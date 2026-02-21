@@ -6,6 +6,7 @@ import com.lz.paperword.core.docx.DocxBuilder;
 import com.lz.paperword.model.PaperExportRequest;
 import com.lz.paperword.model.QuestionDTO;
 import com.lz.paperword.model.SectionDTO;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -37,7 +38,10 @@ class RandomPaperBatchGeneratorTest {
 
     @Test
     void generateFiveRandomPapersFromConvertedQuestions() throws IOException {
-        assertTrue(Files.exists(SOURCE_JSON), "Source json file not found: " + SOURCE_JSON);
+        Assumptions.assumeTrue(
+            Files.exists(SOURCE_JSON),
+            "Source json file not found, skip offline generator test: " + SOURCE_JSON
+        );
 
         JsonNode root = mapper.readTree(Files.readString(SOURCE_JSON));
         assertTrue(root.isArray(), "Source json must be an array.");
