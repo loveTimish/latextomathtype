@@ -1,0 +1,745 @@
+package com.lz.paperword.core.latex;
+
+import com.lz.paperword.core.latex.LaTeXTokenizer.Token;
+import com.lz.paperword.core.latex.LaTeXTokenizer.TokenType;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Node;
+import org.jsoup.nodes.TextNode;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * LaTeX 解析器：从 HTML 内容中提取 LaTeX 数学公式并构建抽象语法树（AST）。
+ *
+ * <p>本类是 LaTeX 解析流水线的核心组件，负责两个主要任务：</p>
+ * <ol>
+ *   <li><b>内容分割</b>：将包含 LaTeX 公式的文本拆分为纯文本段和数学公式段</li>
+ *   <li><b>AST 构建</b>：对每个数学公式段，使用递归下降解析器（Recursive Descent Parser）
+ *       将 Token 序列转换为 {@link LaTeXNode} 构成的 AST</li>
+ * </ol>
+ *
+ * <h3>整体处理流水线：</h3>
+ * <pre>
+ * HTML 输入（如 "&lt;p&gt;已知 $\frac{x}{2}=3$&lt;/p&gt;"）
+ *     ↓ parseHtml()：用 Jsoup 去除 HTML 标签，提取纯文本
+ * 纯文本（如 "已知 $\frac{x}{2}=3$"）
+ *     ↓ parseText()：用正则表达式识别 $...$ 和 $$...$$ 分隔符
+ * 内容段列表 [纯文本("已知"), 数学公式("\frac{x}{2}=3")]
+ *     ↓ parseLaTeX()：对数学公式段进行 Token 化 + AST 构建
+ * ContentSegment 列表 [text段, math段(含AST)]
+ * </pre>
+ *
+ * <h3>LaTeX 公式识别策略：</h3>
+ * <ul>
+ *   <li><b>标准分隔符</b>：$$...$$ (行间公式) 和 $...$ (行内公式)，使用联合正则确保 $$ 优先匹配</li>
+ *   <li><b>替代分隔符</b>：\[...\] 和 \(...\) 会被预处理为 $$...$$ 和 $...$</li>
+ *   <li><b>裸露命令</b>：未被 $ 包围的 LaTeX 命令（如纯文本中的 \overline{AB}）
+ *       通过 {@code BARE_LATEX_PATTERN} 识别</li>
+ * </ul>
+ *
+ * <h3>递归下降解析器设计：</h3>
+ * <p>AST 构建采用自顶向下的递归下降策略，主要解析函数及其职责：</p>
+ * <ul>
+ *   <li>{@code parseExpression()}：解析一个表达式序列（循环调用 parseAtom + parseScripts）</li>
+ *   <li>{@code parseAtom()}：解析一个原子元素（CHAR、COMMAND 或 LBRACE 开头的分组）</li>
+ *   <li>{@code parseScripts()}：处理上标（^）和下标（_）运算符，支持连续 ^/_ 运算</li>
+ *   <li>{@code parseCommand()}：根据命令名分发到具体的命令解析函数</li>
+ *   <li>{@code parseGroup()}：解析花括号分组 {...} 中的内容</li>
+ *   <li>{@code parseRequiredGroup()}：解析必需参数（花括号分组或单个原子）</li>
+ * </ul>
+ *
+ * <p>上标和下标运算符具有右结合性，且可以链式使用。例如 {@code x^{2}_{i}} 会被解析为
+ * 先创建 SUPERSCRIPT(x, 2)，再将其整体作为 SUBSCRIPT 的底数。</p>
+ */
+public class LaTeXParser {
+
+    /**
+     * 组合正则表达式：同时匹配行间公式 $$...$$ 和行内公式 $...$。
+     * 使用非贪婪匹配（.+?），$$...$$ 分支在前以确保优先匹配，
+     * 避免将 $$ 误识别为两个单独的 $ 分隔符。
+     *
+     * <p>匹配组说明：</p>
+     * <ul>
+     *   <li>group(1)：行间公式内容（$$...$$ 之间的部分）</li>
+     *   <li>group(2)：行内公式内容（$...$ 之间的部分）</li>
+     * </ul>
+     */
+    private static final Pattern LATEX_PATTERN = Pattern.compile("\\$\\$(.+?)\\$\\$|\\$(.+?)\\$");
+
+    /**
+     * 裸露 LaTeX 命令正则表达式：匹配未被 $ 包围的 LaTeX 命令片段。
+     *
+     * <p>匹配模式：以反斜杠开头的命令名（如 \overline），后跟零或多个花括号参数 {…}，
+     * 可选地通过比较运算符（<、>、=、+、-）连接更多命令。
+     * 例如可匹配 {@code \overline{ab}>\overline{bc}} 这样的比较表达式。</p>
+     */
+    private static final Pattern BARE_LATEX_PATTERN = Pattern.compile(
+        "\\\\[a-zA-Z]+(?:\\{[^{}]+\\})*(?:\\s*[<>=+\\-]\\s*\\\\[a-zA-Z]+(?:\\{[^{}]+\\})*)*");
+
+    /**
+     * 数学函数命令集合。
+     *
+     * <p>这些命令在渲染时以直立体（罗马体）显示，而非斜体，
+     * 包括三角函数（sin、cos、tan 等）、对数函数（log、ln）、极限（lim）等。
+     * 解析时这些命令不需要花括号参数，直接作为 COMMAND 节点返回。</p>
+     */
+    private static final Set<String> FUNCTION_COMMANDS = Set.of(
+        "\\sin", "\\cos", "\\tan", "\\cot", "\\sec", "\\csc",
+        "\\arcsin", "\\arccos", "\\arctan",
+        "\\sinh", "\\cosh", "\\tanh",
+        "\\log", "\\ln", "\\exp", "\\lim", "\\max", "\\min",
+        "\\det", "\\dim", "\\gcd"
+    );
+
+    /**
+     * 内容段记录类：表示解析后的一个内容片段，可以是纯文本或数学公式。
+     *
+     * <p>在最终的 Word 文档生成中，纯文本段以普通文本写入，
+     * 数学公式段则通过 MathType OLE 嵌入为可编辑的公式对象。</p>
+     *
+     * @param isMath  是否为数学公式段（true=数学公式，false=纯文本）
+     * @param rawText 原始文本：纯文本段为文本内容，数学段为去掉 $ 分隔符后的 LaTeX 源码
+     * @param ast     数学公式的 AST 根节点；纯文本段此字段为 null
+     */
+    public record ContentSegment(boolean isMath, String rawText, LaTeXNode ast) {}
+
+    /** 词法分析器实例，用于将 LaTeX 字符串拆分为 Token 序列 */
+    private final LaTeXTokenizer tokenizer = new LaTeXTokenizer();
+
+    /**
+     * 解析 HTML 内容，提取其中的纯文本和 LaTeX 公式段。
+     *
+     * <p>处理步骤：</p>
+     * <ol>
+     *   <li>使用 Jsoup 解析 HTML，提取 body 中的纯文本内容（去除所有 HTML 标签）</li>
+     *   <li>将提取的纯文本传递给 {@link #parseText(String)} 进行公式识别和解析</li>
+     * </ol>
+     *
+     * @param html 包含 LaTeX 公式的 HTML 字符串（如题目内容 HTML）
+     * @return 内容段列表，按出现顺序排列
+     */
+    public List<ContentSegment> parseHtml(String html) {
+        if (html == null || html.isBlank()) {
+            return List.of();
+        }
+
+        // 使用 Jsoup 去除 HTML 标签，保留纯文本内容
+        Document doc = Jsoup.parse(html);
+        String text = doc.body().text();
+
+        return parseText(text);
+    }
+
+    /**
+     * 解析可能包含 LaTeX 分隔符（$$...$$ 或 $...$）的纯文本。
+     *
+     * <p>处理流程：</p>
+     * <ol>
+     *   <li>先将 \[...\] 和 \(...\) 标准化为 $$...$$ 和 $...$</li>
+     *   <li>使用联合正则逐个匹配公式段，$$...$$ 优先于 $...$</li>
+     *   <li>公式段之间的文本通过 {@link #splitPlainTextWithBareLatex} 进一步检查裸露命令</li>
+     *   <li>每个识别出的公式段调用 {@link #parseLaTeX(String)} 构建 AST</li>
+     * </ol>
+     *
+     * @param text 可能包含 LaTeX 公式分隔符的纯文本
+     * @return 内容段列表（纯文本段 + 数学公式段）
+     */
+    public List<ContentSegment> parseText(String text) {
+        List<ContentSegment> segments = new ArrayList<>();
+        // 将 \[...\] 和 \(...\) 统一转换为 $$...$$ 和 $...$
+        text = normalizeMathDelimiters(text);
+
+        Matcher matcher = LATEX_PATTERN.matcher(text);
+        int lastEnd = 0;       // 上一个匹配结束的位置
+        boolean found = false;  // 是否找到过任何公式段
+
+        while (matcher.find()) {
+            found = true;
+            // 处理公式前的纯文本部分
+            if (matcher.start() > lastEnd) {
+                String before = text.substring(lastEnd, matcher.start());
+                splitPlainTextWithBareLatex(before, segments);
+            }
+            // group(1) = 行间公式 $$...$$ 的内容, group(2) = 行内公式 $...$ 的内容
+            String latex = matcher.group(1) != null ? matcher.group(1).trim() : matcher.group(2).trim();
+            // 将 LaTeX 源码解析为 AST
+            LaTeXNode ast = parseLaTeX(latex);
+            segments.add(new ContentSegment(true, latex, ast));
+            lastEnd = matcher.end();
+        }
+
+        if (!found) {
+            // 未找到任何 $...$ 公式，整段文本可能包含裸露的 LaTeX 命令
+            splitPlainTextWithBareLatex(text, segments);
+        } else if (lastEnd < text.length()) {
+            // 处理最后一个公式之后的剩余文本
+            String remaining = text.substring(lastEnd);
+            splitPlainTextWithBareLatex(remaining, segments);
+        }
+
+        return segments;
+    }
+
+    /**
+     * 标准化数学分隔符：将 LaTeX 的 \[...\] 和 \(...\) 转换为 $$...$$ 和 $...$。
+     * 这样后续只需要用一种正则就能统一匹配所有公式分隔符。
+     *
+     * @param text 原始文本
+     * @return 分隔符标准化后的文本
+     */
+    private String normalizeMathDelimiters(String text) {
+        return text
+            .replace("\\[", "$$")
+            .replace("\\]", "$$")
+            .replace("\\(", "$")
+            .replace("\\)", "$");
+    }
+
+    /**
+     * 在纯文本中查找裸露的 LaTeX 命令片段。
+     *
+     * <p>某些情况下，HTML 中的 LaTeX 命令可能没有被 $ 包围（如 \overline{AB}），
+     * 本方法使用 {@link #BARE_LATEX_PATTERN} 正则来识别这些片段，
+     * 并将它们作为数学公式段处理。</p>
+     *
+     * <p>特殊处理：\left 和 \right 命令不作为独立公式处理（因为它们只是定界符的一部分），
+     * 而是作为普通文本传递。</p>
+     *
+     * @param plain 纯文本字符串（不含 $ 分隔符）
+     * @param out   输出的内容段列表（结果追加到此列表）
+     */
+    private void splitPlainTextWithBareLatex(String plain, List<ContentSegment> out) {
+        if (plain == null || plain.isBlank()) {
+            return;
+        }
+        Matcher matcher = BARE_LATEX_PATTERN.matcher(plain);
+        int lastEnd = 0;
+        boolean found = false;
+        while (matcher.find()) {
+            found = true;
+            // 裸露命令之前的纯文本
+            if (matcher.start() > lastEnd) {
+                addPlainTextSegment(plain.substring(lastEnd, matcher.start()), out);
+            }
+            String latex = matcher.group();
+            // \left 和 \right 是定界符命令，不作为独立公式处理
+            if ("\\left".equals(latex) || "\\right".equals(latex)) {
+                addPlainTextSegment(latex, out);
+                lastEnd = matcher.end();
+                continue;
+            }
+            // 将裸露的 LaTeX 片段解析为 AST
+            LaTeXNode ast = parseLaTeX(latex);
+            out.add(new ContentSegment(true, latex, ast));
+            lastEnd = matcher.end();
+        }
+        if (!found) {
+            // 没有裸露命令，整段作为纯文本
+            addPlainTextSegment(plain, out);
+            return;
+        }
+        // 处理最后一个裸露命令之后的剩余文本
+        if (lastEnd < plain.length()) {
+            addPlainTextSegment(plain.substring(lastEnd), out);
+        }
+    }
+
+    /**
+     * 将一段纯文本添加为纯文本内容段。
+     * 会对文本进行 trim 处理，空白文本不会被添加。
+     *
+     * @param text 纯文本字符串
+     * @param out  输出的内容段列表
+     */
+    private void addPlainTextSegment(String text, List<ContentSegment> out) {
+        if (text == null) return;
+        String normalized = text.trim();
+        if (!normalized.isBlank()) {
+            out.add(new ContentSegment(false, normalized, null));
+        }
+    }
+
+    // ==================== AST 构建（递归下降解析器） ====================
+
+    /**
+     * 将一段 LaTeX 数学表达式字符串解析为 AST。
+     *
+     * <p>这是 AST 构建的入口方法，处理流程：</p>
+     * <ol>
+     *   <li>调用 {@link LaTeXTokenizer#tokenize(String)} 将 LaTeX 字符串分词为 Token 列表</li>
+     *   <li>将 Token 列表封装为 {@link TokenStream} 以支持前瞻（peek）和消费（next）操作</li>
+     *   <li>创建 ROOT 类型的根节点</li>
+     *   <li>调用 {@link #parseExpression(TokenStream, LaTeXNode)} 递归解析所有 Token</li>
+     * </ol>
+     *
+     * @param latex LaTeX 数学表达式字符串（不含 $ 分隔符）
+     * @return AST 根节点（类型为 ROOT）
+     */
+    public LaTeXNode parseLaTeX(String latex) {
+        List<Token> tokens = tokenizer.tokenize(latex);
+        TokenStream stream = new TokenStream(tokens);
+        LaTeXNode root = new LaTeXNode(LaTeXNode.Type.ROOT);
+        parseExpression(stream, root);
+        return root;
+    }
+
+    /**
+     * 解析一个表达式序列，将解析出的节点作为子节点添加到 parent 中。
+     *
+     * <p>核心循环逻辑：</p>
+     * <ol>
+     *   <li>检查下一个 Token 是否为右花括号或右方括号（标志分组结束），若是则退出</li>
+     *   <li>调用 {@link #parseAtom(TokenStream)} 解析一个原子元素</li>
+     *   <li>调用 {@link #parseScripts(TokenStream, LaTeXNode)} 检查并处理后续的上标/下标</li>
+     *   <li>将最终节点添加为 parent 的子节点</li>
+     *   <li>重复以上步骤直到 Token 流耗尽或遇到分组结束标记</li>
+     * </ol>
+     *
+     * @param stream Token 流
+     * @param parent 父节点，解析出的元素将添加为其子节点
+     */
+    private void parseExpression(TokenStream stream, LaTeXNode parent) {
+        while (stream.hasNext()) {
+            Token token = stream.peek();
+
+            // 遇到右花括号 } 或右方括号 ]，表示当前分组/可选参数结束
+            if (token.type() == TokenType.RBRACE || token.type() == TokenType.RBRACKET) {
+                break;
+            }
+
+            // 解析一个原子元素（字符、命令或分组）
+            LaTeXNode node = parseAtom(stream);
+            if (node != null) {
+                // 检查原子元素后面是否有上标 ^ 或下标 _，若有则包装为 SUPERSCRIPT/SUBSCRIPT 节点
+                node = parseScripts(stream, node);
+                parent.addChild(node);
+            }
+        }
+    }
+
+    /**
+     * 解析一个原子元素（Atom）——表达式中不可再分的基本单位。
+     *
+     * <p>根据当前 Token 类型分派处理：</p>
+     * <ul>
+     *   <li>CHAR → 创建 CHAR 类型节点（单个字符）</li>
+     *   <li>COMMAND → 调用 {@link #parseCommand(TokenStream, String)} 处理命令</li>
+     *   <li>LBRACE → 调用 {@link #parseGroup(TokenStream)} 解析花括号分组</li>
+     *   <li>其他类型（RBRACE、CARET 等）→ 返回 null（由调用者处理）</li>
+     * </ul>
+     *
+     * @param stream Token 流
+     * @return 解析出的 AST 节点，或 null（无法识别的 Token）
+     */
+    private LaTeXNode parseAtom(TokenStream stream) {
+        if (!stream.hasNext()) return null;
+        Token token = stream.next();
+
+        return switch (token.type()) {
+            case CHAR -> new LaTeXNode(LaTeXNode.Type.CHAR, token.value());
+            case COMMAND -> parseCommand(stream, token.value());
+            case LBRACE -> parseGroup(stream);
+            default -> null;
+        };
+    }
+
+    /**
+     * 根据命令名分派到对应的命令解析函数。
+     *
+     * <p>命令分类及处理方式：</p>
+     * <ul>
+     *   <li>\frac → {@link #parseFrac}：解析分数，读取两个必需参数（分子、分母）</li>
+     *   <li>\sqrt → {@link #parseSqrt}：解析根号，可选的根次参数 + 必需的被开方数</li>
+     *   <li>\left → {@link #parseLeftRight}：解析 \left...\right 定界符对</li>
+     *   <li>\overline 等一元装饰命令 → {@link #parseUnaryCommand}：读取一个必需参数</li>
+     *   <li>\text 等文本/字体命令 → {@link #parseTextCommand}：读取一个必需参数</li>
+     *   <li>\sum 等大型运算符 → {@link #parseBigOp}：仅创建节点（上下标由外层处理）</li>
+     *   <li>\lim → {@link #parseLimCommand}：类似大型运算符处理</li>
+     *   <li>函数命令（sin、cos 等）→ {@link #parseFunctionCommand}：仅创建节点</li>
+     *   <li>其他命令（希腊字母、符号等）→ 直接创建 COMMAND 节点</li>
+     * </ul>
+     *
+     * @param stream Token 流
+     * @param cmd    完整命令名（含反斜杠，如 "\frac"）
+     * @return 解析出的 AST 节点
+     */
+    private LaTeXNode parseCommand(TokenStream stream, String cmd) {
+        return switch (cmd) {
+            case "\\frac" -> parseFrac(stream);
+            case "\\sqrt" -> parseSqrt(stream);
+            case "\\left" -> parseLeftRight(stream);
+            case "\\overline", "\\underline", "\\hat", "\\tilde",
+                 "\\vec", "\\bar", "\\dot", "\\overbrace", "\\underbrace" -> parseUnaryCommand(stream, cmd);
+            case "\\text", "\\mathrm", "\\mathbf", "\\mathit",
+                 "\\mathcal", "\\mathbb" -> parseTextCommand(stream, cmd);
+            case "\\sum", "\\int", "\\iint", "\\iiint", "\\oint",
+                 "\\prod", "\\coprod", "\\bigcup", "\\bigcap" -> parseBigOp(stream, cmd);
+            case "\\lim" -> parseLimCommand(stream, cmd);
+            default -> {
+                if (FUNCTION_COMMANDS.contains(cmd)) {
+                    yield parseFunctionCommand(stream, cmd);
+                }
+                // 希腊字母、符号等无参数命令，直接作为 COMMAND 节点返回
+                yield new LaTeXNode(LaTeXNode.Type.COMMAND, cmd);
+            }
+        };
+    }
+
+    /**
+     * 解析分数命令 \frac{分子}{分母}。
+     *
+     * <p>创建 FRACTION 类型节点，依次读取两个必需的花括号参数：</p>
+     * <ul>
+     *   <li>children[0]：分子（numerator）</li>
+     *   <li>children[1]：分母（denominator）</li>
+     * </ul>
+     *
+     * @param stream Token 流（当前位置在 \frac 之后）
+     * @return FRACTION 类型的 AST 节点
+     */
+    private LaTeXNode parseFrac(TokenStream stream) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.FRACTION, "\\frac");
+        // 读取分子参数
+        node.addChild(parseRequiredGroup(stream));
+        // 读取分母参数
+        node.addChild(parseRequiredGroup(stream));
+        return node;
+    }
+
+    /**
+     * 解析根号命令 \sqrt{...} 或 \sqrt[n]{...}。
+     *
+     * <p>处理逻辑：</p>
+     * <ol>
+     *   <li>检查下一个 Token 是否为左方括号 '['，若是则解析可选的根次参数</li>
+     *   <li>解析必需的花括号参数（被开方数）</li>
+     * </ol>
+     *
+     * <p>子节点结构：</p>
+     * <ul>
+     *   <li>无根次：children[0] = 被开方数（GROUP）</li>
+     *   <li>有根次：children[0] = 根次（GROUP），children[1] = 被开方数（GROUP）</li>
+     * </ul>
+     *
+     * @param stream Token 流（当前位置在 \sqrt 之后）
+     * @return SQRT 类型的 AST 节点
+     */
+    private LaTeXNode parseSqrt(TokenStream stream) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.SQRT, "\\sqrt");
+        // 检查可选参数 [n]（第 n 次方根）
+        if (stream.hasNext() && stream.peek().type() == TokenType.LBRACKET) {
+            stream.next(); // 消费 [
+            // 解析方括号内的根次内容
+            LaTeXNode degree = new LaTeXNode(LaTeXNode.Type.GROUP);
+            while (stream.hasNext() && stream.peek().type() != TokenType.RBRACKET) {
+                LaTeXNode child = parseAtom(stream);
+                if (child != null) degree.addChild(child);
+            }
+            if (stream.hasNext()) stream.next(); // 消费 ]
+            node.addChild(degree); // 第一个子节点 = 根次
+        }
+        // 读取必需的被开方数参数 {content}
+        node.addChild(parseRequiredGroup(stream));
+        return node;
+    }
+
+    /**
+     * 解析 \left...\right 定界符对。
+     *
+     * <p>处理 LaTeX 中的自适应大小定界符，如 \left( ... \right)、\left\{ ... \right\}。</p>
+     *
+     * <p>处理逻辑：</p>
+     * <ol>
+     *   <li>读取左定界符字符（如 '('、'\{'）</li>
+     *   <li>将节点值设置为 "\left" + 定界符（如 "\left("）</li>
+     *   <li>解析定界符之间的内容，直到遇到 \right 命令</li>
+     *   <li>消费 \right 及其后的右定界符</li>
+     * </ol>
+     *
+     * @param stream Token 流（当前位置在 \left 之后）
+     * @return COMMAND 类型的 AST 节点，value 为 "\left" + 左定界符
+     */
+    private LaTeXNode parseLeftRight(TokenStream stream) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.COMMAND, "\\left");
+        // 读取左定界符字符
+        String leftDelim = "(";
+        if (stream.hasNext()) {
+            Token delim = stream.next();
+            leftDelim = delim.value();
+            // 将转义的花括号或命令形式统一为标准形式
+            if (leftDelim.equals("\\{") || leftDelim.equals("\\lbrace")) leftDelim = "{";
+        }
+        node.setValue("\\left" + leftDelim);
+
+        // 解析定界符之间的内容，直到遇到 \right 命令
+        LaTeXNode content = new LaTeXNode(LaTeXNode.Type.GROUP);
+        while (stream.hasNext()) {
+            Token t = stream.peek();
+            if (t.type() == TokenType.COMMAND && t.value().equals("\\right")) {
+                stream.next(); // 消费 \right
+                if (stream.hasNext()) stream.next(); // 消费右定界符字符
+                break;
+            }
+            LaTeXNode child = parseAtom(stream);
+            if (child != null) {
+                // 定界符内的元素也可能有上下标
+                child = parseScripts(stream, child);
+                content.addChild(child);
+            }
+        }
+        node.addChild(content);
+        return node;
+    }
+
+    /**
+     * 解析一元装饰命令（如 \overline{AB}、\hat{x}、\vec{v}）。
+     *
+     * <p>这些命令接受一个必需的花括号参数，表示被装饰的内容。
+     * 创建 COMMAND 类型节点，子节点为参数内容。</p>
+     *
+     * @param stream Token 流
+     * @param cmd    命令名（如 "\overline"）
+     * @return COMMAND 类型节点，children[0] 为被装饰的内容
+     */
+    private LaTeXNode parseUnaryCommand(TokenStream stream, String cmd) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.COMMAND, cmd);
+        node.addChild(parseRequiredGroup(stream));
+        return node;
+    }
+
+    /**
+     * 解析文本/字体命令（如 \text{内容}、\mathrm{ABC}、\mathbb{R}）。
+     *
+     * <p>创建 TEXT 类型节点（区别于 COMMAND），表示非数学的文本内容。
+     * value 存储命令名，子节点为花括号内的文本内容。</p>
+     *
+     * @param stream Token 流
+     * @param cmd    命令名（如 "\text"、"\mathrm"）
+     * @return TEXT 类型节点，children[0] 为文本内容
+     */
+    private LaTeXNode parseTextCommand(TokenStream stream, String cmd) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.TEXT, cmd);
+        node.addChild(parseRequiredGroup(stream));
+        return node;
+    }
+
+    /**
+     * 解析大型运算符命令（如 \sum、\int、\prod、\bigcup）。
+     *
+     * <p>大型运算符本身不消费参数——它们的上下标（求和范围、积分界限等）
+     * 由外层的 {@link #parseScripts(TokenStream, LaTeXNode)} 统一处理。
+     * 因此此方法仅创建一个 COMMAND 节点并返回。</p>
+     *
+     * @param stream Token 流
+     * @param cmd    命令名（如 "\sum"）
+     * @return COMMAND 类型节点
+     */
+    private LaTeXNode parseBigOp(TokenStream stream, String cmd) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.COMMAND, cmd);
+        return node;
+    }
+
+    /**
+     * 解析 \lim 命令。
+     *
+     * <p>与大型运算符类似，\lim 的下标（如 \lim_{x \to 0}）
+     * 由外层 parseScripts 处理，此处仅创建节点。</p>
+     *
+     * @param stream Token 流
+     * @param cmd    命令名（"\lim"）
+     * @return COMMAND 类型节点
+     */
+    private LaTeXNode parseLimCommand(TokenStream stream, String cmd) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.COMMAND, cmd);
+        return node;
+    }
+
+    /**
+     * 解析数学函数命令（如 \sin、\cos、\log）。
+     *
+     * <p>函数命令在数学排版中以直立体显示（非斜体）。
+     * 它们不消费花括号参数，参数通过自然的 LaTeX 排列传递。
+     * 此处仅创建 COMMAND 节点。</p>
+     *
+     * @param stream Token 流
+     * @param cmd    命令名（如 "\sin"）
+     * @return COMMAND 类型节点
+     */
+    private LaTeXNode parseFunctionCommand(TokenStream stream, String cmd) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.COMMAND, cmd);
+        return node;
+    }
+
+    /**
+     * 处理上标（^）和下标（_）运算符。
+     *
+     * <p>上标和下标是后缀运算符，作用于前面的原子元素（base）。
+     * 本方法会循环检查后续 Token，支持连续的上下标（如 x^{2}_{i} 或 a_{n}^{k}）。</p>
+     *
+     * <p>处理逻辑：</p>
+     * <ul>
+     *   <li>遇到 ^ → 创建 SUPERSCRIPT 节点：children[0]=底数(base)，children[1]=指数内容</li>
+     *   <li>遇到 _ → 创建 SUBSCRIPT 节点：children[0]=底数(base)，children[1]=下标内容</li>
+     *   <li>新创建的节点替代原 base 继续参与后续上下标检测（实现链式上下标）</li>
+     * </ul>
+     *
+     * <p>示例：{@code x^{2}_{i}} 的解析过程：</p>
+     * <ol>
+     *   <li>base = CHAR(x)</li>
+     *   <li>遇到 ^，创建 SUPERSCRIPT(CHAR(x), GROUP(CHAR(2)))，base 更新为此节点</li>
+     *   <li>遇到 _，创建 SUBSCRIPT(SUPERSCRIPT(...), GROUP(CHAR(i)))，base 更新为此节点</li>
+     * </ol>
+     *
+     * @param stream Token 流
+     * @param base   作为底数的节点（上标/下标将作用于此节点）
+     * @return 处理完上下标后的最终节点（可能是原 base，也可能是包装后的 SUPERSCRIPT/SUBSCRIPT）
+     */
+    private LaTeXNode parseScripts(TokenStream stream, LaTeXNode base) {
+        while (stream.hasNext()) {
+            Token t = stream.peek();
+            if (t.type() == TokenType.CARET) {
+                // 上标运算符 ^
+                stream.next(); // 消费 ^
+                LaTeXNode sup = new LaTeXNode(LaTeXNode.Type.SUPERSCRIPT, "^");
+                sup.addChild(base);                    // children[0] = 底数
+                sup.addChild(parseRequiredGroup(stream)); // children[1] = 指数内容
+                base = sup; // 更新 base，支持链式上下标
+            } else if (t.type() == TokenType.UNDERSCORE) {
+                // 下标运算符 _
+                stream.next(); // 消费 _
+                LaTeXNode sub = new LaTeXNode(LaTeXNode.Type.SUBSCRIPT, "_");
+                sub.addChild(base);                    // children[0] = 底数
+                sub.addChild(parseRequiredGroup(stream)); // children[1] = 下标内容
+                base = sub; // 更新 base，支持链式上下标
+            } else {
+                // 既不是上标也不是下标，退出循环
+                break;
+            }
+        }
+        return base;
+    }
+
+    /**
+     * 解析一个必需的参数组。
+     *
+     * <p>LaTeX 中很多命令要求花括号参数（如 \frac{...}{...}），但也支持单个原子作为参数
+     * （如 \frac xy 等价于 \frac{x}{y}）。本方法处理两种情况：</p>
+     * <ul>
+     *   <li>下一个 Token 是 LBRACE → 消费 { 并调用 {@link #parseGroup(TokenStream)} 解析完整分组</li>
+     *   <li>下一个 Token 不是 LBRACE → 调用 {@link #parseAtom(TokenStream)} 解析单个原子元素</li>
+     *   <li>Token 流已耗尽 → 返回空 GROUP 节点（容错处理）</li>
+     * </ul>
+     *
+     * @param stream Token 流
+     * @return 参数内容的 AST 节点（通常是 GROUP 或单个原子节点）
+     */
+    private LaTeXNode parseRequiredGroup(TokenStream stream) {
+        if (!stream.hasNext()) {
+            // Token 流已耗尽，返回空分组作为容错
+            return new LaTeXNode(LaTeXNode.Type.GROUP);
+        }
+        Token token = stream.peek();
+        if (token.type() == TokenType.LBRACE) {
+            stream.next(); // 消费 {
+            return parseGroup(stream);
+        }
+        // 非花括号参数：解析单个原子元素作为参数
+        LaTeXNode atom = parseAtom(stream);
+        if (atom == null) {
+            return new LaTeXNode(LaTeXNode.Type.GROUP);
+        }
+        return atom;
+    }
+
+    /**
+     * 解析花括号分组 {...} 的内容。
+     *
+     * <p>调用此方法时，左花括号 { 已经被消费。方法会持续解析内容直到遇到
+     * 右花括号 } 或 Token 流耗尽，然后消费右花括号。</p>
+     *
+     * <p>分组内的每个原子元素都会检查后续上下标，确保 {x^{2}} 中的上标被正确解析。</p>
+     *
+     * @param stream Token 流（当前位置在 { 之后）
+     * @return GROUP 类型的 AST 节点，子节点为分组内的所有元素
+     */
+    private LaTeXNode parseGroup(TokenStream stream) {
+        LaTeXNode group = new LaTeXNode(LaTeXNode.Type.GROUP);
+        // 持续解析直到遇到右花括号 }
+        while (stream.hasNext() && stream.peek().type() != TokenType.RBRACE) {
+            LaTeXNode child = parseAtom(stream);
+            if (child != null) {
+                // 分组内的元素也可能有上下标
+                child = parseScripts(stream, child);
+                group.addChild(child);
+            }
+        }
+        // 消费右花括号 }（如果存在）
+        if (stream.hasNext()) {
+            stream.next();
+        }
+        return group;
+    }
+
+    /**
+     * Token 流封装类：为 Token 列表提供顺序访问接口。
+     *
+     * <p>支持三个基本操作：</p>
+     * <ul>
+     *   <li>{@link #hasNext()}：检查是否还有未消费的 Token</li>
+     *   <li>{@link #peek()}：前瞻（查看）下一个 Token，不消费</li>
+     *   <li>{@link #next()}：消费并返回下一个 Token，指针后移</li>
+     * </ul>
+     *
+     * <p>递归下降解析器通过 peek() 进行前瞻判断，通过 next() 消费 Token，
+     * 这种模式使得解析器可以根据下一个 Token 的类型决定进入哪个解析分支。</p>
+     */
+    private static class TokenStream {
+        /** Token 列表（不可变引用） */
+        private final List<Token> tokens;
+        /** 当前读取位置（指向下一个待消费的 Token） */
+        private int pos = 0;
+
+        /**
+         * 构造 Token 流。
+         *
+         * @param tokens 词法分析器输出的 Token 列表
+         */
+        TokenStream(List<Token> tokens) {
+            this.tokens = tokens;
+        }
+
+        /**
+         * 检查是否还有未消费的 Token。
+         *
+         * @return 如果还有 Token 未被消费则返回 true
+         */
+        boolean hasNext() {
+            return pos < tokens.size();
+        }
+
+        /**
+         * 前瞻：查看下一个 Token，不移动指针。
+         * 调用前应先通过 {@link #hasNext()} 确认还有 Token 可用。
+         *
+         * @return 下一个 Token
+         */
+        Token peek() {
+            return tokens.get(pos);
+        }
+
+        /**
+         * 消费并返回下一个 Token，指针后移一位。
+         * 调用前应先通过 {@link #hasNext()} 确认还有 Token 可用。
+         *
+         * @return 当前位置的 Token
+         */
+        Token next() {
+            return tokens.get(pos++);
+        }
+    }
+}

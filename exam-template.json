@@ -1,0 +1,95 @@
+{
+  "paper": {
+    "name": "2026年1月月考数学试卷",
+    "subjectType": 1,
+    "stage": 2,
+    "score": 100,
+    "suggestTime": 90
+  },
+  "sections": [
+    {
+      "headline": "一、选择题（每题5分，共25分）",
+      "questions": [
+        {
+          "serialNumber": 1,
+          "questionType": 1,
+          "content": "已知 $a^2 + b^2 = 25$，$ab = 12$，则 $(a+b)^2 =$",
+          "options": [
+            { "prefix": "A", "content": "$49$" },
+            { "prefix": "B", "content": "$37$" },
+            { "prefix": "C", "content": "$13$" },
+            { "prefix": "D", "content": "$1$" }
+          ],
+          "correct": "A",
+          "score": 5,
+          "analyze": "由完全平方公式 $(a+b)^2=a^2+2ab+b^2$ 得 $(a+b)^2=25+24=49$。"
+        },
+        {
+          "serialNumber": 2,
+          "questionType": 1,
+          "content": "一元二次方程 $ax^2+bx+c=0$ 的求根公式是 $x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}$，若 $b^2-4ac<0$，则方程",
+          "options": [
+            { "prefix": "A", "content": "有两个相等实根" },
+            { "prefix": "B", "content": "有两个不等实根" },
+            { "prefix": "C", "content": "无实根" },
+            { "prefix": "D", "content": "有一个实根" }
+          ],
+          "correct": "C",
+          "score": 5,
+          "analyze": "判别式 $\\Delta=b^2-4ac<0$ 时，$\\sqrt{\\Delta}$ 在实数范围内无意义，故无实根。"
+        },
+        {
+          "serialNumber": 3,
+          "questionType": 1,
+          "content": "直线斜率 $k=\\frac{y_2-y_1}{x_2-x_1}$，若过点 $A(1,2)$ 和 $B(3,6)$，则 $k=$",
+          "options": [
+            { "prefix": "A", "content": "$2$" },
+            { "prefix": "B", "content": "$\\frac{1}{2}$" },
+            { "prefix": "C", "content": "$-2$" },
+            { "prefix": "D", "content": "$4$" }
+          ],
+          "correct": "A",
+          "score": 5,
+          "analyze": "$k=\\frac{6-2}{3-1}=\\frac{4}{2}=2$。"
+        }
+      ]
+    },
+    {
+      "headline": "二、填空题（每题5分，共15分）",
+      "questions": [
+        {
+          "serialNumber": 4,
+          "questionType": 4,
+          "content": "椭圆 $\\frac{x^2}{16}+\\frac{y^2}{9}=1$ 的长轴长为 $\\underline{\\qquad}$。",
+          "options": null,
+          "correct": "8",
+          "score": 5,
+          "analyze": "$a^2=16$，$a=4$，长轴 $2a=8$。"
+        },
+        {
+          "serialNumber": 5,
+          "questionType": 4,
+          "content": "等差数列前 $n$ 项和 $S_n=\\frac{n(a_1+a_n)}{2}$，若 $a_1=1$，$a_n=10$，$n=10$，则 $S_{10}=\\underline{\\qquad}$。",
+          "options": null,
+          "correct": "55",
+          "score": 5,
+          "analyze": "$S_{10}=\\frac{10\\times(1+10)}{2}=55$。"
+        }
+      ]
+    },
+    {
+      "headline": "三、解答题（共60分）",
+      "questions": [
+        {
+          "serialNumber": 6,
+          "questionType": 6,
+          "content": "计算：$\\sum_{k=1}^{n}k^2=1^2+2^2+\\cdots+n^2=\\frac{n(n+1)(2n+1)}{6}$。当 $n=5$ 时，求该和式的值。",
+          "options": null,
+          "correct": "$55$",
+          "score": 10,
+          "analyze": "$\\sum_{k=1}^{5}k^2=\\frac{5\\times6\\times11}{6}=55$。"
+        }
+      ]
+    }
+  ]
+}

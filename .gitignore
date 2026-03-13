@@ -1,0 +1,42 @@
+# Build output
+target/
+*.class
+
+# Maven wrapper
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+.factorypath
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Test/debug output
+output/
+
+# Example/template files
+eg/
+data/
+
+# Logs
+*.log
+logs/
+
+# Environment & secrets
+.env
+*.env
+
+# Temp files
+*.tmp
+*.bak
+~$*
