@@ -7,6 +7,9 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -87,7 +90,9 @@ public class MtefWriter {
 
     /** 目标字体名称 — MathType 中 Text/Variable/Number/Function/Vector 样式默认使用 Times New Roman */
     private static final String TARGET_FONT = "Times New Roman";
-
+    /** 仅恢复模板里的默认字号，不修改公式内部字体。 */
+    private static final String TEMPLATE_FULL_SIZE_POINTS =
+        System.getProperty("paperword.mtef.full-size-points", "30");
     /**
      * 从模板 OLE 中提取的 MTEF 前缀（header + 字体定义 + SIZE 记录 + 表达式 LINE 的起始部分）。
      * 类加载时从资源文件一次性加载；如果加载失败则为 null，回退到手工构建 header 的模式。
@@ -237,7 +242,7 @@ public class MtefWriter {
                 }
                 int prefixLen = idx; // 表达式之前的所有内容即为前缀
                 byte[] prefix = java.util.Arrays.copyOfRange(mtef, 0, prefixLen);
-                return patchFontsToTimesNewRoman(prefix);
+                return patchEqnPrefsFullSize(patchFontsToTimesNewRoman(prefix));
             }
         } catch (Exception e) {
             log.warn("Failed to load template MTEF prefix; fallback to legacy writer", e);
@@ -260,6 +265,93 @@ public class MtefWriter {
         // Symbol 和 MT Extra 必须保持不变以确保字形正确渲染。
         return prefix;
     }
+
+    /**
+     * 只恢复模板中的默认 full size，避免 Word/MathType 打开后重新排版时缩成最早的错误版本。
+     * 这个补丁不改字体定义，也不改整体 nudge。
+     */
+    private static byte[] patchEqnPrefsFullSize(byte[] prefix) {
+        if (prefix == null || prefix.length < 4) {
+            return prefix;
+        }
+        int recordIndex = indexOf(prefix, new byte[] {
+            (byte) MtefRecord.EQN_PREFS, 0x00, 0x08
+        });
+        if (recordIndex < 0) {
+            return prefix;
+        }
+
+        int nibbleStreamStart = recordIndex + 3;
+        ParseResult parseResult = parseDimensionArray(prefix, nibbleStreamStart, 8);
+        if (parseResult == null || parseResult.dimensions.isEmpty()) {
+            return prefix;
+        }
+
+        parseResult.dimensions.set(0, buildPointsDimension(TEMPLATE_FULL_SIZE_POINTS));
+        byte[] packed = packDimensions(parseResult.dimensions);
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream(prefix.length + 8);
+        out.write(prefix, 0, nibbleStreamStart);
+        out.writeBytes(packed);
+        out.write(prefix, parseResult.endByteOffset, prefix.length - parseResult.endByteOffset);
+        return out.toByteArray();
+    }
+
+    private static ParseResult parseDimensionArray(byte[] data, int startByteOffset, int count) {
+        List<int[]> dimensions = new ArrayList<>();
+        List<Integer> current = new ArrayList<>();
+        int nibbleIndex = 0;
+        int byteOffset = startByteOffset;
+        while (byteOffset < data.length && dimensions.size() < count) {
+            int value = data[byteOffset] & 0xFF;
+            int[] nibbles = new int[] {(value >>> 4) & 0x0F, value & 0x0F};
+            for (int nibble : nibbles) {
+                current.add(nibble);
+                nibbleIndex++;
+                if (nibble == 0x0F) {
+                    dimensions.add(current.stream().mapToInt(Integer::intValue).toArray());
+                    current = new ArrayList<>();
+                    if (dimensions.size() == count) {
+                        int consumedBytes = (nibbleIndex + (nibbleIndex % 2)) / 2;
+                        return new ParseResult(dimensions, startByteOffset + consumedBytes);
+                    }
+                }
+            }
+            byteOffset++;
+        }
+        return null;
+    }
+
+    private static byte[] packDimensions(List<int[]> dimensions) {
+        List<Integer> nibbles = new ArrayList<>();
+        for (int[] dimension : dimensions) {
+            for (int nibble : dimension) {
+                nibbles.add(nibble & 0x0F);
+            }
+        }
+        if ((nibbles.size() & 1) == 1) {
+            nibbles.add(0);
+        }
+        byte[] packed = new byte[nibbles.size() / 2];
+        for (int i = 0; i < nibbles.size(); i += 2) {
+            packed[i / 2] = (byte) ((nibbles.get(i) << 4) | nibbles.get(i + 1));
+        }
+        return packed;
+    }
+
+    private static int[] buildPointsDimension(String points) {
+        String normalized = points == null || points.isBlank() ? "18" : points.trim();
+        int[] nibbles = new int[normalized.length() + 2];
+        nibbles[0] = 0x02;
+        for (int i = 0; i < normalized.length(); i++) {
+            char ch = normalized.charAt(i);
+            nibbles[i + 1] = ch == '.' ? 0x0A : Character.digit(ch, 10);
+        }
+        nibbles[nibbles.length - 1] = 0x0F;
+        return nibbles;
+    }
+
+    private record ParseResult(List<int[]> dimensions, int endByteOffset) {}
 
     /**
      * 在字节数组中查找并替换所有匹配的子序列（通用字节替换工具方法）。

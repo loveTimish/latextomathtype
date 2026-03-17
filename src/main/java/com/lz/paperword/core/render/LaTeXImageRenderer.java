@@ -142,10 +142,10 @@ public class LaTeXImageRenderer {
             // 3 倍缩放确保 PNG 在 Word 中的清晰度
             float renderScale = 3.0f;
             TeXIcon icon = formula.createTeXIcon(TeXConstants.STYLE_DISPLAY, DEFAULT_SIZE * renderScale);
-            // 设置内边距（按 renderScale 缩放），为公式周围留出呼吸空间
+            // 紧凑内边距，使预览图尺寸接近 MathType 原生 WMF
             icon.setInsets(new Insets(
-                (int)(5 * renderScale), (int)(2 * renderScale),
-                (int)(5 * renderScale), (int)(2 * renderScale)));
+                (int)(2 * renderScale), (int)(1 * renderScale),
+                (int)(2 * renderScale), (int)(1 * renderScale)));
             icon.setForeground(Color.BLACK);
 
             // 确保最小尺寸，避免空图异常
