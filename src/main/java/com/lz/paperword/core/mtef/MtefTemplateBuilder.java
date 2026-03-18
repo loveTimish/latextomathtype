@@ -237,6 +237,27 @@ public class MtefTemplateBuilder {
         writeTemplateHeader(out, MtefRecord.TM_PROD, variation, 0x00);
     }
 
+    // ===== 长除法模板（Long Division）=====
+
+    /**
+     * 写入长除法模板（TM_LDIV）的头部。
+     *
+     * <p>根据 Wiris 的 MTEF 文档，LDivBoxClass 的模板子对象顺序为：</p>
+     * <ul>
+     *   <li>quotient slot（可选）</li>
+     *   <li>dividend slot</li>
+     * </ul>
+     *
+     * <p>除数不在模板槽位内，而是写在模板之前的父级对象列表中。</p>
+     *
+     * @param out 输出字节流
+     * @param hasUpper 是否包含商槽位
+     * @throws IOException 写入异常
+     */
+    public static void writeLongDivisionHeader(ByteArrayOutputStream out, boolean hasUpper) throws IOException {
+        writeTemplateHeader(out, MtefRecord.TM_LDIV, hasUpper ? 0x0001 : 0x0000, 0x00);
+    }
+
     // ===== 围栏/括号模板（Fences）=====
 
     /**

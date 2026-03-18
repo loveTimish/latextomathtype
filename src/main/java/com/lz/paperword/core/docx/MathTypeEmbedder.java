@@ -6,12 +6,15 @@ import com.lz.paperword.core.mtef.MtefWriter;
 import com.lz.paperword.core.ole.OlePackager;
 import com.lz.paperword.core.render.LaTeXImageRenderer;
 import org.apache.poi.openxml4j.opc.*;
+import org.apache.poi.util.Units;
+import org.apache.poi.xwpf.usermodel.Document;
 import org.apache.poi.xwpf.usermodel.XWPFParagraph;
 import org.apache.poi.xwpf.usermodel.XWPFRun;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTR;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -37,10 +40,15 @@ public class MathTypeEmbedder {
      */
     public void embedEquation(XWPFParagraph paragraph, XWPFRun run, LaTeXNode latexAst, String rawLatex) {
         try {
+            if (isLongDivisionFormula(rawLatex)) {
+                insertLongDivisionPicture(paragraph, run, latexAst, rawLatex);
+                return;
+            }
+
             byte[] mtefData = mtefWriter.write(latexAst);
             byte[] oleData = olePackager.packageOle(mtefData);
 
-            LaTeXImageRenderer.PreviewImage preview = imageRenderer.renderForOlePreview(rawLatex);
+            LaTeXImageRenderer.PreviewImage preview = imageRenderer.renderForOlePreview(latexAst, rawLatex);
             if (preview == null || preview.data() == null || preview.data().length == 0) {
                 log.warn("Could not render preview for: {}", rawLatex);
                 run.setText("[" + rawLatex + "]");
@@ -80,6 +88,45 @@ public class MathTypeEmbedder {
             log.error("Failed to embed MathType equation: {}", rawLatex, e);
             run.setText("[" + rawLatex + "]");
         }
+    }
+
+    private void insertLongDivisionPicture(XWPFParagraph paragraph, XWPFRun run, LaTeXNode latexAst, String rawLatex) {
+        try {
+            LaTeXImageRenderer.PreviewImage preview = imageRenderer.renderLongDivisionPicture(latexAst, rawLatex);
+            if (preview == null || preview.data() == null || preview.data().length == 0) {
+                log.warn("Could not render long division picture for: {}", rawLatex);
+                run.setText("[" + rawLatex + "]");
+                return;
+            }
+            insertImageRun(paragraph, run, preview, "long-division.png");
+        } catch (Exception e) {
+            log.error("Failed to insert long division picture: {}", rawLatex, e);
+            run.setText("[" + rawLatex + "]");
+        }
+    }
+
+    private void insertImageRun(XWPFParagraph paragraph, XWPFRun run, LaTeXImageRenderer.PreviewImage preview,
+                                String fileName) throws Exception {
+        int runIndex = paragraph.getRuns().indexOf(run);
+        if (runIndex < 0) {
+            throw new IllegalStateException("Could not locate target run in paragraph");
+        }
+
+        // 直接用 drawing 插图替换原 run，确保长除法不再生成 OLE 对象。
+        paragraph.removeRun(runIndex);
+        XWPFRun imageRun = paragraph.insertNewRun(runIndex);
+        try (ByteArrayInputStream input = new ByteArrayInputStream(preview.data())) {
+            imageRun.addPicture(
+                input,
+                Document.PICTURE_TYPE_PNG,
+                fileName,
+                Units.pixelToEMU(Math.max(preview.widthPx(), 10)),
+                Units.pixelToEMU(Math.max(preview.heightPx(), 10))
+            );
+        }
+
+        XWPFRun spacerRun = paragraph.insertNewRun(runIndex + 1);
+        spacerRun.setText(" ");
     }
 
     private void insertOleObjectXml(XWPFParagraph paragraph, XWPFRun run, String oleRelId, String imgRelId,
@@ -166,6 +213,14 @@ public class MathTypeEmbedder {
     private int resolveRunPositionHalfPoints(String rawLatex, double targetHeightPt) {
         String latex = rawLatex == null ? "" : rawLatex;
 
+        if (isDecimalAlignmentArray(latex)) {
+            // 小数加减法参考对象使用较大的下移量，保持与参考文档一致。
+            return -42;
+        }
+        if (isLongDivisionFormula(latex)) {
+            // 除法参考对象的基线下移非常大，按参考值处理更接近 Word 中的占位效果。
+            return -220;
+        }
         if (latex.contains("\\frac") || latex.contains("\\dfrac") || latex.contains("\\cfrac")) {
             return -24;
         }
@@ -180,4 +235,18 @@ public class MathTypeEmbedder {
         }
         return -6;
     }
+
+    private boolean isDecimalAlignmentArray(String latex) {
+        String normalized = latex == null ? "" : latex.replaceAll("\\s+", "");
+        return normalized.contains("\\begin{array}")
+            && (normalized.contains("&.&") || normalized.contains("&{.}&"));
+    }
+
+    private boolean isLongDivisionFormula(String latex) {
+        String normalized = latex == null ? "" : latex.replaceAll("\\s+", "");
+        return normalized.contains("\\longdiv")
+            || normalized.contains("\\begin{array}{r|l}")
+            || normalized.contains("\\begin{longdivision}");
+    }
+
 }

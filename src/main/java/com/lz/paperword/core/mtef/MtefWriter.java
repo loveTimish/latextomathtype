@@ -1,6 +1,9 @@
 package com.lz.paperword.core.mtef;
 
 import com.lz.paperword.core.latex.LaTeXNode;
+import com.lz.paperword.core.layout.VerticalLayoutCompiler;
+import com.lz.paperword.core.layout.VerticalLayoutNodeFactory;
+import com.lz.paperword.core.layout.VerticalLayoutSpec;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,6 +87,9 @@ import java.util.Set;
 public class MtefWriter {
 
     private static final Logger log = LoggerFactory.getLogger(MtefWriter.class);
+    private final VerticalLayoutCompiler verticalLayoutCompiler = new VerticalLayoutCompiler();
+    private final VerticalLayoutNodeFactory verticalLayoutNodeFactory = new VerticalLayoutNodeFactory();
+    private final MtefPileRulerWriter pileRulerWriter = new MtefPileRulerWriter();
 
     /** OLE 模板资源路径 — 包含一个由 MathType 生成的已知正确的 OLE 对象，用于提取 MTEF 前缀 */
     private static final String TEMPLATE_OLE_RESOURCE = "/mathtype-template/oleObject-template.bin";
@@ -501,7 +507,7 @@ public class MtefWriter {
      */
     private void writeNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
         switch (node.getType()) {
-            case ROOT, GROUP, ROW, CELL -> writeChildren(out, node);
+            case ROOT, GROUP, ROW, CELL -> writeContainerNode(out, node);
             case CHAR -> writeCharNode(out, node);
             case COMMAND -> writeCommandNode(out, node);
             case FRACTION -> writeFractionNode(out, node);
@@ -510,7 +516,20 @@ public class MtefWriter {
             case SUBSCRIPT -> writeSubscriptNode(out, node);
             case TEXT -> writeTextNode(out, node);
             case ARRAY -> writeArrayNode(out, node);
+            case LONG_DIVISION -> writeLongDivisionNode(out, node);
         }
+    }
+
+    private void writeContainerNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        if ("true".equals(node.getMetadata(VerticalLayoutNodeFactory.RAW_LINE_CONTAINER))) {
+            writeRawLineNode(out, node);
+            return;
+        }
+        if ("true".equals(node.getMetadata(VerticalLayoutNodeFactory.RAW_PILE_CONTAINER))) {
+            writeRawPileNode(out, node);
+            return;
+        }
+        writeChildren(out, node);
     }
 
     /**
@@ -618,7 +637,7 @@ public class MtefWriter {
      */
     private boolean generatesTemplate(LaTeXNode node) {
         return switch (node.getType()) {
-            case SUPERSCRIPT, SUBSCRIPT, SQRT, FRACTION -> true;
+            case SUPERSCRIPT, SUBSCRIPT, SQRT, FRACTION, LONG_DIVISION -> true;
             default -> false;
         };
     }
@@ -1306,28 +1325,232 @@ public class MtefWriter {
         }
     }
 
+    private void writeLongDivisionNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        if (!"true".equals(node.getMetadata(VerticalLayoutNodeFactory.LONG_DIVISION_HEADER_ONLY))) {
+            VerticalLayoutSpec layoutSpec = verticalLayoutCompiler.compileExplicitLongDivision(node);
+            if (layoutSpec != null && !layoutSpec.rows().isEmpty()) {
+                LaTeXNode expanded = verticalLayoutNodeFactory.buildStructuredLongDivisionNode(node, layoutSpec);
+                writeLongDivisionNode(out, expanded);
+                return;
+            }
+        }
+
+        LaTeXNode divisor = childAt(node, 0);
+        LaTeXNode quotient = childAt(node, 1);
+        LaTeXNode dividend = childAt(node, 2);
+        boolean hasQuotient = quotient != null && !quotient.getChildren().isEmpty();
+
+        // MathType tmLDIV: 除数写在模板外部；模板内部先写被除数槽，再写顶部商槽。
+        if (divisor != null) {
+            writeNode(out, divisor);
+        }
+        MtefTemplateBuilder.writeLongDivisionHeader(out, hasQuotient);
+        if (dividend != null) {
+            writeNode(out, dividend);
+        } else {
+            writeNullLine(out);
+        }
+        if (hasQuotient) {
+            writeNode(out, quotient);
+        }
+        out.write(MtefRecord.END);
+    }
+
     private void writeArrayNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
-        int rows = node.getChildren().size();
-        int cols = resolveArrayColumnCount(node);
+        // 恢复到稳定的“布局驱动 MATRIX 后端”。
+        if ("true".equals(node.getMetadata(VerticalLayoutNodeFactory.PRESERVE_RAW_ARRAY))) {
+            writeMatrixNode(out, node);
+            return;
+        }
+        if (verticalLayoutCompiler.isCompositeLongDivisionArray(node)) {
+            VerticalLayoutSpec compositeLayout = verticalLayoutCompiler.compileCompositeLongDivision(node);
+            if (compositeLayout != null) {
+                LaTeXNode compositeArray = verticalLayoutNodeFactory.buildCompositeLongDivisionArray(node, compositeLayout);
+                writeMatrixNode(out, compositeArray);
+                return;
+            }
+        }
+
+        VerticalLayoutSpec layoutSpec = verticalLayoutCompiler.compileArray(node);
+        if (layoutSpec != null && layoutSpec.kind() == VerticalLayoutSpec.Kind.DECIMAL) {
+            // 小数加减法单独走单列 PILE，每行写完整小数，避免拆成多列。
+            pileRulerWriter.writeLayout(out, layoutSpec, this::writeNode);
+            return;
+        }
+        LaTeXNode normalized = layoutSpec != null ? verticalLayoutNodeFactory.buildArrayNode(layoutSpec) : node;
+        writeMatrixNode(out, normalized);
+    }
+
+    private void writeMatrixNode(ByteArrayOutputStream out, LaTeXNode normalized) throws IOException {
+        int rows = normalized.getChildren().size();
+        int cols = resolveArrayColumnCount(normalized);
 
         out.write(MtefRecord.MATRIX);
         out.write(0x00);
-        out.write(resolveMatrixVerticalAlignment(node));
-        out.write(resolveMatrixHorizontalAlignment(node));
-        out.write(resolveMatrixVerticalJustification(node));
+        out.write(resolveMatrixVerticalAlignment(normalized));
+        out.write(resolveMatrixHorizontalAlignment(normalized));
+        out.write(resolveMatrixVerticalJustification(normalized));
         writeUnsignedInt(out, rows);
         writeUnsignedInt(out, cols);
-        writePartitionLineArray(out, parsePartitionArray(node.getMetadata("rowLines"), rows + 1));
-        writePartitionLineArray(out, parsePartitionArray(node.getMetadata("columnLines"), cols + 1));
+        writePartitionLineArray(out, parsePartitionArray(normalized.getMetadata("rowLines"), rows + 1));
+        writePartitionLineArray(out, parsePartitionArray(normalized.getMetadata("columnLines"), cols + 1));
 
         for (int rowIndex = 0; rowIndex < rows; rowIndex++) {
-            LaTeXNode row = node.getChildren().get(rowIndex);
+            LaTeXNode row = normalized.getChildren().get(rowIndex);
             for (int colIndex = 0; colIndex < cols; colIndex++) {
                 LaTeXNode cell = colIndex < row.getChildren().size() ? row.getChildren().get(colIndex) : null;
                 writeMatrixCell(out, cell);
             }
         }
         out.write(MtefRecord.END);
+    }
+
+    private LaTeXNode normalizeArrayNode(LaTeXNode node) {
+        if (node == null || node.getChildren().isEmpty() || verticalLayoutCompiler.isCompositeLongDivisionArray(node)) {
+            return node;
+        }
+        VerticalLayoutSpec layoutSpec = verticalLayoutCompiler.compileArray(node);
+        if (layoutSpec != null) {
+            return verticalLayoutNodeFactory.buildArrayNode(layoutSpec);
+        }
+        return node;
+    }
+
+    private boolean isMultiplicationArray(LaTeXNode node) {
+        for (LaTeXNode row : node.getChildren()) {
+            for (LaTeXNode cell : row.getChildren()) {
+                String text = flattenNodeText(cell);
+                if (text.contains("\\times") || text.contains("×")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isDecimalArray(LaTeXNode node) {
+        for (LaTeXNode row : node.getChildren()) {
+            for (LaTeXNode cell : row.getChildren()) {
+                if (".".equals(flattenNodeText(cell))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private LaTeXNode normalizeMultiplicationArray(LaTeXNode node) {
+        LaTeXNode normalized = shallowCloneArray(node);
+        int maxRowSize = 0;
+        for (LaTeXNode row : normalized.getChildren()) {
+            maxRowSize = Math.max(maxRowSize, row.getChildren().size());
+        }
+        int contentCols = maxRowSize;
+        int targetCols = contentCols + 1; // 末尾哨兵空列，锁定右边界
+        for (LaTeXNode row : normalized.getChildren()) {
+            int padLeft = contentCols - row.getChildren().size();
+            if (padLeft > 0) {
+                List<LaTeXNode> padded = new ArrayList<>();
+                for (int i = 0; i < padLeft; i++) {
+                    padded.add(new LaTeXNode(LaTeXNode.Type.CELL));
+                }
+                padded.addAll(row.getChildren());
+                row.getChildren().clear();
+                row.getChildren().addAll(padded);
+            }
+            row.addChild(new LaTeXNode(LaTeXNode.Type.CELL));
+        }
+        normalized.setMetadata("columnCount", String.valueOf(targetCols));
+        normalized.setMetadata("columnSpec", "r".repeat(Math.max(targetCols, 0)));
+        normalized.setMetadata("columnLines", encodeZeroPartitionArray(targetCols + 1));
+        return normalized;
+    }
+
+    private LaTeXNode normalizeDecimalArray(LaTeXNode node) {
+        LaTeXNode normalized = shallowCloneArray(node);
+        for (LaTeXNode row : normalized.getChildren()) {
+            List<LaTeXNode> originalCells = new ArrayList<>(row.getChildren());
+            row.getChildren().clear();
+
+            String first = originalCells.isEmpty() ? "" : flattenNodeText(originalCells.get(0));
+            String sign = "";
+            String integer = first;
+            if (!first.isEmpty() && (first.charAt(0) == '+' || first.charAt(0) == '-')) {
+                sign = String.valueOf(first.charAt(0));
+                integer = first.substring(1);
+            }
+            String dot = originalCells.size() > 1 ? flattenNodeText(originalCells.get(1)) : "";
+            String fraction = originalCells.size() > 2 ? flattenNodeText(originalCells.get(2)) : "";
+
+            row.addChild(buildCellFromText(sign));
+            row.addChild(buildCellFromText(integer));
+            row.addChild(buildCellFromText(dot));
+            row.addChild(buildCellFromText(fraction));
+        }
+        normalized.setMetadata("columnCount", "4");
+        normalized.setMetadata("columnSpec", "rcrl");
+        normalized.setMetadata("columnLines", encodeZeroPartitionArray(5));
+        return normalized;
+    }
+
+    private LaTeXNode shallowCloneArray(LaTeXNode node) {
+        LaTeXNode copy = new LaTeXNode(node.getType(), node.getValue());
+        copy.getMetadata().putAll(node.getMetadata());
+        for (LaTeXNode row : node.getChildren()) {
+            LaTeXNode rowCopy = new LaTeXNode(row.getType(), row.getValue());
+            rowCopy.getMetadata().putAll(row.getMetadata());
+            for (LaTeXNode cell : row.getChildren()) {
+                rowCopy.addChild(deepCloneNode(cell));
+            }
+            copy.addChild(rowCopy);
+        }
+        return copy;
+    }
+
+    private LaTeXNode deepCloneNode(LaTeXNode node) {
+        LaTeXNode copy = new LaTeXNode(node.getType(), node.getValue());
+        copy.getMetadata().putAll(node.getMetadata());
+        for (LaTeXNode child : node.getChildren()) {
+            copy.addChild(deepCloneNode(child));
+        }
+        return copy;
+    }
+
+    private LaTeXNode buildCellFromText(String text) {
+        LaTeXNode cell = new LaTeXNode(LaTeXNode.Type.CELL);
+        if (text == null || text.isEmpty()) {
+            return cell;
+        }
+        for (char ch : text.toCharArray()) {
+            cell.addChild(new LaTeXNode(LaTeXNode.Type.CHAR, String.valueOf(ch)));
+        }
+        return cell;
+    }
+
+    private String flattenNodeText(LaTeXNode node) {
+        if (node == null) {
+            return "";
+        }
+        if (node.getValue() != null && (node.getType() == LaTeXNode.Type.CHAR || node.getType() == LaTeXNode.Type.COMMAND)) {
+            return node.getValue();
+        }
+        StringBuilder builder = new StringBuilder();
+        for (LaTeXNode child : node.getChildren()) {
+            builder.append(flattenNodeText(child));
+        }
+        return builder.toString();
+    }
+
+    private String encodeZeroPartitionArray(int size) {
+        int[] parts = new int[Math.max(size, 1)];
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                builder.append(',');
+            }
+            builder.append('0');
+        }
+        return builder.toString();
     }
 
     private int resolveArrayColumnCount(LaTeXNode node) {
@@ -1351,6 +1574,10 @@ public class MtefWriter {
     }
 
     private int resolveMatrixHorizontalAlignment(LaTeXNode node) {
+        String explicit = node.getMetadata(VerticalLayoutNodeFactory.RAW_MATRIX_HALIGN);
+        if (explicit != null && !explicit.isBlank()) {
+            return Integer.parseInt(explicit);
+        }
         String spec = node.getMetadata("columnSpec");
         if (spec == null || spec.isBlank()) {
             return 2;
@@ -1405,7 +1632,9 @@ public class MtefWriter {
             for (int offset = 0; offset < 4; offset++) {
                 int partIndex = byteIndex * 4 + offset;
                 int value = partIndex < parts.length ? parts[partIndex] & 0x03 : 0;
-                packed |= value << (6 - offset * 2);
+                // Matrix partition arrays are stored low-bits first in MTEF.
+                // Writing them high-bits first shifts every line boundary left by one slot in MathType.
+                packed |= value << (offset * 2);
             }
             out.write(packed);
         }
@@ -1441,6 +1670,34 @@ public class MtefWriter {
             writeNode(out, node);
         }
         out.write(MtefRecord.END); // 关闭 LINE（slot 结束）
+    }
+
+    private void writeRawLineNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        out.write(MtefRecord.LINE);
+        out.write(0x00);
+        writeChildren(out, node);
+        out.write(MtefRecord.END);
+    }
+
+    private void writeRawPileNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        out.write(MtefRecord.PILE);
+        out.write(0x00);
+        out.write(parseMetadataInt(node, VerticalLayoutNodeFactory.RAW_PILE_HALIGN, 1));
+        out.write(parseMetadataInt(node, VerticalLayoutNodeFactory.RAW_PILE_VALIGN, 1));
+        writeChildren(out, node);
+        out.write(MtefRecord.END);
+    }
+
+    private int parseMetadataInt(LaTeXNode node, String key, int defaultValue) {
+        String value = node == null ? null : node.getMetadata(key);
+        if (value == null || value.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException ignored) {
+            return defaultValue;
+        }
     }
 
     /**
