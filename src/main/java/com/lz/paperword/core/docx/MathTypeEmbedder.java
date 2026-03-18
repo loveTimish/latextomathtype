@@ -27,7 +27,6 @@ public class MathTypeEmbedder {
     private static final Logger log = LoggerFactory.getLogger(MathTypeEmbedder.class);
 
     private static final double PT_PER_PX = 0.75d;
-
     private final MtefWriter mtefWriter = new MtefWriter();
     private final OlePackager olePackager = new OlePackager();
     private final LaTeXImageRenderer imageRenderer = new LaTeXImageRenderer();

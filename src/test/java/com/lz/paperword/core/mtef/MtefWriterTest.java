@@ -107,4 +107,55 @@ class MtefWriterTest {
         // '+' is a math operator and should map to Symbol typeface.
         assertEquals(MtefRecord.FN_SYMBOL, plus.typeface());
     }
+
+    @Test
+    void testWriteArrayAdditionAsMatrix() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{rrrr} & 1 & 2 & 3 \\\\ + & 4 & 5 & 6 \\\\ \\hline & 5 & 7 & 9\\end{array}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(mtef.length > 20);
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "array should emit MATRIX record");
+    }
+
+    @Test
+    void testWriteArrayDivisionAsMatrix() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{r|l}13 & 845 \\\\ \\hline & 65 \\\\ & 78 \\\\ & 65 \\\\ & 0\\end{array}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "division template should emit MATRIX record");
+    }
+
+    @Test
+    void testWriteDecimalArrayKeepsDotCharacter() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{rcr}12 & . & 50 \\\\ +3 & . & 75 \\\\ \\hline 16 & . & 25\\end{array}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "decimal array should emit MATRIX record");
+        assertTrue(containsBytes(mtef, new byte[]{'.', 0x00}), "decimal point should be serialized in MTEF");
+    }
+
+    private boolean containsRecord(byte[] bytes, int recordType) {
+        for (int i = 12; i < bytes.length; i++) {
+            if ((bytes[i] & 0xFF) == recordType) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsBytes(byte[] bytes, byte[] needle) {
+        outer:
+        for (int i = 0; i <= bytes.length - needle.length; i++) {
+            for (int j = 0; j < needle.length; j++) {
+                if (bytes[i + j] != needle[j]) {
+                    continue outer;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
 }

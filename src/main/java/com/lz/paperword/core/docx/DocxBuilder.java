@@ -261,17 +261,35 @@ public class DocxBuilder {
         if (question == null) return;
 
         // ---- 题目内容行 ----
-        XWPFParagraph qPara = doc.createParagraph();
-        qPara.setSpacingBefore(100);
-        qPara.setSpacingAfter(50);
-
         // 题号前缀（如 "1. "、"2. "）
         String prefix = question.getSerialNumber() != null ?
             question.getSerialNumber() + ". " : "";
 
-        // 写入题号 + 题目内容（HTML 中可能包含 LaTeX 公式）
-        writeContentWithMath(qPara, prefix + (question.getContent() != null ? "" : ""),
-            question.getContent());
+        // 题干中的 <br/> 需要拆成多个段落，否则复杂竖式会和题干挤在同一行
+        List<String> contentLines = splitHtmlContentLines(question.getContent());
+        if (contentLines.isEmpty()) {
+            XWPFParagraph qPara = doc.createParagraph();
+            qPara.setSpacingBefore(100);
+            qPara.setSpacingAfter(50);
+            writeContentWithMath(qPara, prefix, question.getContent());
+        } else {
+            for (int i = 0; i < contentLines.size(); i++) {
+                XWPFParagraph qPara = doc.createParagraph();
+                qPara.setSpacingBefore(i == 0 ? 100 : 0);
+                qPara.setSpacingAfter(50);
+
+                String line = contentLines.get(i);
+                if (i > 0) {
+                    qPara.setIndentationLeft(360);
+                    if (isStandaloneDisplayFormula(line)) {
+                        qPara.setAlignment(ParagraphAlignment.CENTER);
+                        qPara.setIndentationLeft(0);
+                    }
+                }
+
+                writeContentWithMath(qPara, i == 0 ? prefix : "", line);
+            }
+        }
 
         // ---- 选项（选择题：type 1=单选, 2=多选, 3=判断） ----
         if (question.getOptions() != null && !question.getOptions().isEmpty()) {
@@ -283,20 +301,31 @@ public class DocxBuilder {
             int type = question.getQuestionType();
             if (type == 4) {
                 // 填空题：题目内容中已包含下划线占位符，不需要额外空间
-            } else if (type == 5 || type == 6) {
+            } else if ((type == 5 || type == 6) && !hasResolvedContent(question)) {
                 // 简答题/计算题：在题目后添加 3 行空白区域供答题
                 addAnswerSpace(doc, 3);
             }
         }
 
-        // ---- 正确答案（蓝色标签 + 答案内容） ----
-        if (question.getCorrect() != null && !question.getCorrect().isBlank()) {
-            writeAnswerSection(doc, question.getCorrect());
+        if (question.getKnowledgePoint() != null && !question.getKnowledgePoint().isBlank()) {
+            writeInlineLabeledSection(doc, "【知识点】", question.getKnowledgePoint());
+        }
+        if (question.getTags() != null && !question.getTags().isEmpty()) {
+            writeInlineLabeledSection(doc, "【标签】", String.join("、", question.getTags()));
+        }
+        if (question.getDifficulty() != null && !question.getDifficulty().isBlank()) {
+            writeInlineLabeledSection(doc, "【难度】", question.getDifficulty());
+        }
+        if (question.getAnalyze() != null && !question.getAnalyze().isBlank()) {
+            writeInlineLabeledSection(doc, "【分析】", question.getAnalyze());
+        }
+        if (question.getSolution() != null && !question.getSolution().isBlank()) {
+            writeMultilineLabeledSection(doc, "【解答】", question.getSolution());
         }
 
-        // ---- 解析说明（蓝色标签 + 解析内容） ----
-        if (question.getAnalyze() != null && !question.getAnalyze().isBlank()) {
-            writeAnalyzeSection(doc, question.getAnalyze());
+        // ---- 正确答案（标签 + 答案内容） ----
+        if (question.getCorrect() != null && !question.getCorrect().isBlank()) {
+            writeAnswerSection(doc, question.getCorrect());
         }
     }
 
@@ -425,15 +454,7 @@ public class DocxBuilder {
         XWPFParagraph para = doc.createParagraph();
         para.setSpacingBefore(100);
 
-        // 写入蓝色加粗标签 "【答案】"
-        XWPFRun labelRun = para.createRun();
-        labelRun.setText("【答案】");
-        labelRun.setBold(true);
-        labelRun.setFontSize(11);
-        labelRun.setFontFamily("宋体");
-        labelRun.setColor("0000CC"); // 蓝色
-
-        // 写入答案内容（可能含公式）
+        writeLabelRun(para, "【答案】");
         writeContentWithMath(para, "", correct);
     }
 
@@ -446,36 +467,79 @@ public class DocxBuilder {
      * @param doc         Word 文档对象
      * @param analyzeHtml 解析说明内容（HTML 格式，可能包含 &lt;br/&gt; 换行）
      */
-    private void writeAnalyzeSection(XWPFDocument doc, String analyzeHtml) {
-        // 写入蓝色加粗标签 "【解析】"
-        XWPFParagraph labelPara = doc.createParagraph();
-        labelPara.setSpacingBefore(150);
+    private void writeInlineLabeledSection(XWPFDocument doc, String label, String content) {
+        XWPFParagraph para = doc.createParagraph();
+        para.setSpacingBefore(100);
+        writeLabelRun(para, label);
+        writeContentWithMath(para, "", content);
+    }
 
-        XWPFRun labelRun = labelPara.createRun();
-        labelRun.setText("【解析】");
+    private void writeMultilineLabeledSection(XWPFDocument doc, String label, String contentHtml) {
+        XWPFParagraph para = doc.createParagraph();
+        para.setSpacingBefore(100);
+        writeLabelRun(para, label);
+        writeContentWithMath(para, "", normalizeHtmlLineBreaks(contentHtml));
+    }
+
+    private void writeLabelRun(XWPFParagraph para, String label) {
+        XWPFRun labelRun = para.createRun();
+        labelRun.setText(label);
         labelRun.setBold(true);
         labelRun.setFontSize(11);
         labelRun.setFontFamily("宋体");
-        labelRun.setColor("0000CC"); // 蓝色
+    }
 
-        // 按 <br/> 和 <br> 标签拆分为多行，每行独立成段
-        String[] lines = analyzeHtml.split("(?i)<br\\s*/?>\\s*");
+    private List<String> splitHtmlContentLines(String htmlContent) {
+        if (htmlContent == null || htmlContent.isBlank()) {
+            return List.of();
+        }
+        String[] parts = htmlContent.split("(?i)<br\\s*/?>");
+        List<String> lines = new java.util.ArrayList<>();
+        for (String part : parts) {
+            String trimmed = part == null ? "" : part.trim();
+            if (!trimmed.isEmpty()) {
+                lines.add(trimmed);
+            }
+        }
+        return lines;
+    }
+
+    private boolean isStandaloneDisplayFormula(String line) {
+        if (line == null) {
+            return false;
+        }
+        String trimmed = line.trim();
+        return (trimmed.startsWith("\\[") && trimmed.endsWith("\\]"))
+            || (trimmed.startsWith("$$") && trimmed.endsWith("$$"));
+    }
+
+    private boolean hasResolvedContent(QuestionDTO question) {
+        return (question.getCorrect() != null && !question.getCorrect().isBlank())
+            || (question.getAnalyze() != null && !question.getAnalyze().isBlank())
+            || (question.getSolution() != null && !question.getSolution().isBlank());
+    }
+
+    private String normalizeHtmlLineBreaks(String contentHtml) {
+        if (contentHtml == null || contentHtml.isBlank()) {
+            return contentHtml;
+        }
+        String[] lines = contentHtml.split("(?i)<br\\s*/?>\\s*");
+        StringBuilder builder = new StringBuilder();
         for (String line : lines) {
             String trimmed = line.trim();
-            if (trimmed.isEmpty()) continue;
-
-            // 用 Jsoup 去除每行残留的 HTML 标签，只保留纯文本
+            if (trimmed.isEmpty()) {
+                continue;
+            }
             String cleanText = Jsoup.parse(trimmed).body().text().trim();
-            if (cleanText.isEmpty()) continue;
-
-            // 每行作为独立段落写入（带左缩进）
-            XWPFParagraph linePara = doc.createParagraph();
-            linePara.setSpacingAfter(30);
-            linePara.setIndentationLeft(200); // 轻度左缩进，与标签区分
-
-            // 写入行内容（可能包含 LaTeX 公式）
-            writeContentWithMath(linePara, "", cleanText);
+            if (cleanText.isEmpty()) {
+                continue;
+            }
+            if (!builder.isEmpty()) {
+                builder.append('\n');
+            }
+            builder.append(cleanText);
         }
+        return builder.toString();
     }
 
     /**

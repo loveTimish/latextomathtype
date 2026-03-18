@@ -370,6 +370,7 @@ public class LaTeXParser {
      */
     private LaTeXNode parseCommand(TokenStream stream, String cmd) {
         return switch (cmd) {
+            case "\\begin" -> parseBeginEnvironment(stream);
             case "\\frac" -> parseFrac(stream);
             case "\\sqrt" -> parseSqrt(stream);
             case "\\left" -> parseLeftRight(stream);
@@ -388,6 +389,154 @@ public class LaTeXParser {
                 yield new LaTeXNode(LaTeXNode.Type.COMMAND, cmd);
             }
         };
+    }
+
+    private LaTeXNode parseBeginEnvironment(TokenStream stream) {
+        String envName = extractPlainText(parseRequiredGroup(stream));
+        if ("array".equals(envName)) {
+            return parseArrayEnvironment(stream);
+        }
+        return new LaTeXNode(LaTeXNode.Type.COMMAND, "\\begin{" + envName + "}");
+    }
+
+    private LaTeXNode parseArrayEnvironment(TokenStream stream) {
+        LaTeXNode arrayNode = new LaTeXNode(LaTeXNode.Type.ARRAY, "\\array");
+        String columnSpec = extractPlainText(parseRequiredGroup(stream));
+        arrayNode.setMetadata("columnSpec", columnSpec);
+        arrayNode.setMetadata("columnCount", String.valueOf(countArrayColumns(columnSpec)));
+        arrayNode.setMetadata("columnLines", encodeColumnPartitionLines(columnSpec));
+
+        List<Integer> rowLines = new ArrayList<>();
+        rowLines.add(0);
+
+        LaTeXNode currentRow = new LaTeXNode(LaTeXNode.Type.ROW);
+        LaTeXNode currentCell = new LaTeXNode(LaTeXNode.Type.CELL);
+        boolean seenContent = false;
+
+        while (stream.hasNext()) {
+            if (stream.matchesEnvironmentEnd("array")) {
+                finalizeArrayCell(currentRow, currentCell);
+                finalizeArrayRow(arrayNode, currentRow);
+                stream.consumeEnvironmentEnd();
+                break;
+            }
+
+            Token token = stream.peek();
+            if (token.type() == TokenType.COMMAND && "\\hline".equals(token.value())) {
+                stream.next();
+                rowLines.set(rowLines.size() - 1, 1);
+                continue;
+            }
+            if (token.type() == TokenType.CHAR && "&".equals(token.value())) {
+                stream.next();
+                finalizeArrayCell(currentRow, currentCell);
+                currentCell = new LaTeXNode(LaTeXNode.Type.CELL);
+                seenContent = true;
+                continue;
+            }
+            if (token.type() == TokenType.COMMAND && "\\\\".equals(token.value())) {
+                stream.next();
+                finalizeArrayCell(currentRow, currentCell);
+                finalizeArrayRow(arrayNode, currentRow);
+                currentRow = new LaTeXNode(LaTeXNode.Type.ROW);
+                currentCell = new LaTeXNode(LaTeXNode.Type.CELL);
+                rowLines.add(0);
+                seenContent = false;
+                continue;
+            }
+
+            LaTeXNode child = parseAtom(stream);
+            if (child != null) {
+                child = parseScripts(stream, child);
+                currentCell.addChild(child);
+                seenContent = true;
+                continue;
+            }
+            stream.next();
+        }
+
+        if (!arrayNode.getChildren().isEmpty() || seenContent || !currentCell.getChildren().isEmpty()) {
+            arrayNode.setMetadata("rowLines", encodeRowPartitionLines(rowLines, arrayNode.getChildren().size()));
+        } else {
+            arrayNode.setMetadata("rowLines", "0");
+        }
+        return arrayNode;
+    }
+
+    private void finalizeArrayCell(LaTeXNode row, LaTeXNode cell) {
+        row.addChild(cell);
+    }
+
+    private void finalizeArrayRow(LaTeXNode arrayNode, LaTeXNode row) {
+        if (row.getChildren().isEmpty()) {
+            return;
+        }
+        arrayNode.addChild(row);
+    }
+
+    private int countArrayColumns(String columnSpec) {
+        if (columnSpec == null || columnSpec.isBlank()) {
+            return 0;
+        }
+        int count = 0;
+        for (int i = 0; i < columnSpec.length(); i++) {
+            char ch = columnSpec.charAt(i);
+            if (ch == 'l' || ch == 'c' || ch == 'r') {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private String encodeColumnPartitionLines(String columnSpec) {
+        int columns = countArrayColumns(columnSpec);
+        int[] parts = new int[columns + 1];
+        int boundary = 0;
+        for (int i = 0; i < columnSpec.length(); i++) {
+            char ch = columnSpec.charAt(i);
+            if (ch == '|') {
+                parts[boundary] = 1;
+            } else if (ch == 'l' || ch == 'c' || ch == 'r') {
+                boundary++;
+            }
+        }
+        return encodePartitionArray(parts);
+    }
+
+    private String encodeRowPartitionLines(List<Integer> rowLines, int rowCount) {
+        int[] parts = new int[Math.max(rowCount + 1, 1)];
+        for (int i = 0; i < parts.length && i < rowLines.size(); i++) {
+            parts[i] = rowLines.get(i);
+        }
+        return encodePartitionArray(parts);
+    }
+
+    private String encodePartitionArray(int[] parts) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) {
+                builder.append(',');
+            }
+            builder.append(parts[i]);
+        }
+        return builder.toString();
+    }
+
+    private String extractPlainText(LaTeXNode node) {
+        if (node == null) {
+            return "";
+        }
+        if (node.getType() == LaTeXNode.Type.CHAR) {
+            return node.getValue() == null ? "" : node.getValue();
+        }
+        if (node.getType() == LaTeXNode.Type.COMMAND) {
+            return node.getValue() == null ? "" : node.getValue().replace("\\", "");
+        }
+        StringBuilder builder = new StringBuilder();
+        for (LaTeXNode child : node.getChildren()) {
+            builder.append(extractPlainText(child));
+        }
+        return builder.toString();
     }
 
     /**
@@ -740,6 +889,40 @@ public class LaTeXParser {
          */
         Token next() {
             return tokens.get(pos++);
+        }
+
+        boolean matchesEnvironmentEnd(String envName) {
+            if (!hasNext() || peek().type() != TokenType.COMMAND || !"\\end".equals(peek().value())) {
+                return false;
+            }
+            int idx = pos + 1;
+            if (idx >= tokens.size() || tokens.get(idx).type() != TokenType.LBRACE) {
+                return false;
+            }
+            idx++;
+            StringBuilder builder = new StringBuilder();
+            while (idx < tokens.size() && tokens.get(idx).type() != TokenType.RBRACE) {
+                builder.append(tokens.get(idx).value());
+                idx++;
+            }
+            return idx < tokens.size() && envName.equals(builder.toString());
+        }
+
+        void consumeEnvironmentEnd() {
+            if (!hasNext()) {
+                return;
+            }
+            next(); // \end
+            if (!hasNext() || peek().type() != TokenType.LBRACE) {
+                return;
+            }
+            next(); // {
+            while (hasNext() && peek().type() != TokenType.RBRACE) {
+                next();
+            }
+            if (hasNext()) {
+                next(); // }
+            }
         }
     }
 }

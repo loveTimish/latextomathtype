@@ -26,17 +26,19 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * LaTeX 公式图片渲染器 — 将 LaTeX 公式渲染为 PNG 预览图。
+ * LaTeX 公式图片渲染器 — 将 LaTeX 公式渲染为 OLE 预览图。
  *
  * <h2>核心用途</h2>
  * <p>为嵌入 Word 的 MathType OLE 对象生成预览图片。在 .docx 中，每个 OLE 公式
  * 由两部分组成：OLE 二进制数据（可双击编辑）+ 预览图（静态显示）。
  * 本类负责生成后者。当用户在 Word 中打开文档后，MathType 会自动用其内部的
- * WMF 矢量预览替换我们生成的 PNG 预览，因此这里的 PNG 主要用于首次打开时的
- * 过渡显示。</p>
+ * 原生预览替换我们生成的过渡预览。</p>
  *
  * <h2>渲染策略与回退链</h2>
  * <p>{@link #renderToPng} 方法采用多级回退策略，按优先级依次尝试：</p>
@@ -50,9 +52,9 @@ import java.util.concurrent.TimeUnit;
  * </ol>
  *
  * <h2>OLE 预览图渲染</h2>
- * <p>{@link #renderForOlePreview} 专用于 OLE 形状预览，使用 STYLE_DISPLAY 模式
- * （确保分数线、根号等元素按正确比例显示），以 3 倍分辨率渲染以获得清晰效果，
- * 但报告 1 倍尺寸用于 VML shape 的宽高定义。</p>
+ * <p>{@link #renderForOlePreview} 专用于 OLE 形状预览，优先生成矢量预览（EMF），
+ * 回退到 PNG。预览采用更接近行内公式的度量方式，尽量贴近 Word 中 MathType
+ * 内联对象的实际占位。</p>
  *
  * <h2>配置属性</h2>
  * <ul>
@@ -71,12 +73,13 @@ public class LaTeXImageRenderer {
     /** 默认公式字体大小（磅），对应 Word 中正文公式的标准尺寸 */
     private static final float DEFAULT_SIZE = 13f;
 
-    /** 通用渲染缩放因子，2 倍渲染使 PNG 在 Word 缩放时保持清晰 */
+    /** 通用渲染缩放因子，提高位图预览清晰度 */
     private static final float RENDER_SCALE = 2.0f;
 
     // === 系统属性键（通过 -D 或 System.setProperty 配置） ===
     private static final String LATEX_CMD_PROP = "paperword.latex.command";
     private static final String DVISVGM_CMD_PROP = "paperword.dvisvgm.command";
+    private static final String INKSCAPE_CMD_PROP = "paperword.inkscape.command";
     private static final String RENDER_TIMEOUT_PROP = "paperword.latex.timeout.seconds";
     private static final String MATHJAX_ENABLED_PROP = "paperword.mathjax.enabled";
     private static final String MATHJAX_ONLY_PROP = "paperword.mathjax.only";
@@ -84,9 +87,12 @@ public class LaTeXImageRenderer {
     private static final String MATHJAX_TIMEOUT_PROP = "paperword.mathjax.timeout.seconds";
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final int DEFAULT_MATHJAX_TIMEOUT_SECONDS = 12;
+    private static final float PX_PER_PT = 1.0f / 0.75f;
 
     /** 标记外部工具（latex/dvisvgm）是否不可用，避免反复尝试失败 */
     private volatile boolean externalToolUnavailable = false;
+    /** 标记 SVG -> EMF 转换工具是否不可用，避免反复尝试失败 */
+    private volatile boolean externalVectorToolUnavailable = false;
 
     /** 用于调用 MathJax HTTP 渲染服务的 HTTP 客户端（连接超时 6 秒） */
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -118,19 +124,11 @@ public class LaTeXImageRenderer {
     }
 
     /**
-     * 为 OLE 形状生成高分辨率预览图。
+     * 为 OLE 形状生成预览图。
      *
-     * <p><b>渲染策略：</b>使用 JLaTeXMath 的 STYLE_DISPLAY 模式渲染（与行内 STYLE_TEXT 不同，
-     * STYLE_DISPLAY 确保分数线、根号上横线、求和号等元素按正常大小显示，
-     * 与 MathType 的默认显示尺寸一致）。</p>
-     *
-     * <p><b>3 倍渲染 / 1 倍报告：</b>以 3 倍分辨率（renderScale = 3.0）渲染图片，
-     * 保证 PNG 在 Word 中放大时仍然清晰。但返回的 widthPx/heightPx 为 1 倍尺寸，
-     * 供 VML shape 的 style:width/style:height 使用——Word 会将高分辨率图片
-     * 缩放到该 1 倍尺寸显示，从而实现"视网膜"效果。</p>
-     *
-     * <p><b>临时性：</b>此 PNG 预览仅在首次打开时使用。用户在 Word 中打开文档后，
-     * MathType 会自动用自身生成的 WMF 矢量预览替换此 PNG，获得完美的矢量显示效果。</p>
+     * <p><b>渲染策略：</b>优先尝试矢量预览（EMF），失败时再回退到 PNG。
+     * 为了避免行内 OLE 对象在 Word 里占位过高/过宽，这里采用更接近行内公式的
+     * STYLE_TEXT 度量，并收紧内边距。</p>
      *
      * @param latex LaTeX 公式字符串
      * @return 预览图数据（含 PNG 字节和 1 倍显示尺寸）；渲染失败返回 null
@@ -138,11 +136,8 @@ public class LaTeXImageRenderer {
     public PreviewImage renderForOlePreview(String latex) {
         try {
             TeXFormula formula = new TeXFormula(latex);
-            // 使用 STYLE_DISPLAY 模式：分数线、根号等元素按正确比例渲染
-            // 3 倍缩放确保 PNG 在 Word 中的清晰度
             float renderScale = 3.0f;
             TeXIcon icon = formula.createTeXIcon(TeXConstants.STYLE_DISPLAY, DEFAULT_SIZE * renderScale);
-            // 紧凑内边距，使预览图尺寸接近 MathType 原生 WMF
             icon.setInsets(new Insets(
                 (int)(2 * renderScale), (int)(1 * renderScale),
                 (int)(2 * renderScale), (int)(1 * renderScale)));
@@ -168,8 +163,6 @@ public class LaTeXImageRenderer {
             if (pngData.length == 0) {
                 return null;
             }
-            // 报告 1 倍显示尺寸：VML shape 使用此尺寸定义公式在文档中的显示大小
-            // Word 会将 3 倍分辨率的 PNG 缩放到此 1 倍尺寸，实现高清显示
             int displayWidth = Math.max((int)(width / renderScale), 10);
             int displayHeight = Math.max((int)(height / renderScale), 10);
             return new PreviewImage(pngData, displayWidth, displayHeight, "png", "image/png");
@@ -210,7 +203,7 @@ public class LaTeXImageRenderer {
         }
 
         // 第二优先级：dvisvgm 本地工具链（latex → dvi → svg → png）
-        byte[] external = renderViaDvisvgm(latex);
+        byte[] external = renderViaDvisvgm(latex, size);
         if (external != null && external.length > 0) {
             return external;
         }
@@ -267,7 +260,7 @@ public class LaTeXImageRenderer {
         }
     }
 
-    /** EMF 矢量渲染的缩放因子 */
+    /** EMF 矢量渲染的缩放因子，适当提高可减少 Word 首次显示时的粗糙感 */
     private static final float EMF_RENDER_SCALE = 2.0f;
 
     /**
@@ -292,12 +285,7 @@ public class LaTeXImageRenderer {
      */
     private PreviewImage renderToEmf(String latex, float size) {
         try {
-            TeXFormula formula = new TeXFormula(latex);
-            // 以 2 倍 scale 渲染：确保细线元素在 EMF 坐标中有足够精度
-            TeXIcon icon = formula.createTeXIcon(TeXConstants.STYLE_DISPLAY, size * EMF_RENDER_SCALE);
-            icon.setInsets(new Insets(
-                (int)(5 * EMF_RENDER_SCALE), (int)(2 * EMF_RENDER_SCALE),
-                (int)(5 * EMF_RENDER_SCALE), (int)(2 * EMF_RENDER_SCALE)));
+            TeXIcon icon = createInlinePreviewIcon(latex, size * EMF_RENDER_SCALE, EMF_RENDER_SCALE);
             icon.setForeground(Color.BLACK);
 
             int emfWidth = Math.max(icon.getIconWidth(), 10);
@@ -337,6 +325,34 @@ public class LaTeXImageRenderer {
         }
     }
 
+    private TeXIcon createInlinePreviewIcon(String latex, float scaledSize, float renderScale) {
+        TeXFormula formula = new TeXFormula(latex);
+        int style = usesStackedPreviewStyle(latex) ? TeXConstants.STYLE_DISPLAY : TeXConstants.STYLE_TEXT;
+        TeXIcon icon = formula.createTeXIcon(style, scaledSize);
+        int verticalInset = usesStackedPreviewStyle(latex)
+            ? Math.max((int)(2 * renderScale), 2)
+            : Math.max((int)(1 * renderScale), 1);
+        icon.setInsets(new Insets(
+            verticalInset,
+            Math.max((int)(0.5f * renderScale), 0),
+            verticalInset,
+            Math.max((int)(0.5f * renderScale), 0)));
+        return icon;
+    }
+
+    private boolean usesStackedPreviewStyle(String latex) {
+        if (latex == null) {
+            return false;
+        }
+        return latex.contains("\\frac")
+            || latex.contains("\\dfrac")
+            || latex.contains("\\cfrac")
+            || latex.contains("\\sqrt")
+            || latex.contains("\\sum")
+            || latex.contains("\\int")
+            || latex.contains("\\prod");
+    }
+
     /**
      * 通过系统安装的 latex + dvisvgm 工具链渲染公式。
      *
@@ -351,21 +367,89 @@ public class LaTeXImageRenderer {
      * @param latex LaTeX 公式字符串
      * @return PNG 字节数组；工具不可用或渲染失败返回 null
      */
-    private byte[] renderViaDvisvgm(String latex) {
+    private byte[] renderViaDvisvgm(String latex, float size) {
+        byte[] svg = renderSvgViaDvisvgm(latex, size);
+        if (svg == null || svg.length == 0) {
+            return null;
+        }
+        try {
+            return svgToPng(svg);
+        } catch (Exception e) {
+            log.debug("SVG -> PNG transcode failed, fallback to next renderer: {}", latex, e);
+            return null;
+        }
+    }
+
+    private PreviewImage renderVectorPreviewViaExternalTools(String latex, float size) {
+        if (externalToolUnavailable || externalVectorToolUnavailable) {
+            return null;
+        }
+        Path tempDir = null;
+        try {
+            tempDir = Files.createTempDirectory("paperword-vector-preview-");
+            byte[] svg = renderSvgViaDvisvgm(latex, size, tempDir);
+            if (svg == null || svg.length == 0) {
+                return null;
+            }
+
+            Path svgFile = tempDir.resolve("eq.svg");
+            if (!Files.exists(svgFile)) {
+                Files.write(svgFile, svg);
+            }
+            Path emfFile = tempDir.resolve("eq.emf");
+            if (!convertSvgToEmf(svgFile, emfFile, Integer.getInteger(RENDER_TIMEOUT_PROP, DEFAULT_TIMEOUT_SECONDS))) {
+                return null;
+            }
+
+            byte[] emf = Files.readAllBytes(emfFile);
+            if (emf.length == 0) {
+                return null;
+            }
+
+            SvgDimensions dimensions = extractSvgDisplayDimensions(svg);
+            int widthPx = Math.max((int) Math.ceil(dimensions.widthPt() * PX_PER_PT), 10);
+            int heightPx = Math.max((int) Math.ceil(dimensions.heightPt() * PX_PER_PT), 10);
+            return new PreviewImage(emf, widthPx, heightPx, "emf", "image/x-emf");
+        } catch (IOException e) {
+            if (isCommandUnavailable(e)) {
+                externalVectorToolUnavailable = true;
+            }
+            log.debug("External SVG -> EMF preview failed, fallback to internal EMF: {}", latex, e);
+            return null;
+        } catch (Exception e) {
+            log.debug("External vector preview failed, fallback to internal EMF: {}", latex, e);
+            return null;
+        } finally {
+            if (tempDir != null) {
+                deleteQuietly(tempDir);
+            }
+        }
+    }
+
+    private byte[] renderSvgViaDvisvgm(String latex, float size) {
+        return renderSvgViaDvisvgm(latex, size, null);
+    }
+
+    private byte[] renderSvgViaDvisvgm(String latex, float size, Path providedTempDir) {
         // 外部工具已标记为不可用，直接跳过
         if (externalToolUnavailable) {
             return null;
         }
 
-        Path tempDir = null;
+        Path tempDir = providedTempDir;
+        boolean ownsTempDir = false;
         try {
             // 创建临时目录存放编译中间文件
-            tempDir = Files.createTempDirectory("paperword-latex-");
+            if (tempDir == null) {
+                tempDir = Files.createTempDirectory("paperword-latex-");
+                ownsTempDir = true;
+            }
             Path texFile = tempDir.resolve("eq.tex");
             Path dviFile = tempDir.resolve("eq.dvi");
+            Path svgFile = tempDir.resolve("eq.svg");
 
             // 写入完整的 LaTeX 文档（包含 amsmath/amssymb 宏包）
-            Files.writeString(texFile, buildLatexDocument(latex), StandardCharsets.UTF_8);
+            Files.writeString(texFile, buildLatexDocument(latex, size), StandardCharsets.UTF_8);
 
             String latexCmd = System.getProperty(LATEX_CMD_PROP, "latex");
             String dvisvgmCmd = System.getProperty(DVISVGM_CMD_PROP, "dvisvgm");
@@ -392,33 +476,34 @@ public class LaTeXImageRenderer {
                 return null;
             }
 
-            // 步骤 2：dvisvgm 将 .dvi 转为 SVG（输出到 stdout）
+            // 步骤 2：dvisvgm 将 .dvi 转为 SVG
             // --no-fonts：将文本转为路径（避免字体依赖问题）
             // --exact-bbox：精确计算边界框
-            // --precision=5：坐标精度 5 位小数
+            // --precision=8：进一步提高坐标精度，减少 Office 首次显示时的粗糙感
             CommandResult svgResult = runCommand(
                 List.of(
                     dvisvgmCmd,
                     "--verbosity=0",
                     "--exact-bbox",
                     "--no-fonts",
-                    "--precision=5",
-                    "--stdout",
+                    "--precision=8",
+                    "-o",
+                    svgFile.toAbsolutePath().toString(),
                     dviFile.toAbsolutePath().toString()
                 ),
                 tempDir,
                 timeoutSeconds
             );
-            if (svgResult.exitCode != 0 || svgResult.output.length == 0) {
+            if (svgResult.exitCode != 0 || !Files.exists(svgFile)) {
                 log.debug("dvisvgm render failed (code={}): {}", svgResult.exitCode, svgResult.outputText());
                 return null;
             }
-
-            // 步骤 3：使用 Apache Batik 将 SVG 转为 PNG
-            return svgToPng(svgResult.output);
+            return Files.readAllBytes(svgFile);
         } catch (IOException e) {
             // 命令不存在或执行环境异常：标记外部工具不可用，后续调用直接跳过
-            externalToolUnavailable = true;
+            if (isCommandUnavailable(e)) {
+                externalToolUnavailable = true;
+            }
             log.warn("External LaTeX/SVG tools unavailable, fallback to JLaTeXMath: {}", e.getMessage());
             return null;
         } catch (Exception e) {
@@ -426,10 +511,28 @@ public class LaTeXImageRenderer {
             return null;
         } finally {
             // 清理临时目录及其中所有文件
-            if (tempDir != null) {
+            if (ownsTempDir && tempDir != null) {
                 deleteQuietly(tempDir);
             }
         }
+    }
+
+    private boolean convertSvgToEmf(Path svgFile, Path emfFile, int timeoutSeconds) throws IOException, InterruptedException {
+        String inkscapeCmd = System.getProperty(INKSCAPE_CMD_PROP, "inkscape");
+        CommandResult result = runCommand(
+            List.of(
+                inkscapeCmd,
+                svgFile.toAbsolutePath().toString(),
+                "--export-filename=" + emfFile.toAbsolutePath()
+            ),
+            svgFile.getParent(),
+            timeoutSeconds
+        );
+        if (result.exitCode != 0 || !Files.exists(emfFile)) {
+            log.debug("Inkscape SVG -> EMF failed (code={}): {}", result.exitCode, result.outputText());
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -537,17 +640,20 @@ public class LaTeXImageRenderer {
      * @param latex LaTeX 公式内容
      * @return 完整的 .tex 文档字符串
      */
-    private String buildLatexDocument(String latex) {
+    private String buildLatexDocument(String latex, float size) {
+        String sizePt = String.format(Locale.ROOT, "%.1f", Math.max(size, 8f));
+        String baselineSkipPt = String.format(Locale.ROOT, "%.1f", Math.max(size + 2f, 10f));
         return """
             \\documentclass[12pt]{article}
             \\usepackage{amsmath,amssymb}
             \\pagestyle{empty}
             \\begin{document}
+            \\fontsize{%s}{%s}\\selectfont
             \\[
             %s
             \\]
             \\end{document}
-            """.formatted(latex);
+            """.formatted(sizePt, baselineSkipPt, latex);
     }
 
     /**
@@ -581,6 +687,49 @@ public class LaTeXImageRenderer {
         private String outputText() {
             return new String(output, StandardCharsets.UTF_8);
         }
+    }
+
+    static SvgDimensions extractSvgDisplayDimensions(byte[] svgBytes) {
+        String svg = new String(svgBytes, StandardCharsets.UTF_8);
+        Matcher matcher = Pattern.compile(
+            "<svg[^>]*\\bwidth=['\"]([^'\"]+)['\"][^>]*\\bheight=['\"]([^'\"]+)['\"]",
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL)
+            .matcher(svg);
+        if (!matcher.find()) {
+            return new SvgDimensions(12.0f, 12.0f);
+        }
+        return new SvgDimensions(parseSvgLengthToPt(matcher.group(1)), parseSvgLengthToPt(matcher.group(2)));
+    }
+
+    private static float parseSvgLengthToPt(String value) {
+        Matcher matcher = Pattern.compile("([0-9.]+)\\s*([a-zA-Z]*)").matcher(value == null ? "" : value.trim());
+        if (!matcher.matches()) {
+            return 12.0f;
+        }
+        float number = Float.parseFloat(matcher.group(1));
+        String unit = matcher.group(2).toLowerCase(Locale.ROOT);
+        return switch (unit) {
+            case "", "px" -> number / PX_PER_PT;
+            case "pt" -> number;
+            case "in" -> number * 72.0f;
+            case "mm" -> number * 72.0f / 25.4f;
+            case "cm" -> number * 72.0f / 2.54f;
+            default -> number;
+        };
+    }
+
+    private boolean isCommandUnavailable(IOException exception) {
+        String message = exception.getMessage();
+        if (message == null) {
+            return false;
+        }
+        String normalized = message.toLowerCase(Locale.ROOT);
+        return normalized.contains("cannot run program")
+            || normalized.contains("createprocess error=2")
+            || normalized.contains("no such file");
+    }
+
+    record SvgDimensions(float widthPt, float heightPt) {
     }
 
     /**

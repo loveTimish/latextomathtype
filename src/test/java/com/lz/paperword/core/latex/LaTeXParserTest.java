@@ -111,4 +111,46 @@ class LaTeXParserTest {
         assertNotNull(ast);
         assertTrue(ast.getChildren().size() > 0);
     }
+
+    @Test
+    void testParseArrayForVerticalAddition() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{rrrr} & 1 & 2 & 3 \\\\ + & 4 & 5 & 6 \\\\ \\hline & 5 & 7 & 9\\end{array}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("rrrr", array.getMetadata("columnSpec"));
+        assertEquals("4", array.getMetadata("columnCount"));
+        assertEquals("0,0,0,0,0", array.getMetadata("columnLines"));
+        assertEquals("0,0,1,0", array.getMetadata("rowLines"));
+        assertEquals(3, array.getChildren().size());
+
+        LaTeXNode firstRow = array.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ROW, firstRow.getType());
+        assertEquals(4, firstRow.getChildren().size());
+    }
+
+    @Test
+    void testParseArrayForDecimalAlignment() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{rcr}12 & . & 50 \\\\ +3 & . & 75 \\\\ \\hline 16 & . & 25\\end{array}");
+        assertNotNull(ast);
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("rcr", array.getMetadata("columnSpec"));
+        assertEquals("3", array.getMetadata("columnCount"));
+        assertEquals(3, array.getChildren().size());
+        assertEquals(".", array.getChildren().get(0).getChildren().get(1).getChildren().get(0).getValue());
+    }
+
+    @Test
+    void testParseArrayForDivisionTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{r|l}13 & 845 \\\\ \\hline & 65 \\\\ & 78 \\\\ & 65 \\\\ & 0\\end{array}");
+        assertNotNull(ast);
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("r|l", array.getMetadata("columnSpec"));
+        assertEquals("0,1,0", array.getMetadata("columnLines"));
+        assertEquals(5, array.getChildren().size());
+    }
 }

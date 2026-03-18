@@ -501,7 +501,7 @@ public class MtefWriter {
      */
     private void writeNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
         switch (node.getType()) {
-            case ROOT, GROUP -> writeChildren(out, node);
+            case ROOT, GROUP, ROW, CELL -> writeChildren(out, node);
             case CHAR -> writeCharNode(out, node);
             case COMMAND -> writeCommandNode(out, node);
             case FRACTION -> writeFractionNode(out, node);
@@ -509,6 +509,7 @@ public class MtefWriter {
             case SUPERSCRIPT -> writeSuperscriptNode(out, node);
             case SUBSCRIPT -> writeSubscriptNode(out, node);
             case TEXT -> writeTextNode(out, node);
+            case ARRAY -> writeArrayNode(out, node);
         }
     }
 
@@ -1303,6 +1304,121 @@ public class MtefWriter {
                 writeCharRecord(out, MtefRecord.FN_TEXT, c);
             }
         }
+    }
+
+    private void writeArrayNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        int rows = node.getChildren().size();
+        int cols = resolveArrayColumnCount(node);
+
+        out.write(MtefRecord.MATRIX);
+        out.write(0x00);
+        out.write(resolveMatrixVerticalAlignment(node));
+        out.write(resolveMatrixHorizontalAlignment(node));
+        out.write(resolveMatrixVerticalJustification(node));
+        writeUnsignedInt(out, rows);
+        writeUnsignedInt(out, cols);
+        writePartitionLineArray(out, parsePartitionArray(node.getMetadata("rowLines"), rows + 1));
+        writePartitionLineArray(out, parsePartitionArray(node.getMetadata("columnLines"), cols + 1));
+
+        for (int rowIndex = 0; rowIndex < rows; rowIndex++) {
+            LaTeXNode row = node.getChildren().get(rowIndex);
+            for (int colIndex = 0; colIndex < cols; colIndex++) {
+                LaTeXNode cell = colIndex < row.getChildren().size() ? row.getChildren().get(colIndex) : null;
+                writeMatrixCell(out, cell);
+            }
+        }
+        out.write(MtefRecord.END);
+    }
+
+    private int resolveArrayColumnCount(LaTeXNode node) {
+        String metadata = node.getMetadata("columnCount");
+        if (metadata != null && !metadata.isBlank()) {
+            return Integer.parseInt(metadata);
+        }
+        int maxColumns = 0;
+        for (LaTeXNode row : node.getChildren()) {
+            maxColumns = Math.max(maxColumns, row.getChildren().size());
+        }
+        return maxColumns;
+    }
+
+    private int resolveMatrixVerticalAlignment(LaTeXNode node) {
+        String spec = node.getMetadata("columnSpec");
+        if (spec != null && spec.contains("|")) {
+            return 2;
+        }
+        return 1;
+    }
+
+    private int resolveMatrixHorizontalAlignment(LaTeXNode node) {
+        String spec = node.getMetadata("columnSpec");
+        if (spec == null || spec.isBlank()) {
+            return 2;
+        }
+        boolean hasLeft = spec.indexOf('l') >= 0;
+        boolean hasCenter = spec.indexOf('c') >= 0;
+        boolean hasRight = spec.indexOf('r') >= 0;
+        if (hasRight && !hasLeft && !hasCenter) {
+            return 3;
+        }
+        if (hasCenter && !hasLeft && !hasRight) {
+            return 2;
+        }
+        if (hasLeft && !hasCenter && !hasRight) {
+            return 1;
+        }
+        return hasRight ? 3 : (hasCenter ? 2 : 1);
+    }
+
+    private int resolveMatrixVerticalJustification(LaTeXNode node) {
+        return 1;
+    }
+
+    private void writeMatrixCell(ByteArrayOutputStream out, LaTeXNode cell) throws IOException {
+        if (cell == null || cell.getChildren().isEmpty()) {
+            writeNullLine(out);
+            return;
+        }
+        writeSlot(out, cell);
+    }
+
+    private int[] parsePartitionArray(String encoded, int expectedSize) {
+        int[] parts = new int[Math.max(expectedSize, 1)];
+        if (encoded == null || encoded.isBlank()) {
+            return parts;
+        }
+        String[] values = encoded.split(",");
+        for (int i = 0; i < values.length && i < parts.length; i++) {
+            try {
+                parts[i] = Integer.parseInt(values[i].trim());
+            } catch (NumberFormatException ignored) {
+                parts[i] = 0;
+            }
+        }
+        return parts;
+    }
+
+    private void writePartitionLineArray(ByteArrayOutputStream out, int[] parts) throws IOException {
+        int byteCount = (parts.length + 3) / 4;
+        for (int byteIndex = 0; byteIndex < byteCount; byteIndex++) {
+            int packed = 0;
+            for (int offset = 0; offset < 4; offset++) {
+                int partIndex = byteIndex * 4 + offset;
+                int value = partIndex < parts.length ? parts[partIndex] & 0x03 : 0;
+                packed |= value << (6 - offset * 2);
+            }
+            out.write(packed);
+        }
+    }
+
+    private void writeUnsignedInt(ByteArrayOutputStream out, int value) throws IOException {
+        if (value < 255) {
+            out.write(value & 0xFF);
+            return;
+        }
+        out.write(0xFF);
+        out.write(value & 0xFF);
+        out.write((value >> 8) & 0xFF);
     }
 
     // ======================== 辅助方法 (Helper Methods) ========================

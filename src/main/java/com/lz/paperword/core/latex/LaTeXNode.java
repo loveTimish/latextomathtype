@@ -1,7 +1,9 @@
 package com.lz.paperword.core.latex;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * LaTeX 抽象语法树（AST）节点类。
@@ -23,6 +25,9 @@ import java.util.List;
  *   <li><b>SQRT</b>：根号 \sqrt{...} 或 \sqrt[n]{...}，
  *       无根次时有一个子节点（被开方数）；有根次时有两个子节点：children[0]=根次, children[1]=被开方数</li>
  *   <li><b>TEXT</b>：文本内容节点（如 \text{...}），value 存储命令名，子节点为文本内容</li>
+ *   <li><b>ARRAY</b>：数组/竖式节点（如 \begin{array}），子节点为 ROW；元数据保存列格式和分隔线</li>
+ *   <li><b>ROW</b>：数组中的一行，子节点为 CELL</li>
+ *   <li><b>CELL</b>：数组中的单元格，子节点为单元格内表达式</li>
  * </ul>
  *
  * <h3>AST 示例：</h3>
@@ -67,7 +72,13 @@ public class LaTeXNode {
         /** 根号节点：表示 \sqrt{...} 或 \sqrt[n]{...}，可含 1~2 个子节点（根次 + 被开方数） */
         SQRT,
         /** 文本节点：表示非数学的文本内容（如 \text{...}、\mathrm{...}），子节点为文本内容 */
-        TEXT
+        TEXT,
+        /** 数组/竖式节点：表示 \begin{array}{...}...\end{array} */
+        ARRAY,
+        /** 数组的一行 */
+        ROW,
+        /** 数组中的单元格 */
+        CELL
     }
 
     /** 节点类型（不可变），在构造时确定 */
@@ -78,6 +89,8 @@ public class LaTeXNode {
 
     /** 子节点列表，用于构建树形结构。不同类型的节点对子节点数量和含义有不同约定 */
     private final List<LaTeXNode> children = new ArrayList<>();
+    /** 可选元数据：用于承载 array 列格式、分隔线等结构化信息 */
+    private final Map<String, String> metadata = new LinkedHashMap<>();
 
     /**
      * 构造一个仅指定类型的节点（value 默认为 null）。
@@ -150,6 +163,25 @@ public class LaTeXNode {
         children.add(child);
     }
 
+    public void setMetadata(String key, String value) {
+        if (key == null) {
+            return;
+        }
+        if (value == null) {
+            metadata.remove(key);
+            return;
+        }
+        metadata.put(key, value);
+    }
+
+    public String getMetadata(String key) {
+        return metadata.get(key);
+    }
+
+    public Map<String, String> getMetadata() {
+        return metadata;
+    }
+
     /**
      * 返回节点的调试字符串表示，包含类型、值和子节点数量。
      * 用于调试和日志输出。
@@ -158,6 +190,7 @@ public class LaTeXNode {
      */
     @Override
     public String toString() {
-        return "LaTeXNode{" + type + ", value='" + value + "', children=" + children.size() + '}';
+        return "LaTeXNode{" + type + ", value='" + value + "', children=" + children.size()
+            + ", metadata=" + metadata + '}';
     }
 }

@@ -16,6 +16,10 @@ public class QuestionDTO {
     private String correct;
     private Integer score;
     private String analyze;
+    private String solution;
+    private String difficulty;
+    private String knowledgePoint;
+    private List<String> tags;
 
     @Data
     public static class OptionDTO {
