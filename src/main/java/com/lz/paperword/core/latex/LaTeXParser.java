@@ -373,6 +373,7 @@ public class LaTeXParser {
             case "\\begin" -> parseBeginEnvironment(stream);
             case "\\frac" -> parseFrac(stream);
             case "\\sqrt" -> parseSqrt(stream);
+            case "\\longdiv" -> parseLongDiv(stream);
             case "\\left" -> parseLeftRight(stream);
             case "\\overline", "\\underline", "\\hat", "\\tilde",
                  "\\vec", "\\bar", "\\dot", "\\overbrace", "\\underbrace" -> parseUnaryCommand(stream, cmd);
@@ -394,13 +395,19 @@ public class LaTeXParser {
     private LaTeXNode parseBeginEnvironment(TokenStream stream) {
         String envName = extractPlainText(parseRequiredGroup(stream));
         if ("array".equals(envName)) {
-            return parseArrayEnvironment(stream);
+            return parseArrayEnvironment(stream, "array");
+        }
+        if ("longdivision".equals(envName)) {
+            // `longdivision` 环境暂按 array 兼容处理：
+            // 目前已确认的 MTEF `tmLDIV` 只支持商槽和被除数槽，
+            // 不能安全承载完整步骤矩阵；为保证 MathType 可识别，这里不将环境直接提升为自定义模板节点。
+            return parseArrayEnvironment(stream, "longdivision");
         }
         return new LaTeXNode(LaTeXNode.Type.COMMAND, "\\begin{" + envName + "}");
     }
 
-    private LaTeXNode parseArrayEnvironment(TokenStream stream) {
-        LaTeXNode arrayNode = new LaTeXNode(LaTeXNode.Type.ARRAY, "\\array");
+    private LaTeXNode parseArrayEnvironment(TokenStream stream, String envName) {
+        LaTeXNode arrayNode = new LaTeXNode(LaTeXNode.Type.ARRAY, "\\" + envName);
         String columnSpec = extractPlainText(parseRequiredGroup(stream));
         arrayNode.setMetadata("columnSpec", columnSpec);
         arrayNode.setMetadata("columnCount", String.valueOf(countArrayColumns(columnSpec)));
@@ -414,7 +421,7 @@ public class LaTeXParser {
         boolean seenContent = false;
 
         while (stream.hasNext()) {
-            if (stream.matchesEnvironmentEnd("array")) {
+            if (stream.matchesEnvironmentEnd(envName)) {
                 finalizeArrayCell(currentRow, currentCell);
                 finalizeArrayRow(arrayNode, currentRow);
                 stream.consumeEnvironmentEnd();
@@ -594,6 +601,47 @@ public class LaTeXParser {
         }
         // 读取必需的被开方数参数 {content}
         node.addChild(parseRequiredGroup(stream));
+        return node;
+    }
+
+    /**
+     * 解析长除法命令 \longdiv[quotient]{divisor}{dividend}。
+     *
+     * <p>创建 LONG_DIVISION 类型节点。MathType 的 LDivBoxClass 只有两个模板槽位：
+     * quotient slot 和 dividend slot；除数应写在模板外部。
+     * 因此本节点的子节点顺序约定为：</p>
+     * <ul>
+     *   <li>children[0]：除数（divisor，模板外部）</li>
+     *   <li>children[1]：商（quotient，可选）</li>
+     *   <li>children[2]：被除数（dividend，模板内主槽位）</li>
+     * </ul>
+     *
+     * @param stream Token 流（当前位置在 \longdiv 之后）
+     * @return LONG_DIVISION 类型的 AST 节点
+     */
+    private LaTeXNode parseLongDiv(TokenStream stream) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.LONG_DIVISION, "\\longdiv");
+        if (stream.hasNext() && stream.peek().type() == TokenType.LBRACKET) {
+            stream.next();
+            LaTeXNode quotient = new LaTeXNode(LaTeXNode.Type.GROUP);
+            while (stream.hasNext() && stream.peek().type() != TokenType.RBRACKET) {
+                LaTeXNode child = parseAtom(stream);
+                if (child != null) {
+                    child = parseScripts(stream, child);
+                    quotient.addChild(child);
+                }
+            }
+            if (stream.hasNext()) {
+                stream.next();
+            }
+            node.addChild(parseRequiredGroup(stream)); // divisor
+            node.addChild(quotient);                  // quotient
+            node.addChild(parseRequiredGroup(stream)); // dividend
+            return node;
+        }
+        node.addChild(parseRequiredGroup(stream));     // divisor
+        node.addChild(new LaTeXNode(LaTeXNode.Type.GROUP)); // no quotient slot
+        node.addChild(parseRequiredGroup(stream));     // dividend
         return node;
     }
 

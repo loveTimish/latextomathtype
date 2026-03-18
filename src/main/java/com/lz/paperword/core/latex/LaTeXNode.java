@@ -75,6 +75,8 @@ public class LaTeXNode {
         TEXT,
         /** 数组/竖式节点：表示 \begin{array}{...}...\end{array} */
         ARRAY,
+        /** 长除法节点：表示长除法结构 \begin{longdivision} 或 \longdiv */
+        LONG_DIVISION,
         /** 数组的一行 */
         ROW,
         /** 数组中的单元格 */

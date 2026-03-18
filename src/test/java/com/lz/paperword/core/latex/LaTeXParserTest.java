@@ -144,6 +144,26 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseArrayForVerticalSubtraction() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{rrrr} & 8 & 6 & 4 \\\\ - & 2 & 7 & 9 \\\\ \\hline & 5 & 8 & 5\\end{array}");
+        assertNotNull(ast);
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("rrrr", array.getMetadata("columnSpec"));
+        assertEquals(3, array.getChildren().size());
+    }
+
+    @Test
+    void testParseArrayForDecimalSubtraction() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{rcr}12 & . & 50 \\\\ -3 & . & 75 \\\\ \\hline 8 & . & 75\\end{array}");
+        assertNotNull(ast);
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("rcr", array.getMetadata("columnSpec"));
+        assertEquals(3, array.getChildren().size());
+    }
+
+    @Test
     void testParseArrayForDivisionTemplate() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{array}{r|l}13 & 845 \\\\ \\hline & 65 \\\\ & 78 \\\\ & 65 \\\\ & 0\\end{array}");
         assertNotNull(ast);
@@ -152,5 +172,59 @@ class LaTeXParserTest {
         assertEquals("r|l", array.getMetadata("columnSpec"));
         assertEquals("0,1,0", array.getMetadata("columnLines"));
         assertEquals(5, array.getChildren().size());
+    }
+
+    @Test
+    void testParseExplicitLongDivisionCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\longdiv[65]{13}{845}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode longDiv = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.LONG_DIVISION, longDiv.getType());
+        assertEquals("\\longdiv", longDiv.getValue());
+        assertEquals(3, longDiv.getChildren().size());
+        assertEquals("13", flatten(longDiv.getChildren().get(0)));
+        assertEquals("65", flatten(longDiv.getChildren().get(1)));
+        assertEquals("845", flatten(longDiv.getChildren().get(2)));
+    }
+
+    @Test
+    void testParseExplicitLongDivisionCommandWithoutQuotient() {
+        LaTeXNode ast = parser.parseLaTeX("\\longdiv{13}{845}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode longDiv = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.LONG_DIVISION, longDiv.getType());
+        assertEquals(3, longDiv.getChildren().size());
+        assertEquals("13", flatten(longDiv.getChildren().get(0)));
+        assertEquals("", flatten(longDiv.getChildren().get(1)));
+        assertEquals("845", flatten(longDiv.getChildren().get(2)));
+    }
+
+    @Test
+    void testParseLongDivisionEnvironmentAsArrayFallback() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{longdivision}{r|l}13 & 845 \\\\ \\hline & 65\\end{longdivision}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("\\longdivision", array.getValue());
+    }
+
+    private String flatten(LaTeXNode node) {
+        if (node == null) {
+            return "";
+        }
+        if (node.getType() == LaTeXNode.Type.CHAR || node.getType() == LaTeXNode.Type.COMMAND) {
+            return node.getValue() == null ? "" : node.getValue();
+        }
+        StringBuilder builder = new StringBuilder();
+        for (LaTeXNode child : node.getChildren()) {
+            builder.append(flatten(child));
+        }
+        return builder.toString();
     }
 }
