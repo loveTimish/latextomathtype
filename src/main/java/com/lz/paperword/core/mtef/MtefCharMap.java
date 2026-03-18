@@ -196,6 +196,10 @@ public final class MtefCharMap {
         putSymbol("\\Leftrightarrow", 0x21D4);  // ⇔ 双线双向箭头（等价）
         putSymbol("\\uparrow",   0x2191);  // ↑ 上箭头
         putSymbol("\\downarrow", 0x2193);  // ↓ 下箭头
+        putSymbol("\\nearrow",   0x2197);  // ↗ 右上箭头
+        putSymbol("\\searrow",   0x2198);  // ↘ 右下箭头
+        putSymbol("\\swarrow",   0x2199);  // ↙ 左下箭头
+        putSymbol("\\nwarrow",   0x2196);  // ↖ 左上箭头
 
         // 省略号
         putSymbol("\\ldots",     0x2026);  // … 底部省略号

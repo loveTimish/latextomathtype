@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.StringReader;
@@ -168,6 +169,29 @@ public class LaTeXImageRenderer {
             return new PreviewImage(pngData, displayWidth, displayHeight, "png", "image/png");
         } catch (Exception e) {
             log.debug("Preview render failed: {}", latex, e);
+            // 预览专用的 JLaTeXMath 通道失败时，继续复用正式渲染链，避免 OLE 被直接降级成原始文本。
+            return renderFallbackPreview(latex);
+        }
+    }
+
+    private PreviewImage renderFallbackPreview(String latex) {
+        try {
+            byte[] pngData = renderToPng(latex, DEFAULT_SIZE);
+            if (pngData == null || pngData.length == 0) {
+                return null;
+            }
+            BufferedImage image = ImageIO.read(new ByteArrayInputStream(pngData));
+            if (image == null) {
+                return null;
+            }
+            return new PreviewImage(
+                pngData,
+                Math.max(image.getWidth(), 10),
+                Math.max(image.getHeight(), 10),
+                "png",
+                "image/png");
+        } catch (Exception fallbackException) {
+            log.debug("Fallback preview render failed: {}", latex, fallbackException);
             return null;
         }
     }

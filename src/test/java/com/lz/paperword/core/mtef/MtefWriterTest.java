@@ -106,6 +106,16 @@ class MtefWriterTest {
         assertNotNull(plus);
         // '+' is a math operator and should map to Symbol typeface.
         assertEquals(MtefRecord.FN_SYMBOL, plus.typeface());
+
+        MtefCharMap.CharEntry nearrow = MtefCharMap.lookup("\\nearrow");
+        assertNotNull(nearrow);
+        assertEquals(MtefRecord.FN_SYMBOL, nearrow.typeface());
+        assertEquals(0x2197, nearrow.mtcode());
+
+        MtefCharMap.CharEntry searrow = MtefCharMap.lookup("\\searrow");
+        assertNotNull(searrow);
+        assertEquals(MtefRecord.FN_SYMBOL, searrow.typeface());
+        assertEquals(0x2198, searrow.mtcode());
     }
 
     @Test

@@ -13,11 +13,20 @@ import com.lz.paperword.core.layout.VerticalLayoutSpec.VerticalTabStop;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 将 LaTeX AST 编译为统一的竖式布局语义。
  */
 public class VerticalLayoutCompiler {
+
+    /**
+     * 竖式正规化阶段需要吞掉的 LaTeX 间距命令。
+     * 这些命令只负责排版留白，不能落成可见正文，否则会出现“×quad3”这类脏文本。
+     */
+    private static final Set<String> SPACING_COMMANDS = Set.of(
+        "\\,", "\\;", "\\:", "\\!", "\\quad", "\\qquad", "\\hspace", "\\hskip"
+    );
 
     public VerticalLayoutSpec compile(LaTeXNode node) {
         LaTeXNode root = unwrapRoot(node);
@@ -569,6 +578,10 @@ public class VerticalLayoutCompiler {
         if (node.getType() == LaTeXNode.Type.COMMAND) {
             if ("\\times".equals(node.getValue())) {
                 return "×";
+            }
+            // 间距命令只保留版式意义，不应变成正文字符。
+            if (SPACING_COMMANDS.contains(node.getValue())) {
+                return "";
             }
             return blankToEmpty(node.getValue()).replace("\\", "");
         }
