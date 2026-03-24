@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this project does
 
-This is a Java 21 / Spring Boot 3 application that turns exam-paper JSON into `.docx` files with editable MathType equations. The primary API is `POST /api/export/word`. The service can run in two modes:
+This is a Java 21 / Spring Boot 3 application that turns exam-paper or layout JSON into `.docx` files with editable MathType equations. The primary APIs are `POST /api/export/word` and `POST /api/export/layout-word`. The service can run in two modes:
 
 - Pure Java mode: generate MathType-compatible OLE objects locally and embed them directly into the DOCX.
 - Windows bridge mode: generate a draft DOCX with raw `$...$` markers, then send it to an external Windows service that uses local Word + MathType automation for final conversion.
@@ -29,9 +29,11 @@ The top-level request flow is:
 
 Important pieces:
 
-- `controller/ExportController.java`: HTTP entrypoint for export and health endpoints.
+- `controller/ExportController.java`: HTTP entrypoint for paper export, layout export, and health endpoints.
 - `service/PaperExportService.java`: chooses between pure-Java OLE generation and the Windows conversion service.
+- `service/LayoutExportService.java`: exports `LayoutDocumentRequest` page/block layouts directly into DOCX while preserving OCR layout structure.
 - `core/docx/DocxBuilder.java`: main orchestrator for building the Word document layout, question sections, options, answer areas, and inline/display math placement.
+- `core/docx/LayoutDocxBuilder.java`: layout-preserving DOCX builder used by the OCR/PDF gateway service.
 - `core/docx/MathTypeEmbedder.java`: creates `/word/embeddings/*.bin` OLE parts plus preview image parts, then injects the VML/OLE XML into the paragraph run.
 - `core/ole/OlePackager.java`: packages MTEF bytes into a MathType OLE compound document.
 - `core/render/LaTeXImageRenderer.java`: generates the preview image used before Word/MathType replaces it with native rendering.
