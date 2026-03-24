@@ -58,6 +58,15 @@ class GenerateVisibleVerticalWordTest {
         question.setQuestionType(6);
         question.setScore(20);
         question.setContent("""
+            K12 常见公式：<br/>
+            分数：$\\frac{3}{4}+\\frac{1}{2}=\\frac{5}{4}$<br/>
+            带根号：$\\sqrt{49}=7$<br/>
+            带上下标：$x_1+x_2=x^2$<br/>
+            简单方程：$2x+5=17$<br/>
+            面积公式：$S=\\frac{ah}{2}$<br/>
+            平均数：$\\frac{12+15+18}{3}=15$<br/>
+            浓度十字交叉：<br/>
+            $$\\begin{array}{ccccc}{50\\%} & {} & {} & {} & {20\\%} \\\\ {} & {\\searrow} & {} & {\\nearrow} & {} \\\\ {} & {} & {30\\%} & {} & {} \\\\ {} & {\\nearrow} & {} & {\\searrow} & {} \\\\ {10\\%} & {} & {} & {} & {20\\%}\\end{array}$$<br/>
             整数加法：<br/>
             $$\\begin{array}{rrrr}{} & {1} & {2} & {3} \\\\ {+} & {4} & {5} & {6} \\\\ \\hline {} & {5} & {7} & {9}\\end{array}$$<br/>
             整数减法：<br/>
@@ -68,12 +77,10 @@ class GenerateVisibleVerticalWordTest {
             $$\\begin{array}{rcrl}{} & {12} & {.} & {50} \\\\ {+} & {3} & {.} & {75} \\\\ \\hline {} & {16} & {.} & {25}\\end{array}$$<br/>
             小数减法：<br/>
             $$\\begin{array}{rcrl}{} & {12} & {.} & {50} \\\\ {-} & {3} & {.} & {75} \\\\ \\hline {} & {8} & {.} & {75}\\end{array}$$<br/>
-            显式长除法（两步过程）：<br/>
-            $$\\begin{array}{l}{\\longdiv[65]{13}{845}} \\\\ {\\begin{array}{rrr}{7} & {8} & {} \\\\ \\hline {} & {6} & {5} \\\\ {} & {6} & {5} \\\\ \\hline {} & {} & {0}\\end{array}}\\end{array}$$<br/>
-            显式长除法（三步过程）：<br/>
+            显式长除法：<br/>
             $$\\longdiv[246]{5}{1234}$$<br/>
-            参考三步模板（对照用）：<br/>
-            $$\\begin{array}{l}{\\longdiv[246]{5}{1234}} \\\\ {\\begin{array}{rrrr}{1} & {2} & {3} & {4} \\\\ \\hline {} & {1} & {0} & {} \\\\ {} & {2} & {3} & {} \\\\ \\hline {} & {2} & {0} & {} \\\\ {} & {3} & {4} & {} \\\\ \\hline {} & {3} & {0} & {} \\\\ {} & {} & {4} & {}\\end{array}}\\end{array}$$
+            当前长除法规则：<br/>
+            $$\\longdiv[65]{13}{845}$$
             """);
 
         section.setQuestions(List.of(question));

@@ -20,6 +20,9 @@ import java.util.Set;
  */
 public class VerticalLayoutCompiler {
 
+    public static final String EXPLICIT_EMPTY_CELL_TOKEN = "@@PW_EMPTY_CELL@@";
+    private static final int CROSS_MULTIPLICATION_SIZE = 5;
+
     /**
      * 竖式正规化阶段需要吞掉的 LaTeX 间距命令。
      * 这些命令只负责排版留白，不能落成可见正文，否则会出现“×quad3”这类脏文本。
@@ -32,9 +35,6 @@ public class VerticalLayoutCompiler {
         LaTeXNode root = unwrapRoot(node);
         if (root == null) {
             return null;
-        }
-        if (isCompositeLongDivisionArray(root)) {
-            return compileCompositeLongDivision(root);
         }
         if (root.getType() == LaTeXNode.Type.LONG_DIVISION) {
             return compileExplicitLongDivision(root);
@@ -51,20 +51,9 @@ public class VerticalLayoutCompiler {
         return null;
     }
 
-    public boolean isCompositeLongDivisionArray(LaTeXNode node) {
-        if (node == null || node.getType() != LaTeXNode.Type.ARRAY || node.getChildren().size() < 2) {
-            return false;
-        }
-        return findFirstDescendant(node.getChildren().get(0), LaTeXNode.Type.LONG_DIVISION) != null
-            && findNestedArray(node.getChildren().get(1), node) != null;
-    }
-
     public VerticalLayoutSpec compileArray(LaTeXNode node) {
         if (node == null || node.getType() != LaTeXNode.Type.ARRAY) {
             return null;
-        }
-        if (isDivisionArray(node)) {
-            return compileLegacyDivisionArray(node);
         }
         if (isDecimalArray(node)) {
             return compileDecimalArray(node);
@@ -72,34 +61,28 @@ public class VerticalLayoutCompiler {
         return compileArithmeticArray(node);
     }
 
-    public VerticalLayoutSpec compileCompositeLongDivision(LaTeXNode node) {
-        LaTeXNode longDiv = findFirstDescendant(node.getChildren().get(0), LaTeXNode.Type.LONG_DIVISION);
-        LaTeXNode stepsArray = findNestedArray(node.getChildren().get(1), node);
-        if (longDiv == null || stepsArray == null) {
+    /**
+     * 识别十字交叉数组并提取 5x5 原始单元格文本。
+     *
+     * <p>这里不返回通用竖式规格，而是保留原始行列信息，
+     * 供上层直接重建成嵌套 MATRIX，避免被算术数组正规化压平。</p>
+     */
+    public CrossMultiplicationLayout compileCrossMultiplicationArray(LaTeXNode node) {
+        if (node == null || node.getType() != LaTeXNode.Type.ARRAY) {
             return null;
         }
-
-        VerticalLayoutSpec steps = compileArray(stepsArray);
-        LongDivisionHeader header = new LongDivisionHeader(
-            flattenNodeText(childAt(longDiv, 0)),
-            flattenNodeText(childAt(longDiv, 1)),
-            flattenNodeText(childAt(longDiv, 2))
-        );
-        if (steps == null) {
-            steps = compileExplicitLongDivision(longDiv);
+        List<List<String>> rows = extractRowTexts(node);
+        if (rows.size() != CROSS_MULTIPLICATION_SIZE) {
+            return null;
         }
-        steps = offsetLayout(steps, 2, Kind.LONG_DIVISION, header);
-        return new VerticalLayoutSpec(
-            Kind.LONG_DIVISION,
-            steps == null ? 0 : steps.columnCount(),
-            steps == null ? -1 : steps.anchorColumn(),
-            -1,
-            steps == null ? List.of() : steps.tabStops(),
-            steps == null ? List.of() : steps.rows(),
-            steps == null ? List.of() : steps.ruleSpans(),
-            header,
-            steps == null ? List.of() : steps.longDivisionSteps()
-        );
+        List<List<String>> normalized = new ArrayList<>();
+        for (List<String> row : rows) {
+            normalized.add(normalizeCrossRow(row));
+        }
+        if (!matchesCrossMultiplicationPattern(normalized)) {
+            return null;
+        }
+        return new CrossMultiplicationLayout(normalized);
     }
 
     public VerticalLayoutSpec compileExplicitLongDivision(LaTeXNode node) {
@@ -171,18 +154,15 @@ public class VerticalLayoutCompiler {
             return null;
         }
 
-        boolean multiplication = isMultiplicationArray(node);
+        int declaredCols = parseDeclaredColumnCount(node.getMetadata("columnCount"));
         int maxCols = rawRows.stream().mapToInt(List::size).max().orElse(0);
-        int targetCols = multiplication ? maxCols + 1 : maxCols;
+        int targetCols = Math.max(maxCols, declaredCols);
         List<VerticalRow> rows = new ArrayList<>();
         for (int rowIndex = 0; rowIndex < rawRows.size(); rowIndex++) {
             List<String> row = new ArrayList<>(rawRows.get(rowIndex));
-            int padLeft = targetCols - row.size() - (multiplication ? 1 : 0);
+            int padLeft = targetCols - row.size();
             while (padLeft-- > 0) {
                 row.add(0, "");
-            }
-            if (multiplication) {
-                row.add("");
             }
             while (row.size() < targetCols) {
                 row.add("");
@@ -192,7 +172,7 @@ public class VerticalLayoutCompiler {
 
         List<RuleSpan> ruleSpans = compileRuleSpans(rows, parsePartitionArray(node.getMetadata("rowLines"), rows.size() + 1));
         rows = withSegments(rows, ruleSpans);
-        return new VerticalLayoutSpec(Kind.ARITHMETIC, targetCols, targetCols - 1 - (multiplication ? 1 : 0), -1,
+        return new VerticalLayoutSpec(Kind.ARITHMETIC, targetCols, targetCols - 1, -1,
             buildTabStops(targetCols, -1), rows, ruleSpans, null);
     }
 
@@ -212,70 +192,6 @@ public class VerticalLayoutCompiler {
         rows = withSegments(rows, ruleSpans);
         return new VerticalLayoutSpec(Kind.DECIMAL, 1, 0, 0,
             buildTabStops(1, 0), rows, ruleSpans, null);
-    }
-
-    private VerticalLayoutSpec compileLegacyDivisionArray(LaTeXNode node) {
-        List<List<String>> rawRows = extractRowTexts(node);
-        if (rawRows.isEmpty() || rawRows.get(0).size() < 2) {
-            return null;
-        }
-
-        String divisor = rawRows.get(0).isEmpty() ? "" : rawRows.get(0).get(0);
-        String dividend = rawRows.get(0).size() > 1 ? rawRows.get(0).get(1) : "";
-        List<VerticalRow> rows = new ArrayList<>();
-        List<RuleSpan> ruleSpans = new ArrayList<>();
-        int maxCols = rawRows.stream().skip(1).mapToInt(List::size).max().orElse(1);
-        int columnCount = Math.max(maxCols, 1) + 2;
-        for (int rowIndex = 1; rowIndex < rawRows.size(); rowIndex++) {
-            List<String> row = new ArrayList<>(rawRows.get(rowIndex));
-            while (row.size() < columnCount - 2) {
-                row.add(0, "");
-            }
-            row.add(0, "");
-            row.add(0, "");
-            rows.add(new VerticalRow(RowKind.STEP, row));
-        }
-        ruleSpans.addAll(compileRuleSpans(rows, parsePartitionArray(node.getMetadata("rowLines"), rawRows.size() + 1)));
-        rows = withSegments(rows, ruleSpans);
-        return new VerticalLayoutSpec(
-            Kind.LONG_DIVISION,
-            columnCount,
-            columnCount - 1,
-            -1,
-            buildTabStops(columnCount, -1),
-            rows,
-            ruleSpans,
-            new LongDivisionHeader(divisor, "", dividend)
-        );
-    }
-
-    private VerticalLayoutSpec offsetLayout(VerticalLayoutSpec spec, int offset, Kind kind, LongDivisionHeader header) {
-        if (spec == null) {
-            return null;
-        }
-        List<VerticalRow> shiftedRows = new ArrayList<>();
-        for (VerticalRow row : spec.rows()) {
-            List<String> cells = new ArrayList<>();
-            for (int i = 0; i < offset; i++) {
-                cells.add("");
-            }
-            cells.addAll(row.cells());
-            shiftedRows.add(new VerticalRow(row.kind(), cells));
-        }
-        List<RuleSpan> spans = new ArrayList<>(spec.ruleSpans());
-        shiftedRows = withSegments(shiftedRows, spans);
-        List<LongDivisionStep> shiftedSteps = offsetLongDivisionSteps(spec.longDivisionSteps(), offset);
-        return new VerticalLayoutSpec(
-            kind,
-            spec.columnCount() + offset,
-            spec.anchorColumn() + offset,
-            spec.decimalColumn() < 0 ? -1 : spec.decimalColumn() + offset,
-            buildTabStops(spec.columnCount() + offset, -1),
-            shiftedRows,
-            spans,
-            header,
-            shiftedSteps
-        );
     }
 
     private String buildDecimalRowText(List<String> rawRow) {
@@ -441,7 +357,7 @@ public class VerticalLayoutCompiler {
         for (LaTeXNode rowNode : arrayNode.getChildren()) {
             List<String> row = new ArrayList<>();
             for (LaTeXNode cell : rowNode.getChildren()) {
-                row.add(flattenNodeText(cell));
+                row.add(extractCellText(cell));
             }
             trimRight(row);
             rows.add(row);
@@ -449,34 +365,15 @@ public class VerticalLayoutCompiler {
         return rows;
     }
 
-    private boolean isMultiplicationArray(LaTeXNode node) {
-        for (LaTeXNode row : node.getChildren()) {
-            for (LaTeXNode cell : row.getChildren()) {
-                String text = flattenNodeText(cell);
-                if (text.contains("\\times") || text.contains("×")) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     private boolean isDecimalArray(LaTeXNode node) {
         for (LaTeXNode row : node.getChildren()) {
             for (LaTeXNode cell : row.getChildren()) {
-                if (".".equals(flattenNodeText(cell))) {
+                if (".".equals(extractCellText(cell))) {
                     return true;
                 }
             }
         }
         return false;
-    }
-
-    private boolean isDivisionArray(LaTeXNode node) {
-        return node != null
-            && node.getType() == LaTeXNode.Type.ARRAY
-            && node.getMetadata("columnSpec") != null
-            && node.getMetadata("columnSpec").contains("|");
     }
 
     private LaTeXNode unwrapRoot(LaTeXNode node) {
@@ -487,38 +384,6 @@ public class VerticalLayoutCompiler {
             return node.getChildren().get(0);
         }
         return node;
-    }
-
-    private LaTeXNode findFirstDescendant(LaTeXNode node, LaTeXNode.Type type) {
-        if (node == null) {
-            return null;
-        }
-        if (node.getType() == type) {
-            return node;
-        }
-        for (LaTeXNode child : node.getChildren()) {
-            LaTeXNode found = findFirstDescendant(child, type);
-            if (found != null) {
-                return found;
-            }
-        }
-        return null;
-    }
-
-    private LaTeXNode findNestedArray(LaTeXNode node, LaTeXNode exclude) {
-        if (node == null) {
-            return null;
-        }
-        if (node != exclude && node.getType() == LaTeXNode.Type.ARRAY) {
-            return node;
-        }
-        for (LaTeXNode child : node.getChildren()) {
-            LaTeXNode found = findNestedArray(child, exclude);
-            if (found != null) {
-                return found;
-            }
-        }
-        return null;
     }
 
     private int[] parsePartitionArray(String encoded, int expectedSize) {
@@ -563,9 +428,18 @@ public class VerticalLayoutCompiler {
     }
 
     private void trimRight(List<String> row) {
-        while (!row.isEmpty() && blankToEmpty(row.get(row.size() - 1)).isEmpty()) {
+        while (!row.isEmpty()
+            && blankToEmpty(row.get(row.size() - 1)).isEmpty()
+            && !EXPLICIT_EMPTY_CELL_TOKEN.equals(row.get(row.size() - 1))) {
             row.remove(row.size() - 1);
         }
+    }
+
+    private String extractCellText(LaTeXNode cell) {
+        if (cell != null && "true".equals(cell.getMetadata("explicitEmptyCell"))) {
+            return EXPLICIT_EMPTY_CELL_TOKEN;
+        }
+        return flattenNodeText(cell);
     }
 
     private String flattenNodeText(LaTeXNode node) {
@@ -579,11 +453,24 @@ public class VerticalLayoutCompiler {
             if ("\\times".equals(node.getValue())) {
                 return "×";
             }
+            // LaTeX 转义字符在竖式编译阶段要还原成真实字符，不能把反斜杠也带进最终单元格文本。
+            if ("\\%".equals(node.getValue())) {
+                return "%";
+            }
+            if ("\\_".equals(node.getValue())) {
+                return "_";
+            }
+            if ("\\{".equals(node.getValue())) {
+                return "{";
+            }
+            if ("\\}".equals(node.getValue())) {
+                return "}";
+            }
             // 间距命令只保留版式意义，不应变成正文字符。
             if (SPACING_COMMANDS.contains(node.getValue())) {
                 return "";
             }
-            return blankToEmpty(node.getValue()).replace("\\", "");
+            return blankToEmpty(node.getValue());
         }
         StringBuilder builder = new StringBuilder();
         for (LaTeXNode child : node.getChildren()) {
@@ -593,7 +480,72 @@ public class VerticalLayoutCompiler {
     }
 
     private String blankToEmpty(String text) {
-        return text == null || text.isBlank() ? "" : text;
+        if (text == null || text.isBlank() || EXPLICIT_EMPTY_CELL_TOKEN.equals(text)) {
+            return "";
+        }
+        return text;
+    }
+
+    private List<String> normalizeCrossRow(List<String> row) {
+        List<String> normalized = new ArrayList<>(row == null ? List.of() : row);
+        while (normalized.size() < CROSS_MULTIPLICATION_SIZE) {
+            normalized.add("");
+        }
+        if (normalized.size() > CROSS_MULTIPLICATION_SIZE) {
+            return new ArrayList<>(normalized.subList(0, CROSS_MULTIPLICATION_SIZE));
+        }
+        return normalized;
+    }
+
+    private boolean matchesCrossMultiplicationPattern(List<List<String>> rows) {
+        if (rows.size() != CROSS_MULTIPLICATION_SIZE) {
+            return false;
+        }
+        if (!isPercentLike(rows.get(0).get(0)) || !isPercentLike(rows.get(0).get(4))) {
+            return false;
+        }
+        if (!isDiagonalArrow(rows.get(1).get(1)) || !isDiagonalArrow(rows.get(1).get(3))) {
+            return false;
+        }
+        if (!isPercentLike(rows.get(2).get(2))) {
+            return false;
+        }
+        if (!isDiagonalArrow(rows.get(3).get(1)) || !isDiagonalArrow(rows.get(3).get(3))) {
+            return false;
+        }
+        return isPercentLike(rows.get(4).get(0)) && isPercentLike(rows.get(4).get(4));
+    }
+
+    private boolean isPercentLike(String text) {
+        return !blankToEmpty(text).isEmpty() && blankToEmpty(text).contains("%");
+    }
+
+    private boolean isDiagonalArrow(String text) {
+        String normalized = blankToEmpty(text);
+        return "\\nearrow".equals(normalized)
+            || "\\searrow".equals(normalized)
+            || "\\nwarrow".equals(normalized)
+            || "\\swarrow".equals(normalized);
+    }
+
+    private int parseDeclaredColumnCount(String encoded) {
+        if (encoded == null || encoded.isBlank()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(encoded.trim());
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
+    }
+
+    /**
+     * 十字交叉布局的原始 5x5 文本快照。
+     */
+    public record CrossMultiplicationLayout(List<List<String>> rows) {
+        public CrossMultiplicationLayout {
+            rows = rows == null ? List.of() : List.copyOf(rows.stream().map(List::copyOf).toList());
+        }
     }
 
 }

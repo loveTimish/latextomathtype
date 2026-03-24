@@ -27,6 +27,8 @@ public class MathTypeEmbedder {
     private static final Logger log = LoggerFactory.getLogger(MathTypeEmbedder.class);
 
     private static final double PT_PER_PX = 0.75d;
+    /** 公式层默认字号已从 30pt 收敛到 20pt，基线偏移也按同样比例缩小。 */
+    private static final double BASELINE_SHIFT_SCALE = 20.0d / 30.0d;
     private final MtefWriter mtefWriter = new MtefWriter();
     private final OlePackager olePackager = new OlePackager();
     private final LaTeXImageRenderer imageRenderer = new LaTeXImageRenderer();
@@ -42,9 +44,7 @@ public class MathTypeEmbedder {
 
             LaTeXImageRenderer.PreviewImage preview = imageRenderer.renderForOlePreview(rawLatex);
             if (preview == null || preview.data() == null || preview.data().length == 0) {
-                log.warn("Could not render preview for: {}", rawLatex);
-                run.setText("[" + rawLatex + "]");
-                return;
+                throw new IllegalStateException("OLE preview rendering returned no image data");
             }
 
             OPCPackage pkg = paragraph.getDocument().getPackage();
@@ -166,18 +166,26 @@ public class MathTypeEmbedder {
     private int resolveRunPositionHalfPoints(String rawLatex, double targetHeightPt) {
         String latex = rawLatex == null ? "" : rawLatex;
 
+        if (latex.contains("\\longdiv") || latex.contains("\\enclose{longdiv}")) {
+            // 长除法对象整体更高，保留更大的下移量，但跟着新字号同比缩小。
+            return scaleHalfPoints(-112);
+        }
         if (latex.contains("\\frac") || latex.contains("\\dfrac") || latex.contains("\\cfrac")) {
-            return -24;
+            return scaleHalfPoints(-24);
         }
         if (latex.contains("\\sqrt")) {
-            return -8;
+            return scaleHalfPoints(-8);
         }
         if (targetHeightPt >= 28d) {
-            return -24;
+            return scaleHalfPoints(-24);
         }
         if (targetHeightPt >= 24d) {
-            return -8;
+            return scaleHalfPoints(-8);
         }
-        return -6;
+        return scaleHalfPoints(-6);
+    }
+
+    private int scaleHalfPoints(int originalHalfPt) {
+        return (int) Math.round(originalHalfPt * BASELINE_SHIFT_SCALE);
     }
 }

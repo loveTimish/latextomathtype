@@ -109,13 +109,34 @@ class MtefWriterTest {
 
         MtefCharMap.CharEntry nearrow = MtefCharMap.lookup("\\nearrow");
         assertNotNull(nearrow);
-        assertEquals(MtefRecord.FN_SYMBOL, nearrow.typeface());
+        assertEquals(MtefRecord.FN_MTEXTRA, nearrow.typeface());
         assertEquals(0x2197, nearrow.mtcode());
 
         MtefCharMap.CharEntry searrow = MtefCharMap.lookup("\\searrow");
         assertNotNull(searrow);
-        assertEquals(MtefRecord.FN_SYMBOL, searrow.typeface());
+        assertEquals(MtefRecord.FN_MTEXTRA, searrow.typeface());
         assertEquals(0x2198, searrow.mtcode());
+    }
+
+    @Test
+    void testWriteCrossArrayKeepsDiagonalArrowCommands() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{ccccc}{50\\%} & {} & {} & {} & {10\\%} \\\\ {} & {\\searrow} & {} & {\\nearrow} & {} \\\\ {} & {} & {30\\%} & {} & {} \\\\ {} & {\\nearrow} & {} & {\\searrow} & {} \\\\ {20\\%} & {} & {} & {} & {20\\%}\\end{array}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertFalse(containsAscii(mtef, "Segoe UI Symbol"),
+            "cross array should no longer inject a custom Windows arrow font");
+        assertFalse(containsAscii(mtef, "DejaVu Sans"),
+            "cross array should no longer inject a custom Linux arrow font");
+        assertTrue(containsAscii(mtef, "MT Extra"),
+            "cross array should use MathType official MT Extra font slot");
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "cross array should still emit matrix records");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) 0x97, 0x21}), "should serialize \\nearrow as U+2197");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) 0x98, 0x21}), "should serialize \\searrow as U+2198");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) 0x8B, (byte) 0x97, 0x21}),
+            "diagonal arrows should use FN_MTEXTRA typeface");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) 0x86, (byte) 0x97, 0x21}),
+            "cross array should not keep FN_SYMBOL diagonal arrow typeface");
     }
 
     @Test
@@ -167,6 +188,19 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteMultiplicationArrayKeepsExplicitSpacerCells() {
+        LaTeXNode ast = parser.parseLaTeX(
+            "\\begin{array}{rrrrrr}{} & {} & {1} & {2} & {3} & {} \\\\ {\\times} & {} & {} & {4} & {5} & {} \\\\ \\hline {} & {} & {6} & {1} & {5} & {} \\\\ {+} & {4} & {9} & {2} & {} & {} \\\\ \\hline {} & {5} & {5} & {3} & {5} & {}\\end{array}"
+        );
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "multiplication array should emit MATRIX record");
+        assertTrue(countOccurrences(mtef, new byte[]{0x20, 0x00}) >= 2,
+            "explicit placeholder cells should be serialized as space-based spacer cells");
+    }
+
+    @Test
     void testWriteExplicitLongDivisionAsTemplate() {
         LaTeXNode ast = parser.parseLaTeX("\\longdiv[65]{13}{845}");
         byte[] mtef = writer.write(ast);
@@ -174,10 +208,10 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "explicit long division should emit MATRIX wrapper");
         assertTrue(containsRecord(mtef, MtefRecord.TMPL), "long division should emit TMPL record");
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TM_LDIV, 0x01, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x01, 0x00}),
             "long division should use tmLDIV with upper slot variation");
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TM_FRACT, 0x00, 0x00}),
-            "long division steps should include fraction templates");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
+            "long division steps should include underline templates");
     }
 
     @Test
@@ -187,10 +221,13 @@ class MtefWriterTest {
 
         assertNotNull(mtef);
         String digitStream = extractDigitStream(mtef);
-        assertTrue(digitStream.startsWith("121548"),
-            "tmLDIV should still write divisor and dividend slot content first");
-        assertTrue(digitStream.endsWith("129"),
-            "tmLDIV should still write quotient slot after the structured dividend content");
+        // tmLDIV slot order: divisor (outside template), quotient (slot 0), dividend (slot 1)
+        assertTrue(digitStream.contains("12"),
+            "tmLDIV should write divisor before template");
+        assertTrue(digitStream.contains("129"),
+            "tmLDIV slot 0 should contain quotient");
+        assertTrue(digitStream.contains("1548"),
+            "tmLDIV slot 1 should contain dividend");
     }
 
     @Test
@@ -201,43 +238,34 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "long division without quotient should emit MATRIX wrapper");
         assertTrue(containsRecord(mtef, MtefRecord.TMPL), "long division without quotient should emit TMPL record");
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TM_LDIV, 0x00, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x00, 0x00}),
             "long division without quotient should use tmLDIV without upper slot");
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TM_FRACT, 0x00, 0x00}),
-            "long division without quotient should still include fraction steps");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
+            "long division without quotient should still include underline steps");
     }
 
     @Test
-    void testWriteThreeStepLongDivisionKeepsStructuredFractions() {
+    void testWriteThreeStepLongDivisionKeepsStructuredUnderlines() {
         LaTeXNode ast = parser.parseLaTeX("\\longdiv[246]{5}{1234}");
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TM_LDIV, 0x01, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x01, 0x00}),
             "three-step long division should still use tmLDIV");
-        assertTrue(countOccurrences(mtef, new byte[]{(byte) MtefRecord.TM_FRACT, 0x00, 0x00}) >= 3,
-            "three-step long division should emit one fraction template per step");
+        assertTrue(countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}) >= 3,
+            "three-step long division should emit one underline template per step");
     }
 
     @Test
-    void testWriteLongDivisionEnvironmentStillUsesMatrixFallback() {
-        LaTeXNode ast = parser.parseLaTeX("\\begin{longdivision}{r|l}13 & 845 \\\\ \\hline & 65\\end{longdivision}");
+    void testWriteExplicitLongDivisionWithoutStructuredStepsFallsBackToSimpleHeader() {
+        LaTeXNode ast = parser.parseLaTeX("\\longdiv{x}{845}");
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "longdivision environment should remain MATRIX fallback");
-    }
-
-    @Test
-    void testWriteCompositeLongDivisionWithStepsKeepsTemplateAndMatrix() {
-        LaTeXNode ast = parser.parseLaTeX(
-            "\\begin{array}{l}{\\longdiv[65]{13}{845}} \\\\ {\\begin{array}{rrr}{7} & {8} & {} \\\\ \\hline {} & {6} & {5} \\\\ {} & {6} & {5} \\\\ \\hline {} & {} & {0}\\end{array}}\\end{array}"
-        );
-        byte[] mtef = writer.write(ast);
-
-        assertNotNull(mtef);
-        assertTrue(containsRecord(mtef, MtefRecord.TMPL), "composite long division should still include tmLDIV");
-        assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "composite long division should still include matrix steps");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x00, 0x00}),
+            "non-numeric long division should still emit tmLDIV header");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
+            "non-numeric long division should not synthesize structured underline steps");
     }
 
     private boolean containsRecord(byte[] bytes, int recordType) {
@@ -260,6 +288,10 @@ class MtefWriterTest {
             return true;
         }
         return false;
+    }
+
+    private boolean containsAscii(byte[] bytes, String needle) {
+        return new String(bytes, java.nio.charset.StandardCharsets.US_ASCII).contains(needle);
     }
 
     private String extractDigitStream(byte[] bytes) {

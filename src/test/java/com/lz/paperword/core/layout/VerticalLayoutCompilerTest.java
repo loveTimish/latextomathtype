@@ -54,20 +54,19 @@ class VerticalLayoutCompilerTest {
     }
 
     @Test
-    void shouldCompileCompositeLongDivisionArray() {
+    void shouldKeepMultiplicationColumnCountFromExplicitPlaceholders() {
         LaTeXNode ast = parser.parseLaTeX(
-            "\\begin{array}{l}{\\longdiv[65]{13}{845}} \\\\ {\\begin{array}{rrr}{7} & {8} & {} \\\\ \\hline {} & {6} & {5} \\\\ {} & {6} & {5} \\\\ \\hline {} & {} & {0}\\end{array}}\\end{array}"
+            "\\begin{array}{rrrrrr}{} & {} & {1} & {2} & {3} & {} \\\\ {\\times} & {} & {} & {4} & {5} & {} \\\\ \\hline {} & {} & {6} & {1} & {5} & {} \\\\ {+} & {4} & {9} & {2} & {} & {} \\\\ \\hline {} & {5} & {5} & {3} & {5} & {}\\end{array}"
         );
         VerticalLayoutSpec spec = compiler.compile(ast);
 
         assertNotNull(spec);
-        assertTrue(spec.isLongDivision());
-        assertEquals("65", spec.longDivisionHeader().quotient());
-        assertEquals("845", spec.longDivisionHeader().dividend());
-        assertEquals(5, spec.columnCount());
+        assertEquals(VerticalLayoutSpec.Kind.ARITHMETIC, spec.kind());
+        assertEquals(6, spec.columnCount());
         assertEquals(2, spec.ruleSpans().size());
-        assertEquals("", spec.rows().get(0).cells().get(0));
-        assertEquals("", spec.rows().get(0).cells().get(1));
+        assertEquals("×", spec.rows().get(1).cells().get(0));
+        assertEquals("4", spec.rows().get(1).cells().get(3));
+        assertEquals("5", spec.rows().get(1).cells().get(4));
     }
 
     @Test
@@ -84,6 +83,38 @@ class VerticalLayoutCompilerTest {
         assertEquals("34", joinCells(spec.longDivisionSteps().get(1).remainderRow().cells()));
         assertEquals("30", joinCells(spec.longDivisionSteps().get(2).productRow().cells()));
         assertEquals("4", joinCells(spec.longDivisionSteps().get(2).remainderRow().cells()));
+    }
+
+    @Test
+    void shouldUnescapePercentInCrossArrayCells() {
+        LaTeXNode ast = parser.parseLaTeX(
+            "\\begin{array}{ccccc}{50\\%} & {} & {} & {} & {10\\%} \\\\ {} & {\\searrow} & {} & {\\nearrow} & {} \\\\ {} & {} & {30\\%} & {} & {} \\\\ {} & {\\nearrow} & {} & {\\searrow} & {} \\\\ {20\\%} & {} & {} & {} & {20\\%}\\end{array}"
+        );
+        VerticalLayoutSpec spec = compiler.compile(ast);
+
+        assertNotNull(spec);
+        assertEquals("50%", spec.rows().get(0).cells().get(0));
+        assertEquals("10%", spec.rows().get(0).cells().get(4));
+        assertEquals("30%", spec.rows().get(2).cells().get(2));
+        assertEquals("20%", spec.rows().get(4).cells().get(0));
+        assertEquals("20%", spec.rows().get(4).cells().get(4));
+    }
+
+    @Test
+    void shouldRecognizeCrossMultiplicationLayoutWithoutFlatteningStructure() {
+        LaTeXNode ast = parser.parseLaTeX(
+            "\\begin{array}{ccccc}{50\\%} & {} & {} & {} & {10\\%} \\\\ {} & {\\searrow} & {} & {\\nearrow} & {} \\\\ {} & {} & {30\\%} & {} & {} \\\\ {} & {\\nearrow} & {} & {\\searrow} & {} \\\\ {20\\%} & {} & {} & {} & {20\\%}\\end{array}"
+        );
+        VerticalLayoutCompiler.CrossMultiplicationLayout layout =
+            compiler.compileCrossMultiplicationArray(ast.getChildren().get(0));
+
+        assertNotNull(layout);
+        assertEquals(5, layout.rows().size());
+        assertEquals("50%", layout.rows().get(0).get(0));
+        assertEquals("10%", layout.rows().get(0).get(4));
+        assertEquals("\\searrow", layout.rows().get(1).get(1));
+        assertEquals("\\nearrow", layout.rows().get(1).get(3));
+        assertEquals("30%", layout.rows().get(2).get(2));
     }
 
     private String joinCells(java.util.List<String> cells) {

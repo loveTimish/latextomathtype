@@ -244,8 +244,8 @@ public class MtefTemplateBuilder {
      *
      * <p>根据 Wiris 的 MTEF 文档，LDivBoxClass 的模板子对象顺序为：</p>
      * <ul>
-     *   <li>quotient slot（可选）</li>
      *   <li>dividend slot</li>
+     *   <li>quotient slot（可选）</li>
      * </ul>
      *
      * <p>除数不在模板槽位内，而是写在模板之前的父级对象列表中。</p>

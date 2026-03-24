@@ -196,10 +196,13 @@ public final class MtefCharMap {
         putSymbol("\\Leftrightarrow", 0x21D4);  // ⇔ 双线双向箭头（等价）
         putSymbol("\\uparrow",   0x2191);  // ↑ 上箭头
         putSymbol("\\downarrow", 0x2193);  // ↓ 下箭头
-        putSymbol("\\nearrow",   0x2197);  // ↗ 右上箭头
-        putSymbol("\\searrow",   0x2198);  // ↘ 右下箭头
-        putSymbol("\\swarrow",   0x2199);  // ↙ 左下箭头
-        putSymbol("\\nwarrow",   0x2196);  // ↖ 左上箭头
+        // 斜箭头改走 MathType 官方默认的 MT Extra 样式槽位。
+        // 参考十字交叉.docx 中的 OLE/MTEF 就是用 FN_MTEXTRA + U+2197/U+2198，
+        // 这样公式编辑器能识别为 MathType 自己的已知字体，而不是外部自定义字体。
+        putMtExtra("\\nearrow", 0x2197);  // ↗ 右上箭头
+        putMtExtra("\\searrow", 0x2198);  // ↘ 右下箭头
+        putMtExtra("\\swarrow", 0x2199);  // ↙ 左下箭头
+        putMtExtra("\\nwarrow", 0x2196);  // ↖ 左上箭头
 
         // 省略号
         putSymbol("\\ldots",     0x2026);  // … 底部省略号
@@ -319,6 +322,19 @@ public final class MtefCharMap {
      */
     private static void putText(String latex, int mtcode) {
         LATEX_TO_MTEF.put(latex, new CharEntry(MtefRecord.FN_TEXT, mtcode));
+    }
+
+    /**
+     * 辅助方法：将 LaTeX 命令注册为 MT Extra 样式字符。
+     *
+     * <p>MT Extra 是 MathType 官方默认字体之一，
+     * 适合承载公式编辑器已知的特殊数学符号。</p>
+     *
+     * @param latex  LaTeX 命令，如 "\\nearrow"
+     * @param mtcode Unicode 码点，如 0x2197
+     */
+    private static void putMtExtra(String latex, int mtcode) {
+        LATEX_TO_MTEF.put(latex, new CharEntry(MtefRecord.FN_MTEXTRA, mtcode));
     }
 
     /**

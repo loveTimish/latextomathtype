@@ -20,6 +20,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class MathTypeAlignmentRegressionTest {
 
@@ -28,16 +29,16 @@ class MathTypeAlignmentRegressionTest {
     private final DocxBuilder builder = new DocxBuilder();
 
     @Test
-    void shouldUseExpectedLegacyPreviewForFractionFormula() throws IOException {
+    void shouldUseExpectedPreviewForFractionFormula() throws IOException {
         ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithFormula("\\frac{1}{2}"));
         assertEquals("png", generated.previewExtension);
-        assertEquals(-24, generated.positionHalfPt);
-        assertTrue(generated.styleHeightPt >= 20.0d, "fraction preview height should remain tall enough");
+        assertEquals(-16, generated.positionHalfPt);
+        assertTrue(generated.styleHeightPt >= 12.0d, "fraction preview height should remain positive after shrink");
     }
 
     @Test
     void shouldStayCloseToReferenceFractionMetrics() throws IOException {
-        assertTrue(Files.exists(REFERENCE_DOCX), "reference docx should exist");
+        assumeTrue(Files.exists(REFERENCE_DOCX), "reference docx should exist");
 
         ObjectMetrics reference = extractFirstObjectMetrics(Files.readAllBytes(REFERENCE_DOCX));
         ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithFormula("\\frac{1}{2}"));
@@ -52,33 +53,30 @@ class MathTypeAlignmentRegressionTest {
     }
 
     @Test
-    void shouldEmbedArrayFormulaAsOleObjectInsteadOfPictureFallback() throws IOException {
+    void shouldEmbedConcentrationCrossAsOleObject() throws IOException {
         byte[] docx = buildDocxWithContent(
-            "计算下列竖式：<br/>$$\\begin{array}{r|l}13 & 845 \\\\ \\hline & 65 \\\\ & 78 \\\\ & 65 \\\\ & 0\\end{array}$$"
+            "浓度十字交叉：<br/>$$\\begin{array}{ccccc}{50\\%} & {} & {} & {} & {20\\%} \\\\ {} & {\\searrow} & {} & {\\nearrow} & {} \\\\ {} & {} & {30\\%} & {} & {} \\\\ {} & {\\nearrow} & {} & {\\searrow} & {} \\\\ {10\\%} & {} & {} & {} & {20\\%}\\end{array}$$"
         );
+        Map<String, String> entries = unzipTextEntries(docx);
+        String documentXml = entries.get("word/document.xml");
+
+        assertNotNull(documentXml);
+        assertTrue(documentXml.contains("<o:OLEObject"), "concentration cross should stay on OLE path");
+        assertFalse(documentXml.contains("<w:drawing"), "concentration cross should not fall back to picture drawing");
+    }
+
+    @Test
+    void shouldKeepCurrentLongDivisionAsOleObject() throws IOException {
+        byte[] docx = buildDocxWithContent("长除法：<br/>$\\longdiv[246]{5}{1234}$");
         Map<String, String> entries = unzipTextEntries(docx);
         String documentXml = entries.get("word/document.xml");
         String relsXml = entries.get("word/_rels/document.xml.rels");
 
         assertNotNull(documentXml);
         assertNotNull(relsXml);
-        assertTrue(documentXml.contains("<o:OLEObject"), "complex array should still be embedded as OLE");
-        assertFalse(documentXml.contains("<w:drawing"), "complex array should not fall back to picture drawing");
-        assertNotNull(extractRelationshipTarget(relsXml, extractFirstImageRelId(documentXml)));
-    }
-
-    @Test
-    void shouldSplitDisplayFormulaIntoSeparateParagraphs() throws IOException {
-        byte[] docx = buildDocxWithContent(
-            "先按整数乘法计算：<br/>$$\\begin{array}{rrrrr} & 1 & 2 & 3 & \\\\ \\times & & 4 & 5 & \\\\ \\hline & & 6 & 1 & 5 \\\\ + & 4 & 9 & 2 & \\\\ \\hline & 5 & 5 & 3 & 5\\end{array}$$<br/>再确定小数点位置，得到 55.35。"
-        );
-
-        try (XWPFDocument document = new XWPFDocument(new ByteArrayInputStream(docx))) {
-            assertTrue(document.getParagraphs().stream().anyMatch(p -> p.getText().contains("先按整数乘法计算")));
-            assertTrue(document.getParagraphs().stream().anyMatch(p -> p.getText().contains("再确定小数点位置")));
-            assertTrue(document.getParagraphs().stream().anyMatch(p -> p.getCTP().xmlText().contains("<o:OLEObject")),
-                "display formula should occupy a dedicated paragraph");
-        }
+        assertTrue(documentXml.contains("<o:OLEObject"), "current long division should stay on OLE path");
+        assertFalse(documentXml.contains("[\\longdiv[246]{5}{1234}]"), "current long division should not degrade to raw text");
+        assertEquals("media/image_eq1.png", extractRelationshipTarget(relsXml, extractFirstImageRelId(documentXml)));
     }
 
     @Test

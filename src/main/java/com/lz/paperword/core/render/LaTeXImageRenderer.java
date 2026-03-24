@@ -45,6 +45,9 @@ public class LaTeXImageRenderer {
     /** JLaTeXMath 兜底通道的渲染缩放因子，用于提高位图清晰度。 */
     private static final float RENDER_SCALE = 2.0f;
 
+    /** 原生 TeX 预览图转 PNG 时的放大倍率，只提高底图分辨率，不改变文档显示尺寸。 */
+    private static final float PNG_OUTPUT_SCALE = 2.0f;
+
     /** 原生 TeX 生成 OLE 预览图时的字号微调，尽量贴近行内 MathType 占位。 */
     private static final float OLE_PREVIEW_SIZE = 12f;
 
@@ -58,6 +61,9 @@ public class LaTeXImageRenderer {
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     /** 像素到磅的换算比例。 */
     private static final float PX_PER_PT = 1.0f / 0.75f;
+    /** 显式长除法命令提取模式。 */
+    private static final Pattern LONG_DIVISION_COMMAND_PATTERN =
+        Pattern.compile("\\\\longdiv(?:\\[([^\\]]*)])?\\{([^{}]+)}\\{([^{}]+)}");
 
     /** 标记外部工具是否不可用，避免每个公式都重复探测失败。 */
     private volatile boolean externalToolUnavailable = false;
@@ -105,7 +111,15 @@ public class LaTeXImageRenderer {
         if (preview != null) {
             return preview;
         }
-        return renderPreviewViaJLatexMath(latex, OLE_PREVIEW_SIZE);
+        preview = renderPreviewViaJLatexMath(latex, OLE_PREVIEW_SIZE);
+        if (preview != null) {
+            return preview;
+        }
+        byte[] placeholder = createPlaceholderImage(latex);
+        if (placeholder.length == 0) {
+            return null;
+        }
+        return new PreviewImage(placeholder, 100, 30, "png", "image/png", true);
     }
 
     /**
@@ -157,13 +171,15 @@ public class LaTeXImageRenderer {
             return null;
         }
         try {
-            byte[] pngData = svgToPng(svg);
-            if (pngData == null || pngData.length == 0) {
-                return null;
-            }
             SvgDimensions dimensions = extractSvgDisplayDimensions(svg);
             int widthPx = Math.max((int) Math.ceil(dimensions.widthPt() * PX_PER_PT), 10);
             int heightPx = Math.max((int) Math.ceil(dimensions.heightPt() * PX_PER_PT), 10);
+            int renderWidthPx = Math.max((int) Math.ceil(widthPx * PNG_OUTPUT_SCALE), widthPx);
+            int renderHeightPx = Math.max((int) Math.ceil(heightPx * PNG_OUTPUT_SCALE), heightPx);
+            byte[] pngData = svgToPng(svg, renderWidthPx, renderHeightPx);
+            if (pngData == null || pngData.length == 0) {
+                return null;
+            }
             return new PreviewImage(pngData, widthPx, heightPx, "png", "image/png", false);
         } catch (Exception e) {
             log.debug("Native TeX preview render failed, fallback to JLaTeXMath: {}", latex, e);
@@ -238,12 +254,130 @@ public class LaTeXImageRenderer {
             return latex;
         }
         String normalized = latex.replaceAll("\\\\kern\\s*[-+]?\\d*\\.?\\d+[a-zA-Z]+", "");
+        String expandedLongDivision = expandLongDivisionPreview(normalized);
+        if (expandedLongDivision != null) {
+            return expandedLongDivision;
+        }
         if (!containsLongDivisionLatex(normalized)) {
             return normalized;
         }
         return Pattern.compile("\\\\enclose\\{longdiv\\}\\{([^{}]+)}")
             .matcher(normalized)
             .replaceAll("\\\\big)\\\\overline{$1}");
+    }
+
+    private String expandLongDivisionPreview(String latex) {
+        Matcher matcher = LONG_DIVISION_COMMAND_PATTERN.matcher(latex);
+        if (!matcher.matches()) {
+            return null;
+        }
+        String quotient = matcher.group(1) == null ? "" : matcher.group(1).trim();
+        String divisor = matcher.group(2) == null ? "" : matcher.group(2).trim();
+        String dividend = matcher.group(3) == null ? "" : matcher.group(3).trim();
+        if (!divisor.matches("\\d+") || !dividend.matches("\\d+")) {
+            return null;
+        }
+        return buildLongDivisionPreviewLatex(divisor, quotient, dividend);
+    }
+
+    private String buildLongDivisionPreviewLatex(String divisor, String quotient, String dividend) {
+        int divisorValue;
+        try {
+            divisorValue = Integer.parseInt(divisor);
+        } catch (NumberFormatException ignored) {
+            return "\\longdiv" + (quotient.isBlank() ? "" : "[" + quotient + "]") + "{" + divisor + "}{" + dividend + "}";
+        }
+        if (divisorValue == 0) {
+            return "\\longdiv" + (quotient.isBlank() ? "" : "[" + quotient + "]") + "{" + divisor + "}{" + dividend + "}";
+        }
+
+        List<String> lines = new java.util.ArrayList<>();
+        String header = divisor;
+        if (!quotient.isBlank()) {
+            header += "\\overset{" + quotient + "}{\\overline{\\left)" + dividend + "\\right.}}";
+        } else {
+            header += "\\overline{\\left)" + dividend + "\\right.}";
+        }
+        lines.add(header);
+
+        int remainder = 0;
+        boolean started = false;
+        for (int index = 0; index < dividend.length(); index++) {
+            remainder = remainder * 10 + (dividend.charAt(index) - '0');
+            if (!started && remainder < divisorValue) {
+                continue;
+            }
+            started = true;
+
+            int product = (remainder / divisorValue) * divisorValue;
+            lines.add(buildLongDivisionUnderlineLine(index + 2, String.valueOf(product)));
+
+            remainder -= product;
+            if (index < dividend.length() - 1) {
+                int broughtDown = remainder * 10 + (dividend.charAt(index + 1) - '0');
+                lines.add(buildLongDivisionTextLine(index + 3, String.valueOf(broughtDown)));
+            } else {
+                lines.add(buildLongDivisionTextLine(index + 2, String.valueOf(remainder)));
+            }
+        }
+
+        StringBuilder builder = new StringBuilder("\\begin{array}{l}");
+        for (int index = 0; index < lines.size(); index++) {
+            if (index > 0) {
+                builder.append("\\\\");
+            }
+            builder.append(lines.get(index));
+        }
+        builder.append("\\end{array}");
+        return builder.toString();
+    }
+
+    private String buildLongDivisionUnderlineLine(int endColumn, String digits) {
+        String aligned = buildLongDivisionAlignedText(endColumn, digits);
+        int leadingSpaces = countLeadingSpaces(aligned);
+        String visibleDigits = aligned.substring(leadingSpaces);
+        StringBuilder builder = new StringBuilder();
+        if (leadingSpaces > 0) {
+            // 预览图不复用 MathType 的真实空格宽度，因此这里转成显式 hspace，避免 TeX 折叠连续空格。
+            builder.append(buildHorizontalSpaceCommand(leadingSpaces));
+        }
+        builder.append("\\underline{").append(visibleDigits).append("}");
+        return builder.toString();
+    }
+
+    private String buildLongDivisionTextLine(int endColumn, String digits) {
+        String aligned = buildLongDivisionAlignedText(endColumn, digits);
+        int leadingSpaces = countLeadingSpaces(aligned);
+        String visibleDigits = aligned.substring(leadingSpaces);
+        StringBuilder builder = new StringBuilder();
+        if (leadingSpaces > 0) {
+            builder.append(buildHorizontalSpaceCommand(leadingSpaces));
+        }
+        builder.append(visibleDigits);
+        return builder.toString();
+    }
+
+    private String buildLongDivisionAlignedText(int endColumn, String digits) {
+        if (digits == null || digits.isBlank()) {
+            return "";
+        }
+        int leadingColumns = Math.max(endColumn - digits.length() + 1, 0);
+        // 这里复用公式层已经确定下来的空格公式：n 位数 = 3*c + n - 2。
+        int spaces = Math.max(leadingColumns * 3 + digits.length() - 2, 0);
+        return " ".repeat(spaces) + digits;
+    }
+
+    private int countLeadingSpaces(String text) {
+        int index = 0;
+        while (index < text.length() && text.charAt(index) == ' ') {
+            index++;
+        }
+        return index;
+    }
+
+    private String buildHorizontalSpaceCommand(int spaceCount) {
+        double em = spaceCount * 0.33d;
+        return String.format(Locale.ROOT, "\\hspace*{%.2fem}", em);
     }
 
     /**
@@ -298,7 +432,14 @@ public class LaTeXImageRenderer {
             return null;
         }
         try {
-            return svgToPng(svg);
+            SvgDimensions dimensions = extractSvgDisplayDimensions(svg);
+            int widthPx = Math.max((int) Math.ceil(dimensions.widthPt() * PX_PER_PT), 10);
+            int heightPx = Math.max((int) Math.ceil(dimensions.heightPt() * PX_PER_PT), 10);
+            return svgToPng(
+                svg,
+                Math.max((int) Math.ceil(widthPx * PNG_OUTPUT_SCALE), widthPx),
+                Math.max((int) Math.ceil(heightPx * PNG_OUTPUT_SCALE), heightPx)
+            );
         } catch (Exception e) {
             log.debug("SVG -> PNG transcode failed, fallback to JLaTeXMath: {}", latex, e);
             return null;
@@ -405,9 +546,11 @@ public class LaTeXImageRenderer {
      * @return PNG 字节数组
      * @throws Exception 转码失败时抛出
      */
-    private byte[] svgToPng(byte[] svgBytes) throws Exception {
+    private byte[] svgToPng(byte[] svgBytes, int widthPx, int heightPx) throws Exception {
         PNGTranscoder transcoder = new PNGTranscoder();
         transcoder.addTranscodingHint(PNGTranscoder.KEY_BACKGROUND_COLOR, Color.WHITE);
+        transcoder.addTranscodingHint(PNGTranscoder.KEY_WIDTH, (float) Math.max(widthPx, 10));
+        transcoder.addTranscodingHint(PNGTranscoder.KEY_HEIGHT, (float) Math.max(heightPx, 10));
 
         TranscoderInput input = new TranscoderInput(new StringReader(new String(svgBytes, StandardCharsets.UTF_8)));
         ByteArrayOutputStream baos = new ByteArrayOutputStream();

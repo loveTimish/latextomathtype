@@ -164,17 +164,6 @@ class LaTeXParserTest {
     }
 
     @Test
-    void testParseArrayForDivisionTemplate() {
-        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{r|l}13 & 845 \\\\ \\hline & 65 \\\\ & 78 \\\\ & 65 \\\\ & 0\\end{array}");
-        assertNotNull(ast);
-        LaTeXNode array = ast.getChildren().get(0);
-        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
-        assertEquals("r|l", array.getMetadata("columnSpec"));
-        assertEquals("0,1,0", array.getMetadata("columnLines"));
-        assertEquals(5, array.getChildren().size());
-    }
-
-    @Test
     void testParseExplicitLongDivisionCommand() {
         LaTeXNode ast = parser.parseLaTeX("\\longdiv[65]{13}{845}");
         assertNotNull(ast);
@@ -204,14 +193,30 @@ class LaTeXParserTest {
     }
 
     @Test
-    void testParseLongDivisionEnvironmentAsArrayFallback() {
-        LaTeXNode ast = parser.parseLaTeX("\\begin{longdivision}{r|l}13 & 845 \\\\ \\hline & 65\\end{longdivision}");
+    void testParseConcentrationCrossArrayKeepsArrowCommandsInMathAst() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{ccccc}{50\\%} & {} & {} & {} & {10\\%} \\\\ {} & {\\searrow} & {} & {\\nearrow} & {} \\\\ {} & {} & {30\\%} & {} & {} \\\\ {} & {\\nearrow} & {} & {\\searrow} & {} \\\\ {20\\%} & {} & {} & {} & {20\\%}\\end{array}");
         assertNotNull(ast);
         assertEquals(1, ast.getChildren().size());
 
         LaTeXNode array = ast.getChildren().get(0);
         assertEquals(LaTeXNode.Type.ARRAY, array.getType());
-        assertEquals("\\longdivision", array.getValue());
+        assertEquals("ccccc", array.getMetadata("columnSpec"));
+        assertEquals(5, array.getChildren().size());
+        assertTrue(flatten(array).contains("\\searrow"));
+        assertTrue(flatten(array).contains("\\nearrow"));
+    }
+
+    @Test
+    void testParseMultiplicationArrayMarksExplicitEmptyCells() {
+        LaTeXNode ast = parser.parseLaTeX(
+            "\\begin{array}{rrrrrr}{} & {} & {1} & {2} & {3} & {} \\\\ {\\times} & {} & {} & {4} & {5} & {}\\end{array}"
+        );
+        assertNotNull(ast);
+
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("true", array.getChildren().get(0).getChildren().get(0).getMetadata("explicitEmptyCell"));
+        assertEquals("true", array.getChildren().get(1).getChildren().get(1).getMetadata("explicitEmptyCell"));
     }
 
     private String flatten(LaTeXNode node) {

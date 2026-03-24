@@ -471,7 +471,19 @@ public class LaTeXParser {
     }
 
     private void finalizeArrayCell(LaTeXNode row, LaTeXNode cell) {
+        if (isExplicitEmptyCell(cell)) {
+            // 显式写出的 {} 需要保留“占位但无内容”的语义，后续竖式对齐会用到。
+            cell.setMetadata("explicitEmptyCell", "true");
+        }
         row.addChild(cell);
+    }
+
+    private boolean isExplicitEmptyCell(LaTeXNode cell) {
+        if (cell == null || cell.getChildren().size() != 1) {
+            return false;
+        }
+        LaTeXNode child = cell.getChildren().get(0);
+        return child.getType() == LaTeXNode.Type.GROUP && child.getChildren().isEmpty();
     }
 
     private void finalizeArrayRow(LaTeXNode arrayNode, LaTeXNode row) {
@@ -621,6 +633,7 @@ public class LaTeXParser {
      */
     private LaTeXNode parseLongDiv(TokenStream stream) {
         LaTeXNode node = new LaTeXNode(LaTeXNode.Type.LONG_DIVISION, "\\longdiv");
+        // 不再强制使用简单模板 - 使用 computed array 路径以支持结构化步骤显示
         if (stream.hasNext() && stream.peek().type() == TokenType.LBRACKET) {
             stream.next();
             LaTeXNode quotient = new LaTeXNode(LaTeXNode.Type.GROUP);

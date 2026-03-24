@@ -98,12 +98,38 @@ public class MtefWriter {
     private static final String TARGET_FONT = "Times New Roman";
     /** 仅恢复模板里的默认字号，不修改公式内部字体。 */
     private static final String TEMPLATE_FULL_SIZE_POINTS =
-        System.getProperty("paperword.mtef.full-size-points", "30");
+        System.getProperty("paperword.mtef.full-size-points", "20");
     /**
      * 从模板 OLE 中提取的 MTEF 前缀（header + 字体定义 + SIZE 记录 + 表达式 LINE 的起始部分）。
-     * 类加载时从资源文件一次性加载；如果加载失败则为 null，回退到手工构建 header 的模式。
+    * 类加载时从资源文件一次性加载；如果加载失败则为 null，回退到手工构建 header 的模式。
      */
     private static final byte[] TEMPLATE_MTEF_PREFIX = loadTemplateMtefPrefix();
+    /**
+     * 模板前缀不含末尾 LINE 记录的版本，用于长除法等特殊格式。
+     * 长除法参考格式直接以长除法头部开始，无需外层 LINE 包装。
+     */
+    private static final byte[] TEMPLATE_MTEF_PREFIX_WITHOUT_LINE =
+        TEMPLATE_MTEF_PREFIX != null ? trimLineFromPrefix(TEMPLATE_MTEF_PREFIX) : null;
+    /**
+     * 长除法专用前缀：直接对齐参考 longdivision.docx 在 tmLDIV 之前的 MTEF 结构，
+     * 保留 header / font defs / eqn prefs / paren + matrix 壳，仅把矩阵单元格里的除数内容留给运行时写入。
+     */
+    private static final byte[] LONG_DIVISION_REFERENCE_PREFIX = new byte[] {
+        (byte) 0x05, (byte) 0x01, (byte) 0x00, (byte) 0x07, (byte) 0x0A, (byte) 0x44, (byte) 0x53, (byte) 0x4D, (byte) 0x54, (byte) 0x37, (byte) 0x00, (byte) 0x00, (byte) 0x13, (byte) 0x57, (byte) 0x69, (byte) 0x6E,
+        (byte) 0x41, (byte) 0x6C, (byte) 0x6C, (byte) 0x42, (byte) 0x61, (byte) 0x73, (byte) 0x69, (byte) 0x63, (byte) 0x43, (byte) 0x6F, (byte) 0x64, (byte) 0x65, (byte) 0x50, (byte) 0x61, (byte) 0x67, (byte) 0x65,
+        (byte) 0x73, (byte) 0x00, (byte) 0x11, (byte) 0x05, (byte) 0x54, (byte) 0x69, (byte) 0x6D, (byte) 0x65, (byte) 0x73, (byte) 0x20, (byte) 0x4E, (byte) 0x65, (byte) 0x77, (byte) 0x20, (byte) 0x52, (byte) 0x6F,
+        (byte) 0x6D, (byte) 0x61, (byte) 0x6E, (byte) 0x00, (byte) 0x11, (byte) 0x03, (byte) 0x53, (byte) 0x79, (byte) 0x6D, (byte) 0x62, (byte) 0x6F, (byte) 0x6C, (byte) 0x00, (byte) 0x11, (byte) 0x05, (byte) 0x43,
+        (byte) 0x6F, (byte) 0x75, (byte) 0x72, (byte) 0x69, (byte) 0x65, (byte) 0x72, (byte) 0x20, (byte) 0x4E, (byte) 0x65, (byte) 0x77, (byte) 0x00, (byte) 0x11, (byte) 0x04, (byte) 0x4D, (byte) 0x54, (byte) 0x20,
+        (byte) 0x45, (byte) 0x78, (byte) 0x74, (byte) 0x72, (byte) 0x61, (byte) 0x00, (byte) 0x13, (byte) 0x57, (byte) 0x69, (byte) 0x6E, (byte) 0x41, (byte) 0x6C, (byte) 0x6C, (byte) 0x43, (byte) 0x6F, (byte) 0x64,
+        (byte) 0x65, (byte) 0x50, (byte) 0x61, (byte) 0x67, (byte) 0x65, (byte) 0x73, (byte) 0x00, (byte) 0x11, (byte) 0x06, (byte) 0xCB, (byte) 0xCE, (byte) 0xCC, (byte) 0xE5, (byte) 0x00, (byte) 0x12, (byte) 0x00,
+        (byte) 0x08, (byte) 0x21, (byte) 0x2F, (byte) 0x27, (byte) 0xF2, (byte) 0x5F, (byte) 0x21, (byte) 0x8F, (byte) 0x21, (byte) 0x2F, (byte) 0x47, (byte) 0x5F, (byte) 0x41, (byte) 0x50, (byte) 0xF2, (byte) 0x1F,
+        (byte) 0x1E, (byte) 0x41, (byte) 0x50, (byte) 0xF4, (byte) 0x15, (byte) 0x0F, (byte) 0x41, (byte) 0x00, (byte) 0xF4, (byte) 0x45, (byte) 0xF4, (byte) 0x25, (byte) 0xF4, (byte) 0x8F, (byte) 0x42, (byte) 0x5F,
+        (byte) 0x41, (byte) 0x00, (byte) 0xF4, (byte) 0x10, (byte) 0x0F, (byte) 0x43, (byte) 0x5F, (byte) 0x41, (byte) 0x00, (byte) 0xF2, (byte) 0x1F, (byte) 0x20, (byte) 0xA5, (byte) 0xF2, (byte) 0x0A, (byte) 0x25,
+        (byte) 0xF4, (byte) 0x8F, (byte) 0x21, (byte) 0xF4, (byte) 0x10, (byte) 0x0F, (byte) 0x41, (byte) 0x00, (byte) 0xF4, (byte) 0x0F, (byte) 0x48, (byte) 0xF4, (byte) 0x17, (byte) 0xF4, (byte) 0x8F, (byte) 0x41,
+        (byte) 0x00, (byte) 0xF2, (byte) 0x1A, (byte) 0x5F, (byte) 0x44, (byte) 0x5F, (byte) 0x45, (byte) 0xF4, (byte) 0x5F, (byte) 0x45, (byte) 0xF4, (byte) 0x5F, (byte) 0x41, (byte) 0x0F, (byte) 0x0C, (byte) 0x01,
+        (byte) 0x00, (byte) 0x01, (byte) 0x00, (byte) 0x01, (byte) 0x02, (byte) 0x02, (byte) 0x02, (byte) 0x02, (byte) 0x00, (byte) 0x02, (byte) 0x00, (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x00,
+        (byte) 0x03, (byte) 0x00, (byte) 0x01, (byte) 0x00, (byte) 0x04, (byte) 0x00, (byte) 0x05, (byte) 0x00, (byte) 0x0A, (byte) 0x04, (byte) 0x00, (byte) 0x01, (byte) 0x01, (byte) 0x01, (byte) 0x00,
+    };
 
     /**
      * 求和类大算子 — 使用 TM_SUM 模板，上下限以极限（limit）形式显示在算子正上方/正下方。
@@ -137,30 +163,168 @@ public class MtefWriter {
      */
     public byte[] write(LaTeXNode root) {
         try {
-            // 首选：使用模板前缀模式（从已知正确的 MathType OLE 中提取前缀）
+            // 使用模板前缀模式（从已知正确的 MathType OLE 中提取前缀）
             if (TEMPLATE_MTEF_PREFIX != null) {
+                if (isLongDivisionRoot(root)) {
+                    return writeLongDivisionByTemplate(root);
+                }
                 return writeByTemplatePrefix(root);
             }
 
-            // 回退：手工构建完整 MTEF 流
-            ByteArrayOutputStream out = new ByteArrayOutputStream(256);
-            writeHeader(out);          // 写入 MTEF v5 文件头（12 字节）
-            writeFontStyleDefs(out);   // 写入字体样式定义记录
-            writeSizeRecord(out);      // 写入默认字号 SIZE 记录
-
-            // 写入顶层表达式 LINE 记录（所有公式内容都包含在这个 LINE 中）
-            out.write(MtefRecord.LINE);
-            out.write(0x00); // options: 0x00 表示无偏移(nudge)、非空行(not null)
-
-            // 递归写入 AST 根节点的所有内容
-            writeNode(out, root);
-
-            // 关闭顶层 LINE 记录
-            out.write(MtefRecord.END);
-
-            return out.toByteArray();
+            return writeFullStream(root);
         } catch (IOException e) {
             throw new RuntimeException("Failed to write MTEF binary", e);
+        }
+    }
+
+    private byte[] writeFullStream(LaTeXNode root) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream(256);
+        writeHeader(out);          // 写入 MTEF v5 文件头（12 字节）
+        writeFontStyleDefs(out);   // 写入字体样式定义记录
+        writeSizeRecord(out);      // 写入默认字号 SIZE 记录
+
+        // 写入顶层表达式 LINE 记录（所有公式内容都包含在这个 LINE 中）
+        out.write(MtefRecord.LINE);
+        out.write(0x00); // options: 0x00 表示无偏移(nudge)、非空行(not null)
+
+        // 递归写入 AST 根节点的所有内容
+        writeNode(out, root);
+
+        // 关闭顶层 LINE 记录
+        out.write(MtefRecord.END);
+        // 再追加一个 END，显式结束顶层对象列表，和模板兼容路径保持一致。
+        out.write(MtefRecord.END);
+        return out.toByteArray();
+    }
+
+    /**
+     * 检查根节点是否只包含一个长除法节点（需要特殊格式处理）。
+     */
+    private boolean isLongDivisionRoot(LaTeXNode root) {
+        if (root.getType() == LaTeXNode.Type.LONG_DIVISION) {
+            return true;
+        }
+        return root.getType() == LaTeXNode.Type.ROOT
+            && root.getChildren().size() == 1
+            && root.getChildren().get(0).getType() == LaTeXNode.Type.LONG_DIVISION;
+    }
+
+    /**
+     * 长除法专用写入方法：复用裁剪后的模板前缀，保留参考对象的 header / font / eqn prefs，
+     * 并在 tmLDIV 前显式重建 reference 中存在的 paren + matrix + divisor 壳。
+     */
+    private byte[] writeLongDivisionByTemplate(LaTeXNode root) throws IOException {
+        LaTeXNode longDivision = root;
+        if (root.getType() == LaTeXNode.Type.ROOT && root.getChildren().size() == 1
+            && root.getChildren().get(0).getType() == LaTeXNode.Type.LONG_DIVISION) {
+            longDivision = root.getChildren().get(0);
+        }
+
+        VerticalLayoutSpec layoutSpec = verticalLayoutCompiler.compileExplicitLongDivision(longDivision);
+        if (layoutSpec != null && layoutSpec.hasStructuredLongDivisionSteps()) {
+            // 多步骤长除法优先走 computed array，让 MathType 看到标准 MATRIX/PILE 结构，保证可编辑性。
+            LaTeXNode computedArray = verticalLayoutNodeFactory.buildComputedLongDivisionArray(longDivision, layoutSpec);
+            return writeByTemplatePrefix(computedArray);
+        }
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream(512);
+        out.write(LONG_DIVISION_REFERENCE_PREFIX);
+        longDivision.setMetadata("skipLongDivisionLeadingDivisor", "true");
+        LaTeXNode divisor = childAt(longDivision, 0);
+        if (divisor != null) {
+            writeNode(out, divisor);
+        }
+        writeNode(out, longDivision);
+        out.write(MtefRecord.END);
+        return out.toByteArray();
+    }
+
+    private void writeExplicitLongDivisionByReferenceShape(ByteArrayOutputStream out,
+                                                           LaTeXNode longDivision,
+                                                           VerticalLayoutSpec layoutSpec) throws IOException {
+        LaTeXNode structured = verticalLayoutNodeFactory.buildStructuredLongDivisionNode(longDivision, layoutSpec);
+        if (structured.getChildren().isEmpty()) {
+            writeNode(out, longDivision);
+            return;
+        }
+        // 保持步骤区位于 tmLDIV 外层，避免把复杂布局对象直接塞进 tmLDIV 槽位后导致 MathType 无法编辑。
+        writeNode(out, structured.getChildren().get(0));
+        out.write(MtefRecord.END);
+
+        LaTeXNode pendingUnderline = null;
+        int pendingUnderlineExtraEnds = 0;
+        for (int index = 1; index < structured.getChildren().size(); index++) {
+            LaTeXNode child = structured.getChildren().get(index);
+            boolean splitStep = "true".equals(child.getMetadata(VerticalLayoutNodeFactory.LONG_DIVISION_STEP_SPLIT));
+            boolean firstSplitStep = "true".equals(child.getMetadata(VerticalLayoutNodeFactory.LONG_DIVISION_FIRST_STEP_SPLIT));
+            if (index == 1) {
+                writeNode(out, child);
+                int endCount = firstSplitStep ? 2 : 4;
+                for (int i = 0; i < endCount; i++) {
+                    out.write(MtefRecord.END);
+                }
+                continue;
+            }
+            if (!splitStep) {
+                boolean lastChild = index == structured.getChildren().size() - 1;
+                if (pendingUnderline != null && (lastChild || index >= 5)) {
+                    for (int i = 0; i < pendingUnderlineExtraEnds; i++) {
+                        out.write(MtefRecord.END);
+                    }
+                    writeNode(out, pendingUnderline);
+                    if (index == 5) {
+                        for (int i = 0; i < 5; i++) {
+                            out.write(MtefRecord.END);
+                        }
+                    }
+                    pendingUnderline = null;
+                    pendingUnderlineExtraEnds = 0;
+                }
+                if (index == 3) {
+                    for (int i = 0; i < 7; i++) {
+                        out.write(MtefRecord.END);
+                    }
+                }
+                writeSlot(out, child);
+                if (pendingUnderline != null) {
+                    for (int i = 0; i < pendingUnderlineExtraEnds; i++) {
+                        out.write(MtefRecord.END);
+                    }
+                    writeNode(out, pendingUnderline);
+                    pendingUnderline = null;
+                    pendingUnderlineExtraEnds = 0;
+                }
+            } else {
+                if (!firstSplitStep && child.getChildren().size() >= 2) {
+                    if (index == 4) {
+                        for (int i = 0; i < 6; i++) {
+                            out.write(MtefRecord.END);
+                        }
+                    }
+                    writeSlot(out, child.getChildren().get(0));
+                    int endCount = index == 4 ? 0 : 2;
+                    for (int i = 0; i < endCount; i++) {
+                        out.write(MtefRecord.END);
+                    }
+                    if (index < structured.getChildren().size() - 1) {
+                        pendingUnderline = child.getChildren().get(1);
+                        pendingUnderlineExtraEnds = index == 4 ? 2 : (index == 6 ? 2 : 0);
+                    } else {
+                        for (int i = 0; i < 2; i++) {
+                            out.write(MtefRecord.END);
+                        }
+                        writeNode(out, child.getChildren().get(1));
+                    }
+                } else {
+                    writeNode(out, child);
+                }
+            }
+        }
+        if (pendingUnderline != null) {
+            for (int i = 0; i < pendingUnderlineExtraEnds; i++) {
+                out.write(MtefRecord.END);
+            }
+            writeNode(out, pendingUnderline);
         }
     }
 
@@ -255,6 +419,22 @@ public class MtefWriter {
             return null;
         }
     }
+
+    /**
+     * 从模板前缀中移除末尾的 LINE 记录 (01 00)。
+     * 用于长除法等需要直接以公式头部开始的特殊格式。
+     */
+    private static byte[] trimLineFromPrefix(byte[] prefix) {
+        if (prefix == null || prefix.length < 2) {
+            return prefix;
+        }
+        // 检查末尾是否为 LINE 记录 (01 00)
+        if (prefix[prefix.length - 2] == MtefRecord.LINE && prefix[prefix.length - 1] == 0x00) {
+            return java.util.Arrays.copyOfRange(prefix, 0, prefix.length - 2);
+        }
+        return prefix;
+    }
+
 
     /**
      * 将 MTEF 前缀中非 Symbol 字体替换为 Times New Roman。
@@ -463,6 +643,7 @@ public class MtefWriter {
         writeFontDef(out, MtefRecord.FN_SYMBOL, "Symbol");
         writeFontDef(out, MtefRecord.FN_VECTOR, TARGET_FONT);
         writeFontDef(out, MtefRecord.FN_NUMBER, TARGET_FONT);
+        writeFontDef(out, MtefRecord.FN_MTEXTRA, "MT Extra");
     }
 
     /**
@@ -922,6 +1103,11 @@ public class MtefWriter {
      */
     private void writeCharNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
         String ch = node.getValue();
+        if ("\t".equals(ch)) {
+            // MathType 制表符要以文本字符写入，不能落到默认变量字体。
+            writeCharRecord(out, MtefRecord.FN_TEXT, '\t');
+            return;
+        }
         MtefCharMap.CharEntry entry = MtefCharMap.lookupChar(ch.charAt(0));
         if (entry != null) {
             // 在字符映射表中找到 — 使用指定的字体类型和 MTEF 字符编码
@@ -979,8 +1165,14 @@ public class MtefWriter {
             case "\\underline" -> {
                 // 下划线装饰：生成 TM_UBAR(下方) 模板
                 MtefTemplateBuilder.writeUnderlineHeader(out);
-                writeSlot(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
-                out.write(MtefRecord.END);
+                LaTeXNode underlineContent = node.getChildren().isEmpty() ? null : node.getChildren().get(0);
+                if ("true".equals(node.getMetadata(VerticalLayoutNodeFactory.RAW_INLINE_CONTAINER))) {
+                    out.write(MtefRecord.END);
+                    writeSlot(out, underlineContent);
+                } else {
+                    writeSlot(out, underlineContent);
+                    out.write(MtefRecord.END);
+                }
             }
             case "\\vec" -> {
                 // 向量箭头装饰：生成 TM_HAT 模板 + FN_EXPAND 组合右箭头字符 (U+20D7)
@@ -1326,51 +1518,34 @@ public class MtefWriter {
     }
 
     private void writeLongDivisionNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
-        if (!"true".equals(node.getMetadata(VerticalLayoutNodeFactory.LONG_DIVISION_HEADER_ONLY))) {
-            VerticalLayoutSpec layoutSpec = verticalLayoutCompiler.compileExplicitLongDivision(node);
-            if (layoutSpec != null && !layoutSpec.rows().isEmpty()) {
-                LaTeXNode expanded = verticalLayoutNodeFactory.buildStructuredLongDivisionNode(node, layoutSpec);
-                writeLongDivisionNode(out, expanded);
-                return;
-            }
-        }
-
         LaTeXNode divisor = childAt(node, 0);
         LaTeXNode quotient = childAt(node, 1);
         LaTeXNode dividend = childAt(node, 2);
         boolean hasQuotient = quotient != null && !quotient.getChildren().isEmpty();
 
-        // MathType tmLDIV: 除数写在模板外部；模板内部先写被除数槽，再写顶部商槽。
-        if (divisor != null) {
+        if (!"true".equals(node.getMetadata("skipLongDivisionLeadingDivisor")) && divisor != null) {
             writeNode(out, divisor);
         }
         MtefTemplateBuilder.writeLongDivisionHeader(out, hasQuotient);
-        if (dividend != null) {
-            writeNode(out, dividend);
-        } else {
-            writeNullLine(out);
-        }
+        writeSlot(out, dividend);
         if (hasQuotient) {
-            writeNode(out, quotient);
+            writeSlot(out, quotient);
         }
         out.write(MtefRecord.END);
     }
 
     private void writeArrayNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
-        // 恢复到稳定的“布局驱动 MATRIX 后端”。
+        // PRESERVE_RAW_ARRAY check must come first to avoid composite long division processing destroying structure
         if ("true".equals(node.getMetadata(VerticalLayoutNodeFactory.PRESERVE_RAW_ARRAY))) {
             writeMatrixNode(out, node);
             return;
         }
-        if (verticalLayoutCompiler.isCompositeLongDivisionArray(node)) {
-            VerticalLayoutSpec compositeLayout = verticalLayoutCompiler.compileCompositeLongDivision(node);
-            if (compositeLayout != null) {
-                LaTeXNode compositeArray = verticalLayoutNodeFactory.buildCompositeLongDivisionArray(node, compositeLayout);
-                writeMatrixNode(out, compositeArray);
-                return;
-            }
+        VerticalLayoutCompiler.CrossMultiplicationLayout crossLayout = verticalLayoutCompiler.compileCrossMultiplicationArray(node);
+        if (crossLayout != null) {
+            // 十字交叉需要保留参考里的嵌套矩阵结构，不能压平成普通算术表格。
+            writeMatrixNode(out, verticalLayoutNodeFactory.buildCrossMultiplicationArray(crossLayout));
+            return;
         }
-
         VerticalLayoutSpec layoutSpec = verticalLayoutCompiler.compileArray(node);
         if (layoutSpec != null && layoutSpec.kind() == VerticalLayoutSpec.Kind.DECIMAL) {
             // 小数加减法单独走单列 PILE，每行写完整小数，避免拆成多列。
@@ -1406,7 +1581,7 @@ public class MtefWriter {
     }
 
     private LaTeXNode normalizeArrayNode(LaTeXNode node) {
-        if (node == null || node.getChildren().isEmpty() || verticalLayoutCompiler.isCompositeLongDivisionArray(node)) {
+        if (node == null || node.getChildren().isEmpty()) {
             return node;
         }
         VerticalLayoutSpec layoutSpec = verticalLayoutCompiler.compileArray(node);
@@ -1681,9 +1856,13 @@ public class MtefWriter {
 
     private void writeRawPileNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
         out.write(MtefRecord.PILE);
-        out.write(0x00);
+        List<VerticalLayoutSpec.VerticalTabStop> tabStops = parseRawPileTabStops(node);
+        out.write(tabStops.isEmpty() ? 0x00 : MtefRecord.OPT_LP_RULER);
         out.write(parseMetadataInt(node, VerticalLayoutNodeFactory.RAW_PILE_HALIGN, 1));
         out.write(parseMetadataInt(node, VerticalLayoutNodeFactory.RAW_PILE_VALIGN, 1));
+        if (!tabStops.isEmpty()) {
+            pileRulerWriter.writeRuler(out, tabStops);
+        }
         writeChildren(out, node);
         out.write(MtefRecord.END);
     }
@@ -1698,6 +1877,45 @@ public class MtefWriter {
         } catch (NumberFormatException ignored) {
             return defaultValue;
         }
+    }
+
+    private List<VerticalLayoutSpec.VerticalTabStop> parseRawPileTabStops(LaTeXNode node) {
+        String encoded = node == null ? null : node.getMetadata(VerticalLayoutNodeFactory.RAW_PILE_RULER);
+        if (encoded == null || encoded.isBlank()) {
+            return List.of();
+        }
+
+        List<VerticalLayoutSpec.VerticalTabStop> tabStops = new ArrayList<>();
+        String[] entries = encoded.split(";");
+        for (int index = 0; index < entries.length; index++) {
+            String entry = entries[index].trim();
+            if (entry.isEmpty()) {
+                continue;
+            }
+
+            String[] parts = entry.split(":");
+            if (parts.length != 2) {
+                continue;
+            }
+            try {
+                int kindCode = Integer.parseInt(parts[0].trim());
+                int offset = Integer.parseInt(parts[1].trim());
+                tabStops.add(new VerticalLayoutSpec.VerticalTabStop(index, decodeTabStopKind(kindCode), offset));
+            } catch (NumberFormatException ignored) {
+                // ruler 元数据损坏时忽略该制表位，避免影响其它公式输出。
+            }
+        }
+        return tabStops;
+    }
+
+    private VerticalLayoutSpec.TabStopKind decodeTabStopKind(int kindCode) {
+        return switch (kindCode) {
+            case 0 -> VerticalLayoutSpec.TabStopKind.LEFT;
+            case 1 -> VerticalLayoutSpec.TabStopKind.CENTER;
+            case 3 -> VerticalLayoutSpec.TabStopKind.RELATION;
+            case 4 -> VerticalLayoutSpec.TabStopKind.DECIMAL;
+            default -> VerticalLayoutSpec.TabStopKind.RIGHT;
+        };
     }
 
     /**
