@@ -38,8 +38,7 @@ import java.util.regex.Pattern;
  * <ul>
  *   <li><b>标准分隔符</b>：$$...$$ (行间公式) 和 $...$ (行内公式)，使用联合正则确保 $$ 优先匹配</li>
  *   <li><b>替代分隔符</b>：\[...\] 和 \(...\) 会被预处理为 $$...$$ 和 $...$</li>
- *   <li><b>裸露命令</b>：未被 $ 包围的 LaTeX 命令（如纯文本中的 \overline{AB}）
- *       通过 {@code BARE_LATEX_PATTERN} 识别</li>
+ *   <li><b>强约束</b>：只有被数学定界符包裹的内容才视为公式，其他裸露 LaTeX 文本一律按普通文本保留</li>
  * </ul>
  *
  * <h3>递归下降解析器设计：</h3>
@@ -69,17 +68,7 @@ public class LaTeXParser {
      *   <li>group(2)：行内公式内容（$...$ 之间的部分）</li>
      * </ul>
      */
-    private static final Pattern LATEX_PATTERN = Pattern.compile("\\$\\$(.+?)\\$\\$|\\$(.+?)\\$");
-
-    /**
-     * 裸露 LaTeX 命令正则表达式：匹配未被 $ 包围的 LaTeX 命令片段。
-     *
-     * <p>匹配模式：以反斜杠开头的命令名（如 \overline），后跟零或多个花括号参数 {…}，
-     * 可选地通过比较运算符（<、>、=、+、-）连接更多命令。
-     * 例如可匹配 {@code \overline{ab}>\overline{bc}} 这样的比较表达式。</p>
-     */
-    private static final Pattern BARE_LATEX_PATTERN = Pattern.compile(
-        "\\\\[a-zA-Z]+(?:\\{[^{}]+\\})*(?:\\s*[<>=+\\-]\\s*\\\\[a-zA-Z]+(?:\\{[^{}]+\\})*)*");
+    private static final Pattern LATEX_PATTERN = Pattern.compile("\\$\\$(.+?)\\$\\$|\\$(.+?)\\$", Pattern.DOTALL);
 
     /**
      * 数学函数命令集合。
@@ -142,7 +131,7 @@ public class LaTeXParser {
      * <ol>
      *   <li>先将 \[...\] 和 \(...\) 标准化为 $$...$$ 和 $...$</li>
      *   <li>使用联合正则逐个匹配公式段，$$...$$ 优先于 $...$</li>
-     *   <li>公式段之间的文本通过 {@link #splitPlainTextWithBareLatex} 进一步检查裸露命令</li>
+     *   <li>公式段之间的文本整体按普通文本保留，不再尝试识别裸露命令</li>
      *   <li>每个识别出的公式段调用 {@link #parseLaTeX(String)} 构建 AST</li>
      * </ol>
      *
@@ -162,8 +151,7 @@ public class LaTeXParser {
             found = true;
             // 处理公式前的纯文本部分
             if (matcher.start() > lastEnd) {
-                String before = text.substring(lastEnd, matcher.start());
-                splitPlainTextWithBareLatex(before, segments);
+                addPlainTextSegment(text.substring(lastEnd, matcher.start()), segments);
             }
             // group(1) = 行间公式 $$...$$ 的内容, group(2) = 行内公式 $...$ 的内容
             String latex = matcher.group(1) != null ? matcher.group(1).trim() : matcher.group(2).trim();
@@ -174,12 +162,11 @@ public class LaTeXParser {
         }
 
         if (!found) {
-            // 未找到任何 $...$ 公式，整段文本可能包含裸露的 LaTeX 命令
-            splitPlainTextWithBareLatex(text, segments);
+            // 未找到任何定界公式时，整段都按普通文本保留。
+            addPlainTextSegment(text, segments);
         } else if (lastEnd < text.length()) {
             // 处理最后一个公式之后的剩余文本
-            String remaining = text.substring(lastEnd);
-            splitPlainTextWithBareLatex(remaining, segments);
+            addPlainTextSegment(text.substring(lastEnd), segments);
         }
 
         return segments;
@@ -198,55 +185,6 @@ public class LaTeXParser {
             .replace("\\]", "$$")
             .replace("\\(", "$")
             .replace("\\)", "$");
-    }
-
-    /**
-     * 在纯文本中查找裸露的 LaTeX 命令片段。
-     *
-     * <p>某些情况下，HTML 中的 LaTeX 命令可能没有被 $ 包围（如 \overline{AB}），
-     * 本方法使用 {@link #BARE_LATEX_PATTERN} 正则来识别这些片段，
-     * 并将它们作为数学公式段处理。</p>
-     *
-     * <p>特殊处理：\left 和 \right 命令不作为独立公式处理（因为它们只是定界符的一部分），
-     * 而是作为普通文本传递。</p>
-     *
-     * @param plain 纯文本字符串（不含 $ 分隔符）
-     * @param out   输出的内容段列表（结果追加到此列表）
-     */
-    private void splitPlainTextWithBareLatex(String plain, List<ContentSegment> out) {
-        if (plain == null || plain.isBlank()) {
-            return;
-        }
-        Matcher matcher = BARE_LATEX_PATTERN.matcher(plain);
-        int lastEnd = 0;
-        boolean found = false;
-        while (matcher.find()) {
-            found = true;
-            // 裸露命令之前的纯文本
-            if (matcher.start() > lastEnd) {
-                addPlainTextSegment(plain.substring(lastEnd, matcher.start()), out);
-            }
-            String latex = matcher.group();
-            // \left 和 \right 是定界符命令，不作为独立公式处理
-            if ("\\left".equals(latex) || "\\right".equals(latex)) {
-                addPlainTextSegment(latex, out);
-                lastEnd = matcher.end();
-                continue;
-            }
-            // 将裸露的 LaTeX 片段解析为 AST
-            LaTeXNode ast = parseLaTeX(latex);
-            out.add(new ContentSegment(true, latex, ast));
-            lastEnd = matcher.end();
-        }
-        if (!found) {
-            // 没有裸露命令，整段作为纯文本
-            addPlainTextSegment(plain, out);
-            return;
-        }
-        // 处理最后一个裸露命令之后的剩余文本
-        if (lastEnd < plain.length()) {
-            addPlainTextSegment(plain.substring(lastEnd), out);
-        }
     }
 
     /**

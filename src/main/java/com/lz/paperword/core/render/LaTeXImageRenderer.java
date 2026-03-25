@@ -254,6 +254,10 @@ public class LaTeXImageRenderer {
             return latex;
         }
         String normalized = latex.replaceAll("\\\\kern\\s*[-+]?\\d*\\.?\\d+[a-zA-Z]+", "");
+        String compositeLongDivision = replaceEmbeddedLongDivisionHeader(normalized);
+        if (compositeLongDivision != null) {
+            return compositeLongDivision;
+        }
         String expandedLongDivision = expandLongDivisionPreview(normalized);
         if (expandedLongDivision != null) {
             return expandedLongDivision;
@@ -264,6 +268,18 @@ public class LaTeXImageRenderer {
         return Pattern.compile("\\\\enclose\\{longdiv\\}\\{([^{}]+)}")
             .matcher(normalized)
             .replaceAll("\\\\big)\\\\overline{$1}");
+    }
+
+    private String replaceEmbeddedLongDivisionHeader(String latex) {
+        Matcher matcher = LONG_DIVISION_COMMAND_PATTERN.matcher(latex);
+        if (!matcher.find()) {
+            return null;
+        }
+        String quotient = matcher.group(1) == null ? "" : matcher.group(1).trim();
+        String divisor = matcher.group(2) == null ? "" : matcher.group(2).trim();
+        String dividend = matcher.group(3) == null ? "" : matcher.group(3).trim();
+        String replacement = buildLongDivisionPreviewLatex(divisor, quotient, dividend);
+        return latex.substring(0, matcher.start()) + replacement + latex.substring(matcher.end());
     }
 
     private String expandLongDivisionPreview(String latex) {
@@ -281,55 +297,14 @@ public class LaTeXImageRenderer {
     }
 
     private String buildLongDivisionPreviewLatex(String divisor, String quotient, String dividend) {
-        int divisorValue;
-        try {
-            divisorValue = Integer.parseInt(divisor);
-        } catch (NumberFormatException ignored) {
-            return "\\longdiv" + (quotient.isBlank() ? "" : "[" + quotient + "]") + "{" + divisor + "}{" + dividend + "}";
-        }
-        if (divisorValue == 0) {
-            return "\\longdiv" + (quotient.isBlank() ? "" : "[" + quotient + "]") + "{" + divisor + "}{" + dividend + "}";
-        }
-
-        List<String> lines = new java.util.ArrayList<>();
+        // 预览图只保留头部，不再根据 bare longdiv 自动推导步骤区。
         String header = divisor;
         if (!quotient.isBlank()) {
             header += "\\overset{" + quotient + "}{\\overline{\\left)" + dividend + "\\right.}}";
         } else {
             header += "\\overline{\\left)" + dividend + "\\right.}";
         }
-        lines.add(header);
-
-        int remainder = 0;
-        boolean started = false;
-        for (int index = 0; index < dividend.length(); index++) {
-            remainder = remainder * 10 + (dividend.charAt(index) - '0');
-            if (!started && remainder < divisorValue) {
-                continue;
-            }
-            started = true;
-
-            int product = (remainder / divisorValue) * divisorValue;
-            lines.add(buildLongDivisionUnderlineLine(index + 2, String.valueOf(product)));
-
-            remainder -= product;
-            if (index < dividend.length() - 1) {
-                int broughtDown = remainder * 10 + (dividend.charAt(index + 1) - '0');
-                lines.add(buildLongDivisionTextLine(index + 3, String.valueOf(broughtDown)));
-            } else {
-                lines.add(buildLongDivisionTextLine(index + 2, String.valueOf(remainder)));
-            }
-        }
-
-        StringBuilder builder = new StringBuilder("\\begin{array}{l}");
-        for (int index = 0; index < lines.size(); index++) {
-            if (index > 0) {
-                builder.append("\\\\");
-            }
-            builder.append(lines.get(index));
-        }
-        builder.append("\\end{array}");
-        return builder.toString();
+        return header;
     }
 
     private String buildLongDivisionUnderlineLine(int endColumn, String digits) {

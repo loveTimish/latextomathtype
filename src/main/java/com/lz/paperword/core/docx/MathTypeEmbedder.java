@@ -27,6 +27,10 @@ public class MathTypeEmbedder {
     private static final Logger log = LoggerFactory.getLogger(MathTypeEmbedder.class);
 
     private static final double PT_PER_PX = 0.75d;
+    private static final double MAX_GENERIC_ARRAY_WIDTH_PT = 180.0d;
+    private static final double MAX_CROSS_ARRAY_WIDTH_PT = 140.0d;
+    private static final double MAX_LONG_DIVISION_WIDTH_PT = 150.0d;
+    private static final double MAX_DISPLAY_HEIGHT_PT = 96.0d;
     /** 公式层默认字号已从 30pt 收敛到 20pt，基线偏移也按同样比例缩小。 */
     private static final double BASELINE_SHIFT_SCALE = 20.0d / 30.0d;
     private final MtefWriter mtefWriter = new MtefWriter();
@@ -46,6 +50,7 @@ public class MathTypeEmbedder {
             if (preview == null || preview.data() == null || preview.data().length == 0) {
                 throw new IllegalStateException("OLE preview rendering returned no image data");
             }
+            PreviewBox previewBox = constrainPreviewBox(rawLatex, preview.widthPx(), preview.heightPx());
 
             OPCPackage pkg = paragraph.getDocument().getPackage();
             int idx = oleCounter.getAndIncrement();
@@ -74,7 +79,7 @@ public class MathTypeEmbedder {
                 "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
 
             insertOleObjectXml(paragraph, run, oleRel.getId(), imgRel.getId(), idx,
-                preview.widthPx(), preview.heightPx(), rawLatex);
+                previewBox.widthPx(), previewBox.heightPx(), rawLatex);
 
         } catch (Exception e) {
             log.error("Failed to embed MathType equation: {}", rawLatex, e);
@@ -187,5 +192,50 @@ public class MathTypeEmbedder {
 
     private int scaleHalfPoints(int originalHalfPt) {
         return (int) Math.round(originalHalfPt * BASELINE_SHIFT_SCALE);
+    }
+
+    /**
+     * 宽矩阵和十字交叉的预览图如果按原始尺寸写入，Word 中的 OLE 占位会被拉得过宽。
+     * 这里仅收敛预览框尺寸，不修改内部 MTEF，可编辑性仍由原始公式决定。
+     */
+    private PreviewBox constrainPreviewBox(String rawLatex, int widthPx, int heightPx) {
+        widthPx = Math.max(widthPx, 10);
+        heightPx = Math.max(heightPx, 10);
+        double maxWidthPt = resolveMaxPreviewWidthPt(rawLatex);
+        double scale = Math.min(1.0d, maxWidthPt / Math.max(widthPx * PT_PER_PX, 1.0d));
+        scale = Math.min(scale, MAX_DISPLAY_HEIGHT_PT / Math.max(heightPx * PT_PER_PX, 1.0d));
+        if (scale >= 0.999d) {
+            return new PreviewBox(widthPx, heightPx);
+        }
+        return new PreviewBox(
+            Math.max((int) Math.round(widthPx * scale), 10),
+            Math.max((int) Math.round(heightPx * scale), 10)
+        );
+    }
+
+    private double resolveMaxPreviewWidthPt(String rawLatex) {
+        String latex = rawLatex == null ? "" : rawLatex;
+        if (isCrossMultiplicationArray(latex)) {
+            return MAX_CROSS_ARRAY_WIDTH_PT;
+        }
+        if (latex.contains("\\longdiv") || latex.contains("\\enclose{longdiv}")) {
+            return MAX_LONG_DIVISION_WIDTH_PT;
+        }
+        if (latex.contains("\\begin{array}") || latex.contains("\\begin{aligned}") || latex.contains("\\begin{matrix}")) {
+            return MAX_GENERIC_ARRAY_WIDTH_PT;
+        }
+        return Double.MAX_VALUE;
+    }
+
+    /**
+     * 十字交叉矩阵横向信息密度最高，单独使用更严格的预览宽度上限。
+     */
+    private boolean isCrossMultiplicationArray(String latex) {
+        return latex.contains("\\begin{array}{ccccc}")
+            && latex.contains("\\nearrow")
+            && latex.contains("\\searrow");
+    }
+
+    private record PreviewBox(int widthPx, int heightPx) {
     }
 }

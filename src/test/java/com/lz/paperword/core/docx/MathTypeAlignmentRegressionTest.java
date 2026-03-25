@@ -46,8 +46,9 @@ class MathTypeAlignmentRegressionTest {
         assertTrue(reference.previewExtension.equals("wmf") || reference.previewExtension.equals("emf"),
             "reference preview should be vector");
         assertEquals("png", generated.previewExtension);
-        assertEquals(reference.positionHalfPt, generated.positionHalfPt);
-        assertWithin(generated.styleHeightPt, reference.styleHeightPt, 12.0d, "style height");
+        // 预览链路已从参考文档的矢量图切到更收敛的 PNG 尺寸，断言只要求基线与尺寸保持在合理范围。
+        assertWithin(generated.positionHalfPt, reference.positionHalfPt, 8.0d, "baseline position");
+        assertTrue(generated.styleHeightPt >= 12.0d, "style height should stay readable after preview shrink");
         assertTrue(generated.dyaOrig > 0, "dyaOrig should be positive");
         assertTrue(generated.styleWidthPt > 0, "style width should be positive");
     }
@@ -63,6 +64,20 @@ class MathTypeAlignmentRegressionTest {
         assertNotNull(documentXml);
         assertTrue(documentXml.contains("<o:OLEObject"), "concentration cross should stay on OLE path");
         assertFalse(documentXml.contains("<w:drawing"), "concentration cross should not fall back to picture drawing");
+        assertFalse(documentXml.contains("$$"), "display math delimiters should not leak into Word text");
+        ObjectMetrics metrics = extractFirstObjectMetrics(docx);
+        assertTrue(metrics.styleWidthPt <= 140.5d, "cross preview width should be capped for Word layout");
+    }
+
+    @Test
+    void shouldKeepInlineMathPrefixWithoutLeakingDisplayDelimiters() throws IOException {
+        byte[] docx = buildDocxWithContent("甲：$10\\times2=20(kg)$<br/>乙：$10\\times3=30(kg)$");
+        String documentXml = unzipTextEntries(docx).get("word/document.xml");
+
+        assertNotNull(documentXml);
+        assertTrue(documentXml.contains("甲："), "inline formula prefix should stay as text");
+        assertTrue(documentXml.contains("乙："), "second inline formula prefix should stay as text");
+        assertFalse(documentXml.contains("$$"), "inline formulas should not introduce stray display delimiters");
     }
 
     @Test
@@ -95,6 +110,14 @@ class MathTypeAlignmentRegressionTest {
             count++;
         }
         assertTrue(count >= 2, "multiple vertical templates should remain OLE formulas");
+    }
+
+    @Test
+    void shouldClampWideArrayPreviewWidth() throws IOException {
+        ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithContent(
+            "宽矩阵：<br/>$$\\begin{array}{rrrrrrrr}{} & {} & {3} & {4} & {0} & {} & {} & {} \\\\ {\\times} & {} & {5} & {3} & {0} & {0} & {} & {} \\\\ \\hline {} & {} & {} & {} & {} & {} & {} & {} \\\\ {+} & {} & {1} & {0} & {2} & {0} & {} & {} \\\\ {+} & {1} & {7} & {0} & {0} & {} & {} & {} \\\\ \\hline {} & {1} & {8} & {0} & {2} & {0} & {0} & {}\\end{array}$$"
+        ));
+        assertTrue(generated.styleWidthPt <= 180.5d, "wide array preview width should be capped");
     }
 
     private byte[] buildDocxWithFormula(String latex) throws IOException {

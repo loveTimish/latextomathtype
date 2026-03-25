@@ -94,58 +94,9 @@ public class VerticalLayoutCompiler {
         String quotient = flattenNodeText(childAt(node, 1));
         String dividend = flattenNodeText(childAt(node, 2));
         LongDivisionHeader header = new LongDivisionHeader(divisor, quotient, dividend);
-
-        if (!divisor.matches("\\d+") || !dividend.matches("\\d+")) {
-            return new VerticalLayoutSpec(Kind.LONG_DIVISION, 0, -1, -1, List.of(), List.of(), List.of(), header);
-        }
-
-        int divisorValue;
-        try {
-            divisorValue = Integer.parseInt(divisor);
-        } catch (NumberFormatException ignored) {
-            return new VerticalLayoutSpec(Kind.LONG_DIVISION, 0, -1, -1, List.of(), List.of(), List.of(), header);
-        }
-        if (divisorValue == 0) {
-            return new VerticalLayoutSpec(Kind.LONG_DIVISION, 0, -1, -1, List.of(), List.of(), List.of(), header);
-        }
-
-        int columnCount = dividend.length() + 2;
-        int anchorColumn = columnCount - 1;
-        List<VerticalRow> rows = new ArrayList<>();
-        List<RuleSpan> ruleSpans = new ArrayList<>();
-        List<LongDivisionStep> longDivisionSteps = new ArrayList<>();
-
-        rows.add(buildPlacedRow(RowKind.DIVIDEND, dividend, anchorColumn, columnCount));
-        int remainder = 0;
-        boolean started = false;
-        for (int index = 0; index < dividend.length(); index++) {
-            remainder = remainder * 10 + (dividend.charAt(index) - '0');
-            if (!started && remainder < divisorValue) {
-                continue;
-            }
-            started = true;
-
-            int product = (remainder / divisorValue) * divisorValue;
-            VerticalRow productRow = buildPlacedRow(RowKind.STEP, String.valueOf(product), index + 2, columnCount);
-            rows.add(productRow);
-            ruleSpans.add(ruleForBoundaryBelowRow(rows.size() - 1));
-
-            remainder -= product;
-            VerticalRow remainderRow;
-            if (index < dividend.length() - 1) {
-                int broughtDown = remainder * 10 + (dividend.charAt(index + 1) - '0');
-                remainderRow = buildPlacedRow(RowKind.REMAINDER, String.valueOf(broughtDown), index + 3, columnCount);
-                rows.add(remainderRow);
-            } else {
-                remainderRow = buildPlacedRow(RowKind.REMAINDER, String.valueOf(remainder), index + 2, columnCount);
-                rows.add(remainderRow);
-            }
-            longDivisionSteps.add(new LongDivisionStep(productRow, remainderRow));
-        }
-
-        rows = withSegments(rows, ruleSpans);
-        return new VerticalLayoutSpec(Kind.LONG_DIVISION, columnCount, anchorColumn, -1,
-            buildTabStops(columnCount, -1), rows, ruleSpans, header, withSegments(longDivisionSteps));
+        // 只保留头部语义，不再根据商/除数/被除数自动推导步骤区。
+        // 原图若存在步骤，应由上游显式保留，而不是在这里二次脑补。
+        return new VerticalLayoutSpec(Kind.LONG_DIVISION, 0, -1, -1, List.of(), List.of(), List.of(), header);
     }
 
     private VerticalLayoutSpec compileArithmeticArray(LaTeXNode node) {

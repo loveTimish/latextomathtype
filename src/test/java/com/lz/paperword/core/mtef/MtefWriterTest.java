@@ -210,8 +210,8 @@ class MtefWriterTest {
         assertTrue(containsRecord(mtef, MtefRecord.TMPL), "long division should emit TMPL record");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x01, 0x00}),
             "long division should use tmLDIV with upper slot variation");
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
-            "long division steps should include underline templates");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
+            "bare longdiv 头部不应再自动生成下划线步骤");
     }
 
     @Test
@@ -240,20 +240,39 @@ class MtefWriterTest {
         assertTrue(containsRecord(mtef, MtefRecord.TMPL), "long division without quotient should emit TMPL record");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x00, 0x00}),
             "long division without quotient should use tmLDIV without upper slot");
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
-            "long division without quotient should still include underline steps");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
+            "没有显式步骤时不应自动补下划线步骤");
     }
 
     @Test
-    void testWriteThreeStepLongDivisionKeepsStructuredUnderlines() {
+    void testWriteThreeStepLongDivisionHeaderDoesNotSynthesizeUnderlines() {
         LaTeXNode ast = parser.parseLaTeX("\\longdiv[246]{5}{1234}");
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x01, 0x00}),
             "three-step long division should still use tmLDIV");
-        assertTrue(countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}) >= 3,
-            "three-step long division should emit one underline template per step");
+        assertEquals(0, countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
+            "不能只凭 longdiv 头部自动补出三步下划线结构");
+    }
+
+    @Test
+    void testWriteCompositeLongDivisionSingleBlockKeepsExplicitSteps() {
+        LaTeXNode ast = parser.parseLaTeX(
+            "\\longdiv[570]{6}{3420}\\begin{array}{l}\\text{   }\\underline{30}\\\\\\text{    }42\\\\\\text{    }\\underline{42}\\\\\\text{      }0\\end{array}"
+        );
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x01, 0x00}),
+            "单块复合长除法仍应使用 tmLDIV 头部");
+        assertTrue(countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}) >= 2,
+            "单块复合长除法应保留原图中的下划线步骤");
+        String digitStream = extractDigitStream(mtef);
+        assertTrue(digitStream.contains("570"), "商应继续保留");
+        assertTrue(digitStream.contains("3420"), "被除数应继续保留");
+        assertTrue(digitStream.contains("30"), "显式步骤区中的第一步乘积应被写出");
+        assertTrue(digitStream.contains("42"), "显式步骤区中的后续数字应被写出");
     }
 
     @Test

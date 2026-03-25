@@ -238,7 +238,7 @@ public class LayoutDocxBuilder {
 
         String normalized = normalizeLineBreaks(content);
         if ((prefix == null || prefix.isEmpty()) && looksLikeDisplayLatexBlock(normalized)) {
-            writeMathExpression(para, normalized.trim(), effective);
+            writeMathExpression(para, unwrapDisplayMathBlock(normalized.trim()), effective);
             return;
         }
         List<String> lines = splitContentLinesPreservingDisplayMath(normalized);
@@ -254,7 +254,7 @@ public class LayoutDocxBuilder {
     }
 
     /**
-     * 避免把多行 array/aligned 公式按普通换行拆散，否则后续只会拿到残缺的 begin/end 片段。
+     * 避免把 $$...$$ 行间公式按普通换行拆散，否则多行矩阵会被拆成残缺文本。
      */
     private List<String> splitContentLinesPreservingDisplayMath(String content) {
         List<String> lines = new ArrayList<>();
@@ -262,25 +262,16 @@ public class LayoutDocxBuilder {
             return lines;
         }
         StringBuilder current = new StringBuilder();
-        int arrayDepth = 0;
-        int alignedDepth = 0;
-        int matrixDepth = 0;
+        boolean insideDisplayMath = false;
         for (int index = 0; index < content.length(); index++) {
-            if (content.startsWith("\\begin{array}", index)) {
-                arrayDepth++;
-            } else if (content.startsWith("\\end{array}", index) && arrayDepth > 0) {
-                arrayDepth--;
-            } else if (content.startsWith("\\begin{aligned}", index)) {
-                alignedDepth++;
-            } else if (content.startsWith("\\end{aligned}", index) && alignedDepth > 0) {
-                alignedDepth--;
-            } else if (content.startsWith("\\begin{matrix}", index)) {
-                matrixDepth++;
-            } else if (content.startsWith("\\end{matrix}", index) && matrixDepth > 0) {
-                matrixDepth--;
+            if (content.startsWith("$$", index)) {
+                insideDisplayMath = !insideDisplayMath;
+                current.append("$$");
+                index++;
+                continue;
             }
             char currentChar = content.charAt(index);
-            if (currentChar == '\n' && arrayDepth == 0 && alignedDepth == 0 && matrixDepth == 0) {
+            if (currentChar == '\n' && !insideDisplayMath) {
                 lines.add(current.toString());
                 current.setLength(0);
                 continue;
@@ -300,31 +291,12 @@ public class LayoutDocxBuilder {
             writeLineWithDisplayMathBlock(para, line, style);
             return;
         }
-        if (trimmed.startsWith("【答案】")) {
-            writeTextSegment(para, "【答案】", style);
-            writeExpressionOrText(para, trimmed.substring(4).trim(), style);
-            return;
-        }
-        if (trimmed.startsWith("【解析】")) {
-            writeTextSegment(para, "【解析】", style);
-            writeEquationSequence(para, trimmed.substring(4).trim(), style);
-            return;
-        }
-        Matcher serialMatcher = SERIAL_PREFIX_PATTERN.matcher(line);
-        if (serialMatcher.matches() && looksLikeBareLatex(serialMatcher.group(3).trim())) {
-            writeTextSegment(para, serialMatcher.group(1) + serialMatcher.group(2), style);
-            writeExpressionOrText(para, serialMatcher.group(3).trim(), style);
-            return;
-        }
-        if (trimmed.startsWith("=")) {
-            writeEquationSequence(para, trimmed, style);
-            return;
-        }
         writeGenericSegments(para, line, style);
     }
 
     /**
-     * 某些题目会把“【解答】”和整块 array 放在同一行；这里优先抽出整块显示公式，避免被 HTML/文本分段器切碎。
+     * 某些题目会把“【解答】”和整块 $$...$$ 放在同一行；这里优先抽出定界公式，
+     * 仅把真正被 $$ 包裹的内容送入 MathType，前后缀仍按普通文本写入。
      */
     private void writeLineWithDisplayMathBlock(XWPFParagraph para, String line, LayoutDocumentRequest.Style style) {
         int beginIndex = findDisplayMathStart(line);
@@ -338,14 +310,14 @@ public class LayoutDocxBuilder {
             return;
         }
         String prefix = line.substring(0, beginIndex);
-        String math = line.substring(beginIndex, endIndex);
+        String math = line.substring(beginIndex + 2, endIndex);
         String suffix = line.substring(endIndex);
         if (!prefix.isBlank()) {
-            writeTextSegment(para, prefix, style);
+            writeTextSegment(para, stripDisplayDelimiterNoise(prefix), style);
         }
         writeMathExpression(para, math.trim(), style);
         if (!suffix.isBlank()) {
-            writeGenericSegments(para, suffix, style);
+            writeGenericSegments(para, stripDisplayDelimiterNoise(suffix), style);
         }
     }
 
@@ -355,35 +327,14 @@ public class LayoutDocxBuilder {
     }
 
     private int findDisplayMathStart(String text) {
-        int arrayIndex = text.indexOf("\\begin{array}");
-        int alignedIndex = text.indexOf("\\begin{aligned}");
-        int matrixIndex = text.indexOf("\\begin{matrix}");
-        int bestIndex = -1;
-        for (int candidate : new int[]{arrayIndex, alignedIndex, matrixIndex}) {
-            if (candidate >= 0 && (bestIndex < 0 || candidate < bestIndex)) {
-                bestIndex = candidate;
-            }
-        }
-        return bestIndex;
+        return text.indexOf("$$");
     }
 
     private int findDisplayMathEnd(String text, int beginIndex) {
         if (beginIndex < 0) {
             return -1;
         }
-        if (text.startsWith("\\begin{array}", beginIndex)) {
-            int endIndex = text.indexOf("\\end{array}", beginIndex);
-            return endIndex < 0 ? -1 : endIndex + "\\end{array}".length();
-        }
-        if (text.startsWith("\\begin{aligned}", beginIndex)) {
-            int endIndex = text.indexOf("\\end{aligned}", beginIndex);
-            return endIndex < 0 ? -1 : endIndex + "\\end{aligned}".length();
-        }
-        if (text.startsWith("\\begin{matrix}", beginIndex)) {
-            int endIndex = text.indexOf("\\end{matrix}", beginIndex);
-            return endIndex < 0 ? -1 : endIndex + "\\end{matrix}".length();
-        }
-        return -1;
+        return text.indexOf("$$", beginIndex + 2);
     }
 
     private void writeEquationSequence(XWPFParagraph para, String text, LayoutDocumentRequest.Style style) {
@@ -409,10 +360,6 @@ public class LayoutDocxBuilder {
 
     private void writeExpressionOrText(XWPFParagraph para, String text, LayoutDocumentRequest.Style style) {
         if (text == null || text.isBlank()) {
-            return;
-        }
-        if (looksLikeBareLatex(text)) {
-            writeMathExpression(para, text.trim(), style);
             return;
         }
         writeGenericSegments(para, text, style);
@@ -505,28 +452,8 @@ public class LayoutDocxBuilder {
         return text.contains("<") && text.contains(">");
     }
 
-    private boolean looksLikeBareLatex(String text) {
-        if (text == null) {
-            return false;
-        }
-        String normalized = text.trim();
-        if (normalized.isEmpty()) {
-            return false;
-        }
-        return normalized.contains("\\frac")
-            || normalized.contains("\\left")
-            || normalized.contains("\\right")
-            || normalized.contains("\\times")
-            || normalized.contains("\\div")
-            || normalized.contains("\\begin{array}")
-            || normalized.contains("\\end{array}")
-            || normalized.contains("\\enclose{longdiv}")
-            || normalized.contains("\\sqrt")
-            || normalized.matches(".*\\\\[a-zA-Z]+.*");
-    }
-
     /**
-     * 对整块 array/enclose 公式保持整体写入，避免按换行拆开后破坏 LaTeX 结构。
+     * 只有完整的 $$...$$ 才视为整块行间公式，其余裸露 LaTeX 一律按普通文本保留。
      */
     private boolean looksLikeDisplayLatexBlock(String text) {
         if (text == null) {
@@ -536,10 +463,27 @@ public class LayoutDocxBuilder {
         if (normalized.isEmpty()) {
             return false;
         }
-        return normalized.startsWith("\\begin{array}")
-            || normalized.startsWith("\\begin{aligned}")
-            || normalized.startsWith("\\begin{matrix}")
-            || normalized.contains("\\enclose{longdiv}");
+        return normalized.startsWith("$$")
+            && normalized.endsWith("$$")
+            && normalized.length() > 4
+            && findDisplayMathEnd(normalized, 0) == normalized.length() - 2;
+    }
+
+    /**
+     * 去掉 display math 两侧的 $$ 定界符，只把内部 LaTeX 交给 MathType。
+     */
+    private String unwrapDisplayMathBlock(String text) {
+        return text.substring(2, text.length() - 2).trim();
+    }
+
+    /**
+     * 当前后缀因为上游混排行残留裸 $$ 时，兜底去掉这些无意义文本，避免直接写进 Word。
+     */
+    private String stripDisplayDelimiterNoise(String text) {
+        if (text == null || text.isBlank()) {
+            return "";
+        }
+        return text.replace("$$", "").trim();
     }
 
     private ParagraphAlignment mapAlignment(LayoutDocumentRequest.Alignment alignment) {

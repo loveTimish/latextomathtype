@@ -39,7 +39,7 @@ class VerticalLayoutCompilerTest {
     }
 
     @Test
-    void shouldCompileExplicitLongDivisionHeaderAndSteps() {
+    void shouldCompileExplicitLongDivisionHeaderWithoutSynthesizingSteps() {
         LaTeXNode ast = parser.parseLaTeX("\\longdiv[65]{13}{845}");
         VerticalLayoutSpec spec = compiler.compile(ast);
 
@@ -48,9 +48,7 @@ class VerticalLayoutCompilerTest {
         assertEquals("13", spec.longDivisionHeader().divisor());
         assertEquals("65", spec.longDivisionHeader().quotient());
         assertEquals("845", spec.longDivisionHeader().dividend());
-        assertEquals(2, spec.longDivisionSteps().size(), "explicit long division should produce structured step blocks");
-        assertEquals("78", joinCells(spec.longDivisionSteps().get(0).productRow().cells()));
-        assertEquals("65", joinCells(spec.longDivisionSteps().get(0).remainderRow().cells()));
+        assertTrue(spec.longDivisionSteps().isEmpty(), "bare longdiv 头部不应再自动推导步骤区");
     }
 
     @Test
@@ -70,19 +68,13 @@ class VerticalLayoutCompilerTest {
     }
 
     @Test
-    void shouldCompileExplicitLongDivisionIntoThreeStructuredSteps() {
+    void shouldNotCompileThreeStepLongDivisionFromHeaderAlone() {
         LaTeXNode ast = parser.parseLaTeX("\\longdiv[246]{5}{1234}");
         VerticalLayoutSpec spec = compiler.compile(ast);
 
         assertNotNull(spec);
-        assertTrue(spec.hasStructuredLongDivisionSteps());
-        assertEquals(3, spec.longDivisionSteps().size());
-        assertEquals("10", joinCells(spec.longDivisionSteps().get(0).productRow().cells()));
-        assertEquals("23", joinCells(spec.longDivisionSteps().get(0).remainderRow().cells()));
-        assertEquals("20", joinCells(spec.longDivisionSteps().get(1).productRow().cells()));
-        assertEquals("34", joinCells(spec.longDivisionSteps().get(1).remainderRow().cells()));
-        assertEquals("30", joinCells(spec.longDivisionSteps().get(2).productRow().cells()));
-        assertEquals("4", joinCells(spec.longDivisionSteps().get(2).remainderRow().cells()));
+        assertFalse(spec.hasStructuredLongDivisionSteps(), "不能只凭 longdiv 头部自动补三步长除法");
+        assertTrue(spec.longDivisionSteps().isEmpty(), "步骤区应由原图显式提供，而不是代码自动生成");
     }
 
     @Test

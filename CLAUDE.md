@@ -101,6 +101,26 @@ Equivalent expansion:
 
 This rule was introduced specifically to make rows such as `10 / 23 / 20 / 34 / 30 / 4` line up in editable MathType output without relying on nested pile/ruler structures.
 
+### Latest conclusion on single-block long division alignment
+
+After switching OCR output to the new single-block form:
+
+- `$$\longdiv[...]{}\n\begin{array}{l}...\end{array}$$`
+
+the main remaining alignment issue is currently considered a **program-side layout problem**, not primarily an LLM recognition problem.
+
+Observed conclusion:
+
+- The OCR/LLM side is already preserving the original long-division steps and keeping them inside one display-math block.
+- The current export path reconstructs the step area as single-column text rows with leading spaces (for example via `\text{   }42`), so final alignment depends on text-space rendering rather than preserved column semantics.
+- Because of that, Word/MathType can show visible drift even when the OCR step order and space counts are correct.
+
+Practical implication for future fixes:
+
+- Do not ask the LLM to invent extra steps or to compensate for alignment issues by changing the source steps.
+- Prefer fixing alignment in code by restoring explicit column/anchor semantics for the step rows, instead of relying only on raw text spaces inside the composite long-division block.
+- Keep the rule that bare `\longdiv` must not auto-generate steps; only the original image steps should appear.
+
 ### Cross-multiplication editing rule
 
 For concentration cross-multiplication / "十字交叉", MathType editability depends more on using MathType-known structures and fonts than on visually similar plain-text arrows.

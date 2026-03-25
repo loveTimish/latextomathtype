@@ -106,6 +106,23 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseBareLatexAsPlainTextWhenMissingDelimiters() {
+        List<ContentSegment> segments = parser.parseText("【解答】\\frac{1}{2}+\\frac{1}{3}");
+        assertEquals(1, segments.size());
+        assertFalse(segments.get(0).isMath());
+        assertEquals("【解答】\\frac{1}{2}+\\frac{1}{3}", segments.get(0).rawText());
+    }
+
+    @Test
+    void testParseMultilineDisplayMathKeepsWholeBlock() {
+        List<ContentSegment> segments = parser.parseText("【解答】\n$$\\begin{array}{ccccc}\n{30\\%} & {} & {} & {} & {20\\%} \\\\\n{} & {\\searrow} & {} & {\\nearrow} & {}\n\\end{array}$$");
+        assertEquals(2, segments.size());
+        assertFalse(segments.get(0).isMath());
+        assertTrue(segments.get(1).isMath());
+        assertTrue(segments.get(1).rawText().contains("\\begin{array}{ccccc}"));
+    }
+
+    @Test
     void testParseSumWithLimits() {
         LaTeXNode ast = parser.parseLaTeX("\\sum_{i=1}^{n}a_i");
         assertNotNull(ast);
@@ -190,6 +207,19 @@ class LaTeXParserTest {
         assertEquals("13", flatten(longDiv.getChildren().get(0)));
         assertEquals("", flatten(longDiv.getChildren().get(1)));
         assertEquals("845", flatten(longDiv.getChildren().get(2)));
+    }
+
+    @Test
+    void testParseCompositeLongDivisionWithStepArrayInSingleBlock() {
+        LaTeXNode ast = parser.parseLaTeX(
+            "\\longdiv[570]{6}{3420}\\begin{array}{l}\\text{   }\\underline{30}\\\\\\text{    }42\\\\\\text{    }\\underline{42}\\\\\\text{      }0\\end{array}"
+        );
+        assertNotNull(ast);
+        assertEquals(2, ast.getChildren().size());
+        assertEquals(LaTeXNode.Type.LONG_DIVISION, ast.getChildren().get(0).getType());
+        assertEquals(LaTeXNode.Type.ARRAY, ast.getChildren().get(1).getType());
+        assertEquals("l", ast.getChildren().get(1).getMetadata("columnSpec"));
+        assertEquals(4, ast.getChildren().get(1).getChildren().size());
     }
 
     @Test

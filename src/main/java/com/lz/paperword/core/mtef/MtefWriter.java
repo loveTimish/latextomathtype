@@ -165,6 +165,9 @@ public class MtefWriter {
         try {
             // 使用模板前缀模式（从已知正确的 MathType OLE 中提取前缀）
             if (TEMPLATE_MTEF_PREFIX != null) {
+                if (isCompositeLongDivisionRoot(root)) {
+                    return writeCompositeLongDivisionByTemplate(root);
+                }
                 if (isLongDivisionRoot(root)) {
                     return writeLongDivisionByTemplate(root);
                 }
@@ -209,6 +212,14 @@ public class MtefWriter {
             && root.getChildren().get(0).getType() == LaTeXNode.Type.LONG_DIVISION;
     }
 
+    private boolean isCompositeLongDivisionRoot(LaTeXNode root) {
+        return root != null
+            && root.getType() == LaTeXNode.Type.ROOT
+            && root.getChildren().size() == 2
+            && root.getChildren().get(0).getType() == LaTeXNode.Type.LONG_DIVISION
+            && root.getChildren().get(1).getType() == LaTeXNode.Type.ARRAY;
+    }
+
     /**
      * 长除法专用写入方法：复用裁剪后的模板前缀，保留参考对象的 header / font / eqn prefs，
      * 并在 tmLDIV 前显式重建 reference 中存在的 paren + matrix + divisor 壳。
@@ -221,11 +232,8 @@ public class MtefWriter {
         }
 
         VerticalLayoutSpec layoutSpec = verticalLayoutCompiler.compileExplicitLongDivision(longDivision);
-        if (layoutSpec != null && layoutSpec.hasStructuredLongDivisionSteps()) {
-            // 多步骤长除法优先走 computed array，让 MathType 看到标准 MATRIX/PILE 结构，保证可编辑性。
-            LaTeXNode computedArray = verticalLayoutNodeFactory.buildComputedLongDivisionArray(longDivision, layoutSpec);
-            return writeByTemplatePrefix(computedArray);
-        }
+        // 这里不再根据 bare longdiv 头部自动补全步骤区。
+        // 如果原图真的有步骤，应由上游显式传入，而不是在导出阶段二次推导。
 
         ByteArrayOutputStream out = new ByteArrayOutputStream(512);
         out.write(LONG_DIVISION_REFERENCE_PREFIX);
@@ -237,6 +245,62 @@ public class MtefWriter {
         writeNode(out, longDivision);
         out.write(MtefRecord.END);
         return out.toByteArray();
+    }
+
+    private byte[] writeCompositeLongDivisionByTemplate(LaTeXNode root) throws IOException {
+        LaTeXNode longDivision = root.getChildren().get(0);
+        LaTeXNode stepArray = root.getChildren().get(1);
+        VerticalLayoutSpec headerSpec = verticalLayoutCompiler.compileExplicitLongDivision(longDivision);
+        List<VerticalLayoutNodeFactory.RawLongDivisionLine> stepLines = extractCompositeLongDivisionLines(stepArray);
+        LaTeXNode compositeArray = verticalLayoutNodeFactory.buildCompositeLongDivisionArray(longDivision, headerSpec, stepLines);
+        return writeByTemplatePrefix(compositeArray);
+    }
+
+    private List<VerticalLayoutNodeFactory.RawLongDivisionLine> extractCompositeLongDivisionLines(LaTeXNode stepArray) {
+        List<VerticalLayoutNodeFactory.RawLongDivisionLine> lines = new ArrayList<>();
+        if (stepArray == null || stepArray.getType() != LaTeXNode.Type.ARRAY) {
+            return lines;
+        }
+        for (LaTeXNode rowNode : stepArray.getChildren()) {
+            CompositeLongDivisionLine line = flattenCompositeLongDivisionLine(rowNode);
+            if (line.text().isBlank()) {
+                continue;
+            }
+            lines.add(new VerticalLayoutNodeFactory.RawLongDivisionLine(line.text(), line.underlined()));
+        }
+        return lines;
+    }
+
+    private CompositeLongDivisionLine flattenCompositeLongDivisionLine(LaTeXNode node) {
+        StringBuilder builder = new StringBuilder();
+        boolean underlined = appendCompositeLongDivisionText(node, builder);
+        return new CompositeLongDivisionLine(builder.toString(), underlined);
+    }
+
+    private boolean appendCompositeLongDivisionText(LaTeXNode node, StringBuilder builder) {
+        if (node == null) {
+            return false;
+        }
+        boolean underlined = false;
+        switch (node.getType()) {
+            case CHAR -> builder.append(node.getValue() == null ? "" : node.getValue());
+            case COMMAND -> {
+                if ("\\underline".equals(node.getValue())) {
+                    underlined = true;
+                    for (LaTeXNode child : node.getChildren()) {
+                        underlined = appendCompositeLongDivisionText(child, builder) || underlined;
+                    }
+                }
+            }
+            case ROOT, GROUP, TEXT, ARRAY, ROW, CELL, LONG_DIVISION, FRACTION, SQRT, SUPERSCRIPT, SUBSCRIPT -> {
+                for (LaTeXNode child : node.getChildren()) {
+                    underlined = appendCompositeLongDivisionText(child, builder) || underlined;
+                }
+            }
+            default -> {
+            }
+        }
+        return underlined;
     }
 
     private void writeExplicitLongDivisionByReferenceShape(ByteArrayOutputStream out,
@@ -2116,5 +2180,11 @@ public class MtefWriter {
             "arcsin", "arccos", "arctan", "sinh", "cosh", "tanh",
             "log", "ln", "exp", "lim", "max", "min",
             "det", "dim", "gcd", "lcm", "mod").contains(name);
+    }
+
+    private record CompositeLongDivisionLine(String text, boolean underlined) {
+        private CompositeLongDivisionLine {
+            text = text == null ? "" : text;
+        }
     }
 }

@@ -30,6 +30,12 @@ public class VerticalLayoutNodeFactory {
     public static final String RAW_PILE_RULER = "rawPileRuler";
     public static final String RAW_MATRIX_HALIGN = "rawMatrixHalign";
 
+    public record RawLongDivisionLine(String text, boolean underlined) {
+        public RawLongDivisionLine {
+            text = text == null ? "" : text;
+        }
+    }
+
     public LaTeXNode buildArrayNode(VerticalLayoutSpec spec) {
         if (spec == null) {
             return null;
@@ -87,6 +93,36 @@ public class VerticalLayoutNodeFactory {
         if (spec != null && !spec.longDivisionSteps().isEmpty()) {
             for (LaTeXNode stepRow : buildComputedLongDivisionRows(spec)) {
                 normalized.addChild(stepRow);
+            }
+        }
+        normalized.setMetadata("rowLines", encodeZeros(normalized.getChildren().size() + 1));
+        return normalized;
+    }
+
+    public LaTeXNode buildCompositeLongDivisionArray(LaTeXNode longDivisionNode,
+                                                     VerticalLayoutSpec spec,
+                                                     List<RawLongDivisionLine> stepLines) {
+        LaTeXNode normalized = new LaTeXNode(LaTeXNode.Type.ARRAY, "\\array");
+        normalized.setMetadata("columnCount", "1");
+        normalized.setMetadata("columnSpec", "l");
+        normalized.setMetadata("columnLines", "0,0");
+        normalized.setMetadata(PRESERVE_RAW_ARRAY, "true");
+
+        LaTeXNode firstRow = new LaTeXNode(LaTeXNode.Type.ROW);
+        LaTeXNode headerCell = new LaTeXNode(LaTeXNode.Type.CELL);
+        headerCell.addChild(buildSimpleLongDivisionHeader(longDivisionNode, spec));
+        firstRow.addChild(headerCell);
+        normalized.addChild(firstRow);
+
+        if (stepLines != null) {
+            for (RawLongDivisionLine stepLine : stepLines) {
+                if (stepLine == null || stepLine.text().isBlank()) {
+                    continue;
+                }
+                LaTeXNode content = stepLine.underlined()
+                    ? buildIndentedUnderlineLine(stepLine.text())
+                    : buildTextNode(stepLine.text());
+                normalized.addChild(buildSingleCellRow(content));
             }
         }
         normalized.setMetadata("rowLines", encodeZeros(normalized.getChildren().size() + 1));

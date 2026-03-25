@@ -27,10 +27,10 @@ class LayoutExportServiceTest {
         page.setPageNumber(1);
         page.getBlocks().add(paragraphBlock("b1", "1. 用竖式计算 23×12"));
         page.getBlocks().add(paragraphBlock("b2",
-            "【解答】\\begin{array}{rrrrrr}{} & {} & {1} & {2} & {3} & {} \\\\ {\\times} & {} & {} & {4} & {5} & {} \\\\ \\hline {} & {} & {6} & {1} & {5} & {} \\\\ {+} & {4} & {9} & {2} & {} & {} \\\\ \\hline {} & {5} & {5} & {3} & {5} & {}\\end{array}"));
+            "【解答】\n$$\\begin{array}{rrrrrr}{} & {} & {1} & {2} & {3} & {} \\\\ {\\times} & {} & {} & {4} & {5} & {} \\\\ \\hline {} & {} & {6} & {1} & {5} & {} \\\\ {+} & {4} & {9} & {2} & {} & {} \\\\ \\hline {} & {5} & {5} & {3} & {5} & {}\\end{array}$$"));
         page.getBlocks().add(paragraphBlock("b3", "2. 按十字交叉法配制 30% 溶液"));
         page.getBlocks().add(paragraphBlock("b4",
-            "【解答】\\begin{array}{ccccc} 50\\% & & & & 10\\% \\\\ & {}\\searrow{} & & {}\\nearrow{} & \\\\ & & 30\\% & & \\\\ & {}\\nearrow{} & & {}\\searrow{} & \\\\ 20\\% & & & & 20\\% \\end{array}"));
+            "【解答】\n$$\\begin{array}{ccccc} 50\\% & & & & 10\\% \\\\ & {}\\searrow{} & & {}\\nearrow{} & \\\\ & & 30\\% & & \\\\ & {}\\nearrow{} & & {}\\searrow{} & \\\\ 20\\% & & & & 20\\% \\end{array}$$"));
         request.setPages(java.util.List.of(page));
 
         byte[] docx = service.exportLayoutDocument(request);
@@ -47,6 +47,7 @@ class LayoutExportServiceTest {
             count++;
         }
         assertTrue(count >= 2, "版面导出应把竖式和十字交叉都保留为 OLE 对象");
+        assertTrue(!documentXml.contains("$$"), "版面导出不应把 display math 定界符直接写进 Word");
     }
 
     private LayoutDocumentRequest.Block paragraphBlock(String id, String text) {
