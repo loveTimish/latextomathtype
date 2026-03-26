@@ -232,8 +232,13 @@ public class MtefWriter {
         }
 
         VerticalLayoutSpec layoutSpec = verticalLayoutCompiler.compileExplicitLongDivision(longDivision);
-        // 这里不再根据 bare longdiv 头部自动补全步骤区。
-        // 如果原图真的有步骤，应由上游显式传入，而不是在导出阶段二次推导。
+        String originalQuotient = flattenNodeText(childAt(longDivision, 1));
+        boolean shouldUseComputedLayout = layoutSpec != null
+            && (!layoutSpec.longDivisionHeader().quotient().equals(originalQuotient)
+            || !layoutSpec.longDivisionSteps().isEmpty());
+        if (shouldUseComputedLayout) {
+            return writeByTemplatePrefix(verticalLayoutNodeFactory.buildComputedLongDivisionArray(longDivision, layoutSpec));
+        }
 
         ByteArrayOutputStream out = new ByteArrayOutputStream(512);
         out.write(LONG_DIVISION_REFERENCE_PREFIX);

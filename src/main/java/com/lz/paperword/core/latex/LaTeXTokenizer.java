@@ -23,7 +23,7 @@ import java.util.Set;
  *   <li><b>方括号</b>：'[' → LBRACKET，']' → RBRACKET（用于可选参数，如 \sqrt[3]{x}）</li>
  *   <li><b>上标符</b>：'^' → CARET（触发上标解析）</li>
  *   <li><b>下标符</b>：'_' → UNDERSCORE（触发下标解析）</li>
- *   <li><b>空白字符</b>：在数学模式中跳过，不生成 Token</li>
+ *   <li><b>空白字符</b>：生成 WHITESPACE Token，默认由解析器在数学模式中忽略；文本命令可显式保留</li>
  *   <li><b>普通字符</b>：字母、数字、运算符（+、-、=、<、>等）→ CHAR 类型</li>
  * </ol>
  *
@@ -66,7 +66,7 @@ public class LaTeXTokenizer {
         CARET,
         /** 下标符号 '_'：触发下标（SUBSCRIPT）的解析 */
         UNDERSCORE,
-        /** 空白字符：在数学模式中通常被跳过（本分词器不会生成此类型的 Token） */
+        /** 空白字符：默认可被解析器忽略，但 \text{...} 这类文本命令会显式保留 */
         WHITESPACE
     }
 
@@ -145,7 +145,8 @@ public class LaTeXTokenizer {
      *
      * <p>核心分词算法采用单遍顺序扫描：从左到右逐字符读取输入字符串，
      * 根据当前字符类型决定生成何种 Token。对于反斜杠命令，采用贪婪匹配
-     * （尽可能多地读取字母字符）。数学模式下的空白字符会被忽略。</p>
+     * （尽可能多地读取字母字符）。空白字符会作为 WHITESPACE token 保留，
+     * 便于 \text{   } 这类文本命令显式承载长除法对齐空格。</p>
      *
      * <p>分词过程不做语法校验——即使输入的 LaTeX 语法不完整（如缺少右花括号），
      * 分词器仍会正常输出已识别的 Token 序列，语法错误留给后续的解析器处理。</p>
@@ -207,8 +208,12 @@ public class LaTeXTokenizer {
                 tokens.add(new Token(TokenType.UNDERSCORE, "_"));
                 i++;
             } else if (Character.isWhitespace(c)) {
-                // ---- 空白字符：在数学模式中跳过，不生成 Token ----
-                i++;
+                // ---- 空白字符：保留为 WHITESPACE，便于文本命令恢复显式缩进 ----
+                int start = i;
+                while (i < len && Character.isWhitespace(input.charAt(i))) {
+                    i++;
+                }
+                tokens.add(new Token(TokenType.WHITESPACE, input.substring(start, i)));
             } else {
                 // ---- 普通字符：字母、数字、运算符等，每个字符生成一个 CHAR Token ----
                 tokens.add(new Token(TokenType.CHAR, String.valueOf(c)));

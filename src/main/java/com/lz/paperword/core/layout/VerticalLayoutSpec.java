@@ -126,6 +126,38 @@ public record VerticalLayoutSpec(
         }
     }
 
+    /**
+     * 长除法步骤区的结构化落点模型。
+     *
+     * <p>所有列坐标都以“被除数区域左边界”为原点，不再把除数宽度折进 raw text 前缀里。</p>
+     */
+    public enum LongDivisionPlacedRowType {
+        PRODUCT,
+        REMAINDER
+    }
+
+    public record LongDivisionPlacedLine(
+        LongDivisionPlacedRowType rowType,
+        String text,
+        int startColumn,
+        int endColumn,
+        int underlineStartColumn,
+        int underlineEndColumn
+    ) {
+        public LongDivisionPlacedLine {
+            rowType = rowType == null ? LongDivisionPlacedRowType.REMAINDER : rowType;
+            text = text == null ? "" : text;
+            startColumn = Math.max(startColumn, 0);
+            endColumn = Math.max(endColumn, startColumn);
+            underlineStartColumn = underlineStartColumn < 0 ? -1 : Math.max(underlineStartColumn, startColumn);
+            underlineEndColumn = underlineEndColumn < 0 ? -1 : Math.max(underlineEndColumn, underlineStartColumn);
+        }
+
+        public boolean hasUnderline() {
+            return underlineStartColumn >= 0 && underlineEndColumn >= underlineStartColumn;
+        }
+    }
+
     private static List<VerticalRow> copyRows(List<VerticalRow> source) {
         if (source == null || source.isEmpty()) {
             return List.of();

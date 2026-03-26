@@ -220,6 +220,7 @@ class LaTeXParserTest {
         assertEquals(LaTeXNode.Type.ARRAY, ast.getChildren().get(1).getType());
         assertEquals("l", ast.getChildren().get(1).getMetadata("columnSpec"));
         assertEquals(4, ast.getChildren().get(1).getChildren().size());
+        assertTrue(flatten(ast.getChildren().get(1)).contains("    42"), "\\text{空格} 中的前导空格应被完整保留");
     }
 
     @Test

@@ -2,6 +2,9 @@ package com.lz.paperword.core.layout;
 
 import com.lz.paperword.core.latex.LaTeXNode;
 import com.lz.paperword.core.layout.VerticalLayoutCompiler.CrossMultiplicationLayout;
+import com.lz.paperword.core.layout.VerticalLayoutSpec.LongDivisionHeader;
+import com.lz.paperword.core.layout.VerticalLayoutSpec.LongDivisionPlacedLine;
+import com.lz.paperword.core.layout.VerticalLayoutSpec.LongDivisionPlacedRowType;
 import com.lz.paperword.core.layout.VerticalLayoutSpec.RuleSpan;
 import com.lz.paperword.core.layout.VerticalLayoutSpec.RowKind;
 import com.lz.paperword.core.layout.VerticalLayoutSpec.LongDivisionStep;
@@ -18,6 +21,10 @@ import java.util.List;
  */
 public class VerticalLayoutNodeFactory {
 
+    private static final int LONG_DIVISION_DIGIT_WIDTH_SPACES = 2;
+    private static final int LONG_DIVISION_BRACKET_WIDTH_SPACES = 2;
+    private static final int LONG_DIVISION_TAB_STOP_UNIT = 240;
+
     public static final String LONG_DIVISION_HEADER_ONLY = "longDivisionHeaderOnly";
     public static final String PRESERVE_RAW_ARRAY = "preserveRawArray";
     public static final String RAW_PILE_CONTAINER = "rawPileContainer";
@@ -29,6 +36,8 @@ public class VerticalLayoutNodeFactory {
     public static final String RAW_PILE_VALIGN = "rawPileValign";
     public static final String RAW_PILE_RULER = "rawPileRuler";
     public static final String RAW_MATRIX_HALIGN = "rawMatrixHalign";
+
+    private final VerticalLayoutCompiler verticalLayoutCompiler = new VerticalLayoutCompiler();
 
     public record RawLongDivisionLine(String text, boolean underlined) {
         public RawLongDivisionLine {
@@ -115,18 +124,22 @@ public class VerticalLayoutNodeFactory {
         normalized.addChild(firstRow);
 
         if (stepLines != null) {
-            for (RawLongDivisionLine stepLine : stepLines) {
-                if (stepLine == null || stepLine.text().isBlank()) {
-                    continue;
-                }
-                LaTeXNode content = stepLine.underlined()
-                    ? buildIndentedUnderlineLine(stepLine.text())
-                    : buildTextNode(stepLine.text());
+            for (LongDivisionPlacedLine stepLine : normalizeRawLongDivisionLines(spec, stepLines)) {
+                LaTeXNode content = buildPlacedLongDivisionLine(spec, stepLine);
                 normalized.addChild(buildSingleCellRow(content));
             }
         }
         normalized.setMetadata("rowLines", encodeZeros(normalized.getChildren().size() + 1));
         return normalized;
+    }
+
+    public LaTeXNode buildCompositeLongDivisionTemplateNode(LaTeXNode longDivisionNode,
+                                                            VerticalLayoutSpec headerSpec,
+                                                            List<RawLongDivisionLine> stepLines) {
+        return buildStructuredLongDivisionTemplateNode(
+            longDivisionNode,
+            buildCompositeLongDivisionSpec(headerSpec, stepLines)
+        );
     }
 
     /**
@@ -164,8 +177,10 @@ public class VerticalLayoutNodeFactory {
         }
         header.setMetadata(LONG_DIVISION_HEADER_ONLY, "true");
 
-        // 除数
-        header.addChild(deepCopy(childAt(longDivisionNode, 0)));
+        // 除数优先采用编译后的头部语义，便于小数除法先转成整数除法后统一展示。
+        header.addChild(buildPlainGroup(spec == null || spec.longDivisionHeader() == null
+            ? flattenNodeText(childAt(longDivisionNode, 0))
+            : spec.longDivisionHeader().divisor()));
 
         // 商（简化，不含步骤）
         String quotient = spec == null || spec.longDivisionHeader() == null ? "" : spec.longDivisionHeader().quotient();
@@ -180,14 +195,24 @@ public class VerticalLayoutNodeFactory {
         }
 
         // 被除数（简化，仅数字，不含 PILE/FRACTION 步骤）
-        String dividend = flattenNodeText(childAt(longDivisionNode, 2));
-        LaTeXNode dividendNode = new LaTeXNode(LaTeXNode.Type.GROUP);
-        for (char ch : dividend.toCharArray()) {
-            dividendNode.addChild(new LaTeXNode(LaTeXNode.Type.CHAR, String.valueOf(ch)));
-        }
+        String dividend = spec == null || spec.longDivisionHeader() == null
+            ? flattenNodeText(childAt(longDivisionNode, 2))
+            : spec.longDivisionHeader().dividend();
+        LaTeXNode dividendNode = buildPlainGroup(dividend);
         header.addChild(dividendNode);
 
         return header;
+    }
+
+    private LaTeXNode buildPlainGroup(String text) {
+        LaTeXNode group = new LaTeXNode(LaTeXNode.Type.GROUP);
+        if (text == null) {
+            return group;
+        }
+        for (char ch : text.toCharArray()) {
+            group.addChild(new LaTeXNode(LaTeXNode.Type.CHAR, String.valueOf(ch)));
+        }
+        return group;
     }
 
     public LaTeXNode buildStructuredLongDivisionNode(LaTeXNode longDivisionNode, VerticalLayoutSpec spec) {
@@ -500,6 +525,15 @@ public class VerticalLayoutNodeFactory {
             }
 
             String remainderText = buildFormulaAlignedDivisionText(step.remainderRow());
+            boolean trailingZeroRow = stepIndex == spec.longDivisionSteps().size() - 1
+                && isAllZeroText(remainderText.strip());
+            if (trailingZeroRow) {
+                String collapsedZero = buildCollapsedTrailingZeroText(step.remainderRow());
+                if (!collapsedZero.isBlank()) {
+                    rows.add(buildSingleCellRow(buildTextNode(collapsedZero)));
+                }
+                continue;
+            }
             if (!remainderText.isBlank()) {
                 rows.add(buildSingleCellRow(buildTextNode(remainderText)));
             }
@@ -515,6 +549,287 @@ public class VerticalLayoutNodeFactory {
         }
         row.addChild(cell);
         return row;
+    }
+
+    /**
+     * 将 LLM 返回的 raw 文本行先解析为相对被除数区域的列坐标，再交给统一渲染层。
+     */
+    List<LongDivisionPlacedLine> normalizeRawLongDivisionLines(VerticalLayoutSpec spec,
+                                                               List<RawLongDivisionLine> stepLines) {
+        List<LongDivisionPlacedLine> placedLines = new ArrayList<>();
+        if (stepLines == null || stepLines.isEmpty()) {
+            return placedLines;
+        }
+        List<RawLongDivisionLine> visibleLines = new ArrayList<>();
+        for (RawLongDivisionLine stepLine : stepLines) {
+            if (stepLine == null || stepLine.text().isBlank()) {
+                continue;
+            }
+            visibleLines.add(stepLine);
+        }
+        List<LongDivisionPlacedLine> semanticPlacedLines = matchExpectedLongDivisionLines(spec, visibleLines);
+        if (!semanticPlacedLines.isEmpty()) {
+            return semanticPlacedLines;
+        }
+        for (int index = 0; index < visibleLines.size(); index++) {
+            RawLongDivisionLine rawLine = visibleLines.get(index);
+            ParsedRawLongDivisionLine parsed = parseRawLongDivisionLine(rawLine);
+            if (parsed.text().isEmpty()) {
+                continue;
+            }
+            int startColumn = parsed.leadingSpaces() / LONG_DIVISION_DIGIT_WIDTH_SPACES;
+            int textWidth = countVisualColumns(parsed.text());
+            int endColumn = Math.max(startColumn + textWidth - 1, startColumn);
+            int underlineStartColumn = -1;
+            int underlineEndColumn = -1;
+            if (rawLine.underlined()) {
+                int underlineWidth = resolveUnderlineColumnWidth(visibleLines, index, textWidth);
+                underlineStartColumn = startColumn;
+                underlineEndColumn = startColumn + underlineWidth - 1;
+            }
+            placedLines.add(new LongDivisionPlacedLine(
+                rawLine.underlined() ? LongDivisionPlacedRowType.PRODUCT : LongDivisionPlacedRowType.REMAINDER,
+                parsed.text(),
+                startColumn,
+                endColumn,
+                underlineStartColumn,
+                underlineEndColumn
+            ));
+        }
+        return placedLines;
+    }
+
+    private ParsedRawLongDivisionLine parseRawLongDivisionLine(RawLongDivisionLine rawLine) {
+        String text = rawLine == null || rawLine.text() == null ? "" : rawLine.text();
+        int leadingSpaces = countLeadingSpaces(text);
+        return new ParsedRawLongDivisionLine(text.substring(leadingSpaces), leadingSpaces);
+    }
+
+    private int resolveUnderlineColumnWidth(List<RawLongDivisionLine> visibleLines, int currentIndex, int fallbackWidth) {
+        for (int index = currentIndex + 1; index < visibleLines.size(); index++) {
+            RawLongDivisionLine candidate = visibleLines.get(index);
+            if (candidate == null || candidate.underlined()) {
+                continue;
+            }
+            ParsedRawLongDivisionLine parsed = parseRawLongDivisionLine(candidate);
+            int candidateWidth = countVisualColumns(parsed.text());
+            if (candidateWidth > 0) {
+                return Math.max(candidateWidth, fallbackWidth);
+            }
+        }
+        return Math.max(fallbackWidth, 1);
+    }
+
+    private LaTeXNode buildPlacedLongDivisionLine(VerticalLayoutSpec spec, LongDivisionPlacedLine placedLine) {
+        if (!placedLine.hasUnderline()) {
+            int prefixSpaces = resolveLongDivisionHeaderOffsetSpaces(spec)
+                + Math.max(placedLine.startColumn(), 0) * LONG_DIVISION_DIGIT_WIDTH_SPACES;
+            String prefix = " ".repeat(Math.max(prefixSpaces, 0));
+            return buildTextNode(prefix + placedLine.text());
+        }
+        int underlineStartColumn = Math.max(placedLine.underlineStartColumn(), 0);
+        int prefixSpaces = resolveLongDivisionHeaderOffsetSpaces(spec)
+            + underlineStartColumn * LONG_DIVISION_DIGIT_WIDTH_SPACES;
+        String prefix = " ".repeat(Math.max(prefixSpaces, 0));
+        int leadingUnderlineColumns = Math.max(placedLine.startColumn() - underlineStartColumn, 0);
+        int trailingUnderlineColumns = Math.max(placedLine.underlineEndColumn() - placedLine.endColumn(), 0);
+        String underlineText = " ".repeat(leadingUnderlineColumns * LONG_DIVISION_DIGIT_WIDTH_SPACES)
+            + placedLine.text()
+            + " ".repeat(trailingUnderlineColumns * LONG_DIVISION_DIGIT_WIDTH_SPACES);
+        return buildPrefixedUnderlineLine(prefix, underlineText);
+    }
+
+    /**
+     * 长除法步骤区统一按“除数宽度 + 除号宽度 + 相对列位”推导最终起点，
+     * 避免把这层前缀散落在 raw-lines 里重复补偿。
+     */
+    private int resolveLongDivisionHeaderOffsetSpaces(VerticalLayoutSpec spec) {
+        if (spec == null || spec.longDivisionHeader() == null) {
+            return 0;
+        }
+        return countVisualColumns(spec.longDivisionHeader().divisor()) * LONG_DIVISION_DIGIT_WIDTH_SPACES
+            + LONG_DIVISION_BRACKET_WIDTH_SPACES;
+    }
+
+    private LaTeXNode buildPrefixedUnderlineLine(String prefix, String underlinedText) {
+        LaTeXNode group = new LaTeXNode(LaTeXNode.Type.GROUP);
+        if (prefix != null && !prefix.isEmpty()) {
+            group.addChild(buildTextNode(prefix));
+        }
+        if (underlinedText != null && !underlinedText.isEmpty()) {
+            LaTeXNode underline = new LaTeXNode(LaTeXNode.Type.COMMAND, "\\underline");
+            underline.addChild(buildTextNode(underlinedText));
+            group.addChild(underline);
+        }
+        return group;
+    }
+
+    private int countVisualColumns(String text) {
+        if (text == null || text.isEmpty()) {
+            return 0;
+        }
+        int columns = 0;
+        for (int index = 0; index < text.length(); index++) {
+            if (text.charAt(index) != ' ') {
+                columns++;
+            }
+        }
+        return columns;
+    }
+
+    private VerticalLayoutSpec buildCompositeLongDivisionSpec(VerticalLayoutSpec headerSpec,
+                                                              List<RawLongDivisionLine> stepLines) {
+        if (headerSpec == null || headerSpec.longDivisionHeader() == null) {
+            return headerSpec;
+        }
+
+        List<LongDivisionPlacedLine> placedLines = normalizeRawLongDivisionLines(headerSpec, stepLines);
+        if (placedLines.isEmpty()) {
+            return headerSpec;
+        }
+
+        int maxRelativeColumn = Math.max(countVisualColumns(headerSpec.longDivisionHeader().dividend()) - 1, 0);
+        for (LongDivisionPlacedLine placedLine : placedLines) {
+            maxRelativeColumn = Math.max(maxRelativeColumn,
+                placedLine.hasUnderline() ? placedLine.underlineEndColumn() : placedLine.endColumn());
+        }
+        int columnCount = Math.max(headerSpec.columnCount(), maxRelativeColumn + 3);
+
+        List<VerticalRow> rows = new ArrayList<>();
+        rows.add(buildCompositeDividendRow(headerSpec.longDivisionHeader(), columnCount));
+
+        List<RuleSpan> ruleSpans = new ArrayList<>();
+        for (LongDivisionPlacedLine placedLine : placedLines) {
+            rows.add(buildCompositePlacedRow(placedLine, columnCount));
+            if (placedLine.hasUnderline()) {
+                int rowIndex = rows.size() - 1;
+                ruleSpans.add(new RuleSpan(
+                    rowIndex + 1,
+                    2 + placedLine.underlineStartColumn(),
+                    2 + placedLine.underlineEndColumn()
+                ));
+            }
+        }
+
+        return new VerticalLayoutSpec(
+            VerticalLayoutSpec.Kind.LONG_DIVISION,
+            columnCount,
+            Math.max(columnCount - 1, 0),
+            -1,
+            buildLongDivisionTabStops(columnCount),
+            rows,
+            ruleSpans,
+            headerSpec.longDivisionHeader(),
+            List.of()
+        );
+    }
+
+    private VerticalRow buildCompositeDividendRow(LongDivisionHeader header, int columnCount) {
+        String dividend = header == null ? "" : header.dividend();
+        int endColumn = Math.max(dividend.length() + 1, 2);
+        return new VerticalRow(
+            RowKind.DIVIDEND,
+            createLongDivisionCells(dividend, 2, columnCount),
+            List.of(new VerticalSegment(dividend, 2, endColumn, false))
+        );
+    }
+
+    private VerticalRow buildCompositePlacedRow(LongDivisionPlacedLine placedLine, int columnCount) {
+        if (placedLine == null) {
+            return new VerticalRow(RowKind.STEP, List.of(), List.of());
+        }
+        int spanStart = placedLine.hasUnderline() ? placedLine.underlineStartColumn() : placedLine.startColumn();
+        int spanEnd = placedLine.hasUnderline() ? placedLine.underlineEndColumn() : placedLine.endColumn();
+        String segmentText = buildPlacedSegmentText(placedLine);
+        int fullStartColumn = 2 + Math.max(spanStart, 0);
+        int fullEndColumn = 2 + Math.max(spanEnd, spanStart);
+        RowKind rowKind = placedLine.rowType() == LongDivisionPlacedRowType.PRODUCT ? RowKind.STEP : RowKind.REMAINDER;
+        return new VerticalRow(
+            rowKind,
+            createLongDivisionCells(placedLine.text(), 2 + Math.max(placedLine.startColumn(), 0), columnCount),
+            List.of(new VerticalSegment(segmentText, fullStartColumn, fullEndColumn, false))
+        );
+    }
+
+    private String buildPlacedSegmentText(LongDivisionPlacedLine placedLine) {
+        if (placedLine == null || placedLine.text() == null) {
+            return "";
+        }
+        if (!placedLine.hasUnderline()) {
+            return placedLine.text();
+        }
+        int leadingPadColumns = Math.max(placedLine.startColumn() - placedLine.underlineStartColumn(), 0);
+        int trailingPadColumns = Math.max(placedLine.underlineEndColumn() - placedLine.endColumn(), 0);
+        return " ".repeat(leadingPadColumns) + placedLine.text() + " ".repeat(trailingPadColumns);
+    }
+
+    private List<String> createLongDivisionCells(String text, int startColumn, int columnCount) {
+        int safeColumnCount = Math.max(columnCount, Math.max(startColumn, 0) + (text == null ? 0 : text.length()));
+        List<String> cells = new ArrayList<>();
+        for (int index = 0; index < safeColumnCount; index++) {
+            cells.add("");
+        }
+        if (text == null || text.isEmpty()) {
+            return cells;
+        }
+        int column = Math.max(startColumn, 0);
+        for (int index = 0; index < text.length() && column + index < cells.size(); index++) {
+            cells.set(column + index, String.valueOf(text.charAt(index)));
+        }
+        return cells;
+    }
+
+    private List<VerticalTabStop> buildLongDivisionTabStops(int columnCount) {
+        List<VerticalTabStop> tabStops = new ArrayList<>();
+        for (int column = 0; column < Math.max(columnCount, 1); column++) {
+            tabStops.add(new VerticalTabStop(column, TabStopKind.RIGHT, (column + 1) * LONG_DIVISION_TAB_STOP_UNIT));
+        }
+        return tabStops;
+    }
+
+    private List<LongDivisionPlacedLine> matchExpectedLongDivisionLines(VerticalLayoutSpec spec,
+                                                                        List<RawLongDivisionLine> visibleLines) {
+        if (spec == null || spec.longDivisionHeader() == null || visibleLines == null || visibleLines.isEmpty()) {
+            return List.of();
+        }
+        List<LongDivisionPlacedLine> expectedLines =
+            verticalLayoutCompiler.computeExpectedLongDivisionLines(spec.longDivisionHeader());
+        if (expectedLines.isEmpty()) {
+            return List.of();
+        }
+
+        List<LongDivisionPlacedLine> matched = new ArrayList<>();
+        int cursor = 0;
+        for (RawLongDivisionLine visibleLine : visibleLines) {
+            ParsedRawLongDivisionLine parsed = parseRawLongDivisionLine(visibleLine);
+            LongDivisionPlacedRowType targetType = visibleLine.underlined()
+                ? LongDivisionPlacedRowType.PRODUCT
+                : LongDivisionPlacedRowType.REMAINDER;
+            int matchIndex = findMatchingExpectedLine(expectedLines, cursor, targetType, parsed.text());
+            if (matchIndex < 0) {
+                return List.of();
+            }
+            matched.add(expectedLines.get(matchIndex));
+            cursor = matchIndex + 1;
+        }
+        return matched;
+    }
+
+    private int findMatchingExpectedLine(List<LongDivisionPlacedLine> expectedLines,
+                                         int cursor,
+                                         LongDivisionPlacedRowType targetType,
+                                         String text) {
+        for (int index = Math.max(cursor, 0); index < expectedLines.size(); index++) {
+            LongDivisionPlacedLine candidate = expectedLines.get(index);
+            if (candidate.rowType() != targetType) {
+                continue;
+            }
+            if (!candidate.text().equals(text)) {
+                continue;
+            }
+            return index;
+        }
+        return -1;
     }
 
     private LaTeXNode buildIndentedUnderlineLine(String text) {
@@ -557,15 +872,9 @@ public class VerticalLayoutNodeFactory {
             return "";
         }
 
-        // 统一空格公式：
-        // 1. 每跨 1 个自然列，放大成 3 个空格；
-        // 2. 再按位数补偿，保证个位列继续对齐。
-        // 因而：
-        // 1 位数 = 3*c - 1
-        // 2 位数 = 3*c
-        // 3 位数 = 3*c + 1
-        // n 位数 = 3*c + n - 2
-        int spaces = Math.max(leadingColumns * 3 + digits.length() - 2, 0);
+        // 长除法按“1 个数字 = 2 个空格”直接估算首位缩进，
+        // 这里优先保证首位数字落在目标列，不再额外叠加按位数补偿。
+        int spaces = Math.max(leadingColumns * 2, 0);
         return " ".repeat(spaces) + digits;
     }
 
@@ -575,6 +884,35 @@ public class VerticalLayoutNodeFactory {
             index++;
         }
         return index;
+    }
+
+    private boolean isAllZeroText(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        for (int index = 0; index < text.length(); index++) {
+            if (text.charAt(index) != '0') {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 末尾若是 00/000 这类整除收尾，只保留一个 0，并对齐到原来最右侧那一列。
+     */
+    private String buildCollapsedTrailingZeroText(VerticalRow row) {
+        if (row == null || row.cells().isEmpty()) {
+            return "";
+        }
+        List<String> trimmedCells = trimDivisionColumns(row.cells());
+        int lastColumn = findLastNonEmptyCell(trimmedCells);
+        if (lastColumn < 0) {
+            return "";
+        }
+        // 末尾单个 0 与普通数字共用同一套列宽，保持首位对齐逻辑一致。
+        int spaces = Math.max(lastColumn * 2, 0);
+        return " ".repeat(spaces) + "0";
     }
 
     private VerticalLayoutSpec toComputedLongDivisionSteps(VerticalLayoutSpec spec) {
@@ -905,6 +1243,19 @@ public class VerticalLayoutNodeFactory {
         return -1;
     }
 
+    private int findLastNonEmptyCell(List<String> cells) {
+        if (cells == null) {
+            return -1;
+        }
+        for (int index = cells.size() - 1; index >= 0; index--) {
+            String cell = cells.get(index);
+            if (cell != null && !cell.isEmpty()) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
     private String joinNonEmptyCells(List<String> cells) {
         if (cells == null || cells.isEmpty()) {
             return "";
@@ -979,5 +1330,8 @@ public class VerticalLayoutNodeFactory {
             builder.append(parts[i]);
         }
         return builder.toString();
+    }
+
+    private record ParsedRawLongDivisionLine(String text, int leadingSpaces) {
     }
 }

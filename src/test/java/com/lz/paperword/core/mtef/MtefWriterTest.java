@@ -211,7 +211,7 @@ class MtefWriterTest {
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x01, 0x00}),
             "long division should use tmLDIV with upper slot variation");
         assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
-            "bare longdiv 头部不应再自动生成下划线步骤");
+            "没有显式步骤区时不应再本地补出下划线步骤");
     }
 
     @Test
@@ -239,21 +239,23 @@ class MtefWriterTest {
         assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "long division without quotient should emit MATRIX wrapper");
         assertTrue(containsRecord(mtef, MtefRecord.TMPL), "long division without quotient should emit TMPL record");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x00, 0x00}),
-            "long division without quotient should use tmLDIV without upper slot");
+            "没有显式商时应保留头部模板而不是自动补商");
         assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
-            "没有显式步骤时不应自动补下划线步骤");
+            "没有显式步骤区时不应本地补出下划线步骤");
+        String digitStream = extractDigitStream(mtef);
+        assertFalse(digitStream.contains("65"), "导出端不应再本地补出商 65");
     }
 
     @Test
-    void testWriteThreeStepLongDivisionHeaderDoesNotSynthesizeUnderlines() {
+    void testWriteThreeStepLongDivisionHeaderDoesNotComputeUnderlinesLocally() {
         LaTeXNode ast = parser.parseLaTeX("\\longdiv[246]{5}{1234}");
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x01, 0x00}),
             "three-step long division should still use tmLDIV");
-        assertEquals(0, countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
-            "不能只凭 longdiv 头部自动补出三步下划线结构");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
+            "只有头部时不应再本地补出三步下划线结构");
     }
 
     @Test
@@ -285,6 +287,20 @@ class MtefWriterTest {
             "non-numeric long division should still emit tmLDIV header");
         assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00}),
             "non-numeric long division should not synthesize structured underline steps");
+    }
+
+    @Test
+    void testWriteDecimalLongDivisionHeaderKeepsRawValues() {
+        LaTeXNode ast = parser.parseLaTeX("\\longdiv[5]{2.5}{12.5}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x01, 0x00}),
+            "带显式商的小数长除法仍应使用带商槽的 tmLDIV");
+        String digitStream = extractDigitStream(mtef);
+        assertTrue(digitStream.contains("25"), "原始小数头部中的数字字符应被写出");
+        assertTrue(digitStream.contains("125"), "原始小数被除数中的数字字符应被写出");
+        assertTrue(digitStream.contains("5"), "显式商值应被写出");
     }
 
     private boolean containsRecord(byte[] bytes, int recordType) {

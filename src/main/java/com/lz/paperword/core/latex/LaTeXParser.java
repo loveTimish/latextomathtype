@@ -243,6 +243,10 @@ public class LaTeXParser {
      */
     private void parseExpression(TokenStream stream, LaTeXNode parent) {
         while (stream.hasNext()) {
+            stream.skipWhitespace();
+            if (!stream.hasNext()) {
+                break;
+            }
             Token token = stream.peek();
 
             // 遇到右花括号 } 或右方括号 ]，表示当前分组/可选参数结束
@@ -275,6 +279,7 @@ public class LaTeXParser {
      * @return 解析出的 AST 节点，或 null（无法识别的 Token）
      */
     private LaTeXNode parseAtom(TokenStream stream) {
+        stream.skipWhitespace();
         if (!stream.hasNext()) return null;
         Token token = stream.next();
 
@@ -359,6 +364,10 @@ public class LaTeXParser {
         boolean seenContent = false;
 
         while (stream.hasNext()) {
+            stream.skipWhitespace();
+            if (!stream.hasNext()) {
+                break;
+            }
             if (stream.matchesEnvironmentEnd(envName)) {
                 finalizeArrayCell(currentRow, currentCell);
                 finalizeArrayRow(arrayNode, currentRow);
@@ -397,7 +406,6 @@ public class LaTeXParser {
                 seenContent = true;
                 continue;
             }
-            stream.next();
         }
 
         if (!arrayNode.getChildren().isEmpty() || seenContent || !currentCell.getChildren().isEmpty()) {
@@ -542,7 +550,11 @@ public class LaTeXParser {
             stream.next(); // 消费 [
             // 解析方括号内的根次内容
             LaTeXNode degree = new LaTeXNode(LaTeXNode.Type.GROUP);
-            while (stream.hasNext() && stream.peek().type() != TokenType.RBRACKET) {
+            while (stream.hasNext()) {
+                stream.skipWhitespace();
+                if (!stream.hasNext() || stream.peek().type() == TokenType.RBRACKET) {
+                    break;
+                }
                 LaTeXNode child = parseAtom(stream);
                 if (child != null) degree.addChild(child);
             }
@@ -575,7 +587,11 @@ public class LaTeXParser {
         if (stream.hasNext() && stream.peek().type() == TokenType.LBRACKET) {
             stream.next();
             LaTeXNode quotient = new LaTeXNode(LaTeXNode.Type.GROUP);
-            while (stream.hasNext() && stream.peek().type() != TokenType.RBRACKET) {
+            while (stream.hasNext()) {
+                stream.skipWhitespace();
+                if (!stream.hasNext() || stream.peek().type() == TokenType.RBRACKET) {
+                    break;
+                }
                 LaTeXNode child = parseAtom(stream);
                 if (child != null) {
                     child = parseScripts(stream, child);
@@ -627,6 +643,10 @@ public class LaTeXParser {
         // 解析定界符之间的内容，直到遇到 \right 命令
         LaTeXNode content = new LaTeXNode(LaTeXNode.Type.GROUP);
         while (stream.hasNext()) {
+            stream.skipWhitespace();
+            if (!stream.hasNext()) {
+                break;
+            }
             Token t = stream.peek();
             if (t.type() == TokenType.COMMAND && t.value().equals("\\right")) {
                 stream.next(); // 消费 \right
@@ -672,8 +692,71 @@ public class LaTeXParser {
      */
     private LaTeXNode parseTextCommand(TokenStream stream, String cmd) {
         LaTeXNode node = new LaTeXNode(LaTeXNode.Type.TEXT, cmd);
-        node.addChild(parseRequiredGroup(stream));
+        node.addChild(parseTextRequiredGroup(stream));
         return node;
+    }
+
+    private LaTeXNode parseTextRequiredGroup(TokenStream stream) {
+        if (!stream.hasNext()) {
+            return new LaTeXNode(LaTeXNode.Type.GROUP);
+        }
+        Token token = stream.peek();
+        if (token.type() == TokenType.LBRACE) {
+            stream.next();
+            return parseTextGroup(stream);
+        }
+        if (token.type() == TokenType.CHAR || token.type() == TokenType.WHITESPACE) {
+            stream.next();
+            return new LaTeXNode(LaTeXNode.Type.CHAR, token.value());
+        }
+        return parseRequiredGroup(stream);
+    }
+
+    /**
+     * 文本命令组需要显式保留空格，因此不能复用默认的数学分组解析。
+     */
+    private LaTeXNode parseTextGroup(TokenStream stream) {
+        LaTeXNode group = new LaTeXNode(LaTeXNode.Type.GROUP);
+        while (stream.hasNext() && stream.peek().type() != TokenType.RBRACE) {
+            Token token = stream.next();
+            switch (token.type()) {
+                case CHAR, WHITESPACE -> appendLiteralText(group, token.value());
+                case COMMAND -> appendLiteralText(group, decodeTextCommandLiteral(token.value()));
+                case LBRACE -> appendTextGroupChildren(group, parseTextGroup(stream));
+                default -> {
+                }
+            }
+        }
+        if (stream.hasNext()) {
+            stream.next();
+        }
+        return group;
+    }
+
+    private void appendTextGroupChildren(LaTeXNode target, LaTeXNode source) {
+        if (target == null || source == null) {
+            return;
+        }
+        for (LaTeXNode child : source.getChildren()) {
+            target.addChild(child);
+        }
+    }
+
+    private void appendLiteralText(LaTeXNode group, String text) {
+        if (group == null || text == null || text.isEmpty()) {
+            return;
+        }
+        group.addChild(new LaTeXNode(LaTeXNode.Type.CHAR, text));
+    }
+
+    private String decodeTextCommandLiteral(String command) {
+        if (command == null || command.isEmpty()) {
+            return "";
+        }
+        if (command.length() == 2 && command.charAt(0) == '\\' && !Character.isLetter(command.charAt(1))) {
+            return command.substring(1);
+        }
+        return command;
     }
 
     /**
@@ -787,6 +870,7 @@ public class LaTeXParser {
      * @return 参数内容的 AST 节点（通常是 GROUP 或单个原子节点）
      */
     private LaTeXNode parseRequiredGroup(TokenStream stream) {
+        stream.skipWhitespace();
         if (!stream.hasNext()) {
             // Token 流已耗尽，返回空分组作为容错
             return new LaTeXNode(LaTeXNode.Type.GROUP);
@@ -818,7 +902,11 @@ public class LaTeXParser {
     private LaTeXNode parseGroup(TokenStream stream) {
         LaTeXNode group = new LaTeXNode(LaTeXNode.Type.GROUP);
         // 持续解析直到遇到右花括号 }
-        while (stream.hasNext() && stream.peek().type() != TokenType.RBRACE) {
+        while (stream.hasNext()) {
+            stream.skipWhitespace();
+            if (!stream.hasNext() || stream.peek().type() == TokenType.RBRACE) {
+                break;
+            }
             LaTeXNode child = parseAtom(stream);
             if (child != null) {
                 // 分组内的元素也可能有上下标
@@ -888,6 +976,12 @@ public class LaTeXParser {
          */
         Token next() {
             return tokens.get(pos++);
+        }
+
+        void skipWhitespace() {
+            while (hasNext() && peek().type() == TokenType.WHITESPACE) {
+                pos++;
+            }
         }
 
         boolean matchesEnvironmentEnd(String envName) {

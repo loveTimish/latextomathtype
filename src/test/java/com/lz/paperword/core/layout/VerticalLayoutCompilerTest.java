@@ -39,7 +39,7 @@ class VerticalLayoutCompilerTest {
     }
 
     @Test
-    void shouldCompileExplicitLongDivisionHeaderWithoutSynthesizingSteps() {
+    void shouldKeepExplicitLongDivisionHeaderWithoutSynthesizingSteps() {
         LaTeXNode ast = parser.parseLaTeX("\\longdiv[65]{13}{845}");
         VerticalLayoutSpec spec = compiler.compile(ast);
 
@@ -48,7 +48,23 @@ class VerticalLayoutCompilerTest {
         assertEquals("13", spec.longDivisionHeader().divisor());
         assertEquals("65", spec.longDivisionHeader().quotient());
         assertEquals("845", spec.longDivisionHeader().dividend());
-        assertTrue(spec.longDivisionSteps().isEmpty(), "bare longdiv 头部不应再自动推导步骤区");
+        assertTrue(spec.longDivisionSteps().isEmpty(), "长除法步骤区应改由 LLM 原始结果提供，不再本地补算");
+    }
+
+    @Test
+    void shouldComputeSemanticLongDivisionLinePlacementFromHeader() {
+        VerticalLayoutSpec.LongDivisionHeader header =
+            new VerticalLayoutSpec.LongDivisionHeader("7", "14300", "100100");
+
+        java.util.List<VerticalLayoutSpec.LongDivisionPlacedLine> placedLines =
+            compiler.computeExpectedLongDivisionLines(header);
+
+        assertEquals(8, placedLines.size(), "整数长除法应能从头部推导完整的列位序列");
+        assertEquals(1, placedLines.get(0).startColumn(), "首步单数字乘积应在当前被除数块内右对齐");
+        assertEquals(1, placedLines.get(0).underlineStartColumn(), "首步下划线应与单数字乘积的右对齐起点一致");
+        assertEquals(1, placedLines.get(0).underlineEndColumn(), "首步下划线应覆盖当前被除数块宽度");
+        assertEquals(1, placedLines.get(1).startColumn(), "下移后的 30 应从上一轮余数的尾列继续展开");
+        assertEquals(5, placedLines.get(7).startColumn(), "最终余数 0 应落在最后一位被下移数字所在列");
     }
 
     @Test
@@ -68,13 +84,53 @@ class VerticalLayoutCompilerTest {
     }
 
     @Test
-    void shouldNotCompileThreeStepLongDivisionFromHeaderAlone() {
+    void shouldKeepBareLongDivisionHeaderWithoutStructuredSteps() {
         LaTeXNode ast = parser.parseLaTeX("\\longdiv[246]{5}{1234}");
         VerticalLayoutSpec spec = compiler.compile(ast);
 
         assertNotNull(spec);
-        assertFalse(spec.hasStructuredLongDivisionSteps(), "不能只凭 longdiv 头部自动补三步长除法");
-        assertTrue(spec.longDivisionSteps().isEmpty(), "步骤区应由原图显式提供，而不是代码自动生成");
+        assertEquals("5", spec.longDivisionHeader().divisor());
+        assertEquals("246", spec.longDivisionHeader().quotient());
+        assertEquals("1234", spec.longDivisionHeader().dividend());
+        assertFalse(spec.hasStructuredLongDivisionSteps(), "bare longdiv 不应再触发本地步骤推导");
+    }
+
+    @Test
+    void shouldKeepBareLongDivisionHeaderForIntegerDivision() {
+        LaTeXNode ast = parser.parseLaTeX("\\longdiv{7}{100100}");
+        VerticalLayoutSpec spec = compiler.compile(ast);
+
+        assertNotNull(spec);
+        assertEquals("7", spec.longDivisionHeader().divisor());
+        assertEquals("", spec.longDivisionHeader().quotient());
+        assertEquals("100100", spec.longDivisionHeader().dividend());
+        assertTrue(spec.longDivisionSteps().isEmpty(), "整数除法不应仅凭头部自动补出步骤");
+    }
+
+    @Test
+    void shouldKeepRawDecimalLongDivisionHeader() {
+        LaTeXNode ast = parser.parseLaTeX("\\longdiv{2.5}{12.5}");
+        VerticalLayoutSpec spec = compiler.compile(ast);
+
+        assertNotNull(spec);
+        assertTrue(spec.isLongDivision());
+        assertEquals("2.5", spec.longDivisionHeader().divisor(), "小数除法头部应保留 LLM 返回的原始除数");
+        assertEquals("12.5", spec.longDivisionHeader().dividend(), "小数除法头部应保留原始被除数");
+        assertEquals("", spec.longDivisionHeader().quotient(), "未显式给出商时不应本地补出");
+        assertTrue(spec.longDivisionSteps().isEmpty(), "小数长除法步骤区也不应本地补算");
+    }
+
+    @Test
+    void shouldKeepExplicitDecimalQuotientFromLlmHeader() {
+        LaTeXNode ast = parser.parseLaTeX("\\longdiv[0.44]{5}{2.2}");
+        VerticalLayoutSpec spec = compiler.compile(ast);
+
+        assertNotNull(spec);
+        assertTrue(spec.isLongDivision());
+        assertEquals("5", spec.longDivisionHeader().divisor());
+        assertEquals("2.2", spec.longDivisionHeader().dividend());
+        assertEquals("0.44", spec.longDivisionHeader().quotient(), "带小数商时应保留 LLM 返回的显式商值");
+        assertTrue(spec.longDivisionSteps().isEmpty(), "即便商为小数，步骤位置仍应由 LLM 提供");
     }
 
     @Test
