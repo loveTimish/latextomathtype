@@ -1,0 +1,88 @@
+MathML coverage by MathType - Wiris
+Documentation / MathType
+Demos
+Visit our website
+Downloads
+Contact us
+feedbacks#update" data-controller="glossary" data-glossary-url-value="/glossary_terms.json">
+MathType
+WirisQuizzes
+LearningLemur
+CalcMe
+MathPlayer
+Store FAQ
+VPAT for the electronic documentation
+MathFlow
+BF FAQ
+Miscellaneous
+Wiris Integrations
+Home
+MathType
+MathType Integrations
+MathType web interface features
+MathType web interface features
+MathML coverage by MathType
+Reading time: 3min
+<math> Attribute: dir = “rtl” Attribute: display = “inline” Attribute: indentalign="auto", “right” Attribute: style="font-family:'Courier New'", "font-family:'Times New Roman'", "font-family:Tahoma", "font-family:Verdana", "font-size:12px", "font-size:14px", "font-size:16px", "font-size:17px", "font-size:18px", "font-size:20px", "font-size:22px", "font-size:24px", "font-size:26px", "font-size:28px", "font-size:29px", "font-size:30px", "font-size:36px", "font-size:48px", "font-size:72px", "fontSize:24px", "fontSize:72px", “max-width:100px” Attribute: wrs:positionable = “false” Attribute: xmlns = “http://www.w3.org/1998/Math/MathML” Presentation Markup <maction>
+Attribute: actiontype = “argument”
+<matrix>
+<matrixrow> <menclose> Attribute: notation = "", "actuarial", "bottom", "box", "box circle unknown", "circle", "downdiagonalstrike", "downdiagonalstrike updiagonalstrike", "horizontalstrike", "left", "longdiv", "madruwb", "northeastarrow", "phasorangle", "radical", "right", "roundedbox", "top", "unknown1 unknown2 unknown3", "updiagonalstrike", "verticalstrike", “verticalstrike horizontalstrike” <merror> <mfenced> Attribute: close = "", ")", ">", "[", "]", "|", "||", "}", "⌉", "⌋", “⟧” Attribute: mathbackground = “#80FF80” Attribute: mathcolor = “#FF0000” Attribute: open = "", "(", "<", "[", "]", "{", "|", "||", "⌈", "⌊", “⟦”
+Attribute: separators = "", "|"
+<mfrac>
+Attribute: bevelled = “true” Attribute: id = “fraction” Attribute: linethickness = “0” Attribute: mathbackground = “#80FF80” <mi> Attribute: mathbackground = "#00FF00", "#80FF80", “#FF0000” Attribute: mathcolor = "#0000FF", "#191919", “#FF0000” Attribute: mathsize = "30pt", "40px", “72px” Attribute: mathvariant = "bold", "bold-double-struck", "bold-fraktur", "bold-italic", "bold-italic-double-struck", "bold-italic-fraktur", "bold-italic-script", "bold-script", "double-struck", "fraktur", "italic", "italic-double-struck", "italic-fraktur", "italic-script", "normal", “script” Attribute: style="font-family:'Courier New'", "font-size:11px", "font-size:20px", "font-size:30pt", "font-size:40px", “text-align:right” <mlongdiv> Attribute: charalign="center" Attribute: charspacing = “0px” Attribute: longdivstyle="shortstackedrightright" Attribute: stackalign="left" <mmultiscripts> <mn> Attribute: mathbackground = "#00AAFF", "#00FFFF", "#AABB00", "#FF0000", "#FFFF00", "cadetblue", "chocolate", "lightgreen", "orange", "purple", "rebeccapurple", "sienna", "steelblue", "yellow", “yellowgreen” Attribute: mathcolor = "#007F00", "#FAFAFA", “#FF0000” Attribute: mathsize = "24px", “72px” Attribute: mathvariant = "bold", "bold-italic", "italic", “normal” <mo> Attribute: id = “division” Attribute: largeop = “true” Attribute: lspace = "mediummathspace", "veryverythickmathspace", “veryverythinmathspace” Attribute: mathbackground = "#00FF00", “#FF0000” Attribute: mathcolor = "#0000FF", "#007F00", “#FF0000” Attribute: mathvariant = "fraktur", “italic” Attribute: rspace = "mediummathspace", "veryverythickmathspace", “veryverythinmathspace” Attribute: stretchy = "false", “true” Attribute: style="font-family:'Courier New'", "font-family:'Times New Roman'", "font-family:Arial", "font-family:Tahoma", "font-family:Verdana", “font-family:stix” <mover> Attribute: wrs:positionable = “false” <mphantom> <mprescripts> <mroot> <mrow> Attribute: id = “division” Attribute: style="text-align:left" Attribute: wrs:positionable = "false", “true” <mscarries> Attribute: location = "e", "ne", "nw", "s", "se", "sw", “w” <msgroup> <msline> Attribute: length = "1", "2", "3", “5” Attribute: position = "1", "2", “3” <mspace> Attribute: linebreak = “newline” Attribute: width = "-0.2em", "-0.3em", "0.4em", "0.5ex", "2em", “3px” <msqrt> Attribute: mathbackground = “#FFFF00” <msrow> <mstack> Attribute: charalign="center" Attribute: charspacing = "0px", “30px” Attribute: stackalign="left", “right” <mstyle> Attribute: displaystyle="false", “true” Attribute: indentalign="auto", "center", “right” Attribute: mathbackground = “#88CC88” Attribute: mathcolor = "#ff0000", “#ff00ff” Attribute: mathsize = "20px", "24px", "28px", "36px", “72px” Attribute: mathvariant = “bold” <msub> <msubsup> <msup> <mtable> Attribute: align="SDKline -1", "SDKline 1", "SDKline 2", "bottom", “top” Attribute: columnalign="left", "left right", "right", "right center left", “right left” Attribute: columnlines = "none solid solid none solid", “solid solid none” Attribute: columnspacing = " 24px 6px 36px ", "0px", "1.4ex", "12px", "24px", "24px 6px 36px", “2px” Attribute: equalcolumns = “true” Attribute: equalrows = “true” Attribute: frame = “solid” Attribute: framespacing = "20px", “20px 10px” Attribute: rowalign="top bottom center" Attribute: rowlines = "none solid solid none", “solid none” Attribute: rowspacing = "0", "0.0ex", “1px” <mtd> <mtext> Attribute: mathcolor = “#ff0000” Attribute: mathvariant = "bold", "bold-italic", “italic” <mtr> <munder> Attribute: wrs:positionable = “false” <munderover> Content Markup <abs> <and> <apply> Attribute: xref = "division", “fraction” <arccos> <arccosh> <arccot> <arccoth> <arccsc> <arccsch> <arcsec> <arcsech> <arcsin> <arcsinh> <arctan> <arctanh> <bind> <bvar> <ci> <cn> Attribute: type = "complex-cartesian", "complex-polar", "e-notation", “rational” <condition> <conjugate> <cos> <cosh> <cot> <coth> <csc> <csch> <degree> <diff> <divide> <domainofapplication> <emptyset> <eq> <equivalent> <exists> <exponentiale> <factorial> <factorof> <floor> <forall> <gcd> <gt> <imaginaryi> <implies> <in> <infinity> <int> <intersect> <interval> Attribute: closure = "closed", "closed-open", "open", “open-closed” <inverse> <leq> <limit> <ln> <log> <logSDK> <lowlimit> <lt> <minus> <naturalnumbers> <neq> <none> <not> <or> <partialdiff> <pi> <plus> <power> <product> <prsubset> <reln> <root> <sec> <sech> <selector> <sep> <set> <setdiff> <sin> <sinh> <sum> <tan> <tanh> <tendsto> <times> <transpose> <union> <uplimit> <vector> Mixed Markup <semantics>
+Was this article helpful?
+Yes
+No
+feedbacks#showFeedbackForm" data-helpjuice-element="Write Feedback" data-helpjuice-attributes="visibility" data-helpjuice-related-elements="Write Feedback Icon,Write Feedback Text"> Give feedback about this article
+Related Articles
+MathType for WordPress
+Handwritten input
+MathML coverage by MathType
+Presentation Markup
+Content Markup
+Mixed Markup
+Making people’s STEM work more meaningful
+MathType
+MathType for Office Tools
+MathType for Mac
+MathType for Microsoft
+365
+MathType for Google
+Workspace
+MathType for LMS
+MathType for XML Editors
+Arabic notation
+Our products accessibility
+MathType is online
+WirisQuizzes
+Learning Lemur
+Solutions for Education
+Blackboard Learn
+Brightspace by D2L
+Canvas
+Google Classroom
+Moodle
+Schoology
+Solutions for Publishing Houses
+Solutions for Technical Writers
+Solutions for Chemistry
+Integrations
+HTML Editors
+MathType in WordPress
+Pricing
+Company
+Careers
+Blog
+Contact Us
+Buy Now
+Plugin Downloads
+© Wiris 2025
+Cookie Settings
+Cookie Policy
+Terms of Use
+Privacy Policy / GDPR
+Student Data Privacy
+Compliance
+Powered by Helpjuice
+Close
+Expand

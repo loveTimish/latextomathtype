@@ -3,6 +3,7 @@ package com.lz.paperword.core.docx;
 import com.lz.paperword.model.PaperExportRequest;
 import com.lz.paperword.model.QuestionDTO;
 import com.lz.paperword.model.SectionDTO;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -23,7 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FractionReferenceComparisonTest {
 
-    private static final Path OUTPUT_DOCX = Path.of("d:/pdf2word/data/分数-对照输出.docx");
+    private static final Path OUTPUT_DIR = Path.of("target/generated-docs/reference-comparison");
+    private static final Path OUTPUT_DOCX = OUTPUT_DIR.resolve("fraction-comparison.docx");
     private static final Path REFERENCE_DOCX = Path.of("d:/pdf2word/data/分数.docx");
     private static final String FRACTION_LATEX = "\\left(\\frac{1}{2}+\\frac{2}{3}\\right) \\div \\left(\\frac{5}{6}\\times\\frac{3}{5}\\right)";
 
@@ -32,9 +34,10 @@ class FractionReferenceComparisonTest {
     @Test
     void shouldGenerateComparisonDocxNearReference() throws IOException {
         byte[] generated = buildFractionDocx();
+        Files.createDirectories(OUTPUT_DIR);
         Files.write(OUTPUT_DOCX, generated);
 
-        assertTrue(Files.exists(REFERENCE_DOCX), "reference docx should exist");
+        Assumptions.assumeTrue(Files.exists(REFERENCE_DOCX), "reference docx is only available in the Windows comparison environment");
 
         Metrics reference = extractMetrics(Files.readAllBytes(REFERENCE_DOCX));
         Metrics current = extractMetrics(generated);

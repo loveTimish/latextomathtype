@@ -1,0 +1,11 @@
+Web-fetch capture source: https://docs.wiris.com/sitemap.xml
+
+Purpose: discovery index for future official reference pulls.
+
+Important currently relevant entries confirmed present in sitemap:
+- `/en_US/mathtype-sdk/how-mtef-is-stored-in-files-and-objects`
+- `/en_US/mathtype-sdk/mathtype-mtef-v5-mathtype-40-and-later`
+- `/en_US/mathtype-web-interface-features/latex-support`
+- `/en_US/mathtype-web-interface-features/mathml-coverage-by-mathtype`
+- `/en_US/mathtype-web-interface-features/configuration-table`
+- multiple additional MathType SDK pages for encodings, baseline extraction, OLE subsystem access, and conversion.

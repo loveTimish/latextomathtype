@@ -1,0 +1,18 @@
+Web-fetch capture source: http://www.wiris.net/demo/editor/docs/latex-coverage/
+
+This page is large and machine-hostile, but the extracted command stream is still useful as a regression corpus source.
+
+Observed supported examples/commands in the captured excerpt include at least:
+- greek letters and symbol families
+- many arrows / relations / set symbols
+- `\begin{array}` variants
+- `\begin{pmatrix}` / `\begin{vmatrix}`
+- `\left. ... \right.` asymmetric fences
+- `\sum\nolimits_{...}`
+- piecewise/cases-like array forms with braces
+- `\boxed{...}`
+- `\binom`, `\atop`, `\cfrac`
+- `\underbrace{...}_{...}`
+- colored/style examples
+
+Use this page as a discovery source for official-ish supported input shapes, but not as a clean parser target by itself.
