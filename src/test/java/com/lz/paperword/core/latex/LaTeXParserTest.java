@@ -238,6 +238,59 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseMatrixEnvironmentPromotesToArray() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{matrix}1&2\\\\3&4\\end{matrix}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("matrix", array.getMetadata("environment"));
+        assertEquals("cc", array.getMetadata("columnSpec"));
+        assertEquals(2, array.getChildren().size());
+    }
+
+    @Test
+    void testParsePmatrixEnvironmentWrapsArrayWithFence() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode fence = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, fence.getType());
+        assertEquals("\\left(", fence.getValue());
+        assertEquals(1, fence.getChildren().size());
+        assertEquals(LaTeXNode.Type.ARRAY, fence.getChildren().get(0).getType());
+        assertEquals("pmatrix", fence.getChildren().get(0).getMetadata("environment"));
+    }
+
+    @Test
+    void testParseAlignedEnvironmentPromotesToImplicitArray() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{aligned}a&=b\\\\c&=d\\end{aligned}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("aligned", array.getMetadata("environment"));
+        assertEquals("rl", array.getMetadata("columnSpec"));
+        assertEquals(2, array.getChildren().size());
+    }
+
+    @Test
+    void testParseCasesEnvironmentPromotesToImplicitArray() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{cases}x&1\\\\y&2\\end{cases}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("cases", array.getMetadata("environment"));
+        assertEquals("ll", array.getMetadata("columnSpec"));
+        assertEquals(2, array.getChildren().size());
+    }
+
+    @Test
     void testParseMultiplicationArrayMarksExplicitEmptyCells() {
         LaTeXNode ast = parser.parseLaTeX(
             "\\begin{array}{rrrrrr}{} & {} & {1} & {2} & {3} & {} \\\\ {\\times} & {} & {} & {4} & {5} & {}\\end{array}"

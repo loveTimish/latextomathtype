@@ -140,6 +140,24 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteMatrixEnvironmentAsMatrixRecord() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{matrix}1&2\\\\3&4\\end{matrix}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "matrix environment should emit MATRIX record");
+    }
+
+    @Test
+    void testWriteAlignedEnvironmentAsMatrixRecord() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{aligned}a&=b\\\\c&=d\\end{aligned}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "aligned environment should emit MATRIX record");
+    }
+
+    @Test
     void testWriteArrayAdditionAsMatrix() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{array}{rrrr} & 1 & 2 & 3 \\\\ + & 4 & 5 & 6 \\\\ \\hline & 5 & 7 & 9\\end{array}");
         byte[] mtef = writer.write(ast);

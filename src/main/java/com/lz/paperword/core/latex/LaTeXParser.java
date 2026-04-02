@@ -338,23 +338,50 @@ public class LaTeXParser {
     private LaTeXNode parseBeginEnvironment(TokenStream stream) {
         String envName = extractPlainText(parseRequiredGroup(stream));
         if ("array".equals(envName)) {
-            return parseArrayEnvironment(stream, "array");
+            return parseArrayEnvironment(stream, envName, extractPlainText(parseRequiredGroup(stream)));
         }
         if ("longdivision".equals(envName)) {
             // `longdivision` 环境暂按 array 兼容处理：
             // 目前已确认的 MTEF `tmLDIV` 只支持商槽和被除数槽，
             // 不能安全承载完整步骤矩阵；为保证 MathType 可识别，这里不将环境直接提升为自定义模板节点。
-            return parseArrayEnvironment(stream, "longdivision");
+            return parseArrayEnvironment(stream, envName, extractPlainText(parseRequiredGroup(stream)));
+        }
+        if (isMatrixLikeEnvironment(envName)) {
+            return wrapEnvironmentFence(envName, parseArrayEnvironment(stream, envName, null));
+        }
+        if (isAlignedLikeEnvironment(envName) || "cases".equals(envName)) {
+            return parseArrayEnvironment(stream, envName, null);
         }
         return new LaTeXNode(LaTeXNode.Type.COMMAND, "\\begin{" + envName + "}");
     }
 
-    private LaTeXNode parseArrayEnvironment(TokenStream stream, String envName) {
+    private boolean isMatrixLikeEnvironment(String envName) {
+        return Set.of("matrix", "pmatrix", "bmatrix", "Bmatrix", "vmatrix", "Vmatrix").contains(envName);
+    }
+
+    private boolean isAlignedLikeEnvironment(String envName) {
+        return Set.of("aligned", "align", "split").contains(envName);
+    }
+
+    private LaTeXNode wrapEnvironmentFence(String envName, LaTeXNode content) {
+        String command = switch (envName) {
+            case "pmatrix" -> "\\left(";
+            case "bmatrix" -> "\\left[";
+            case "Bmatrix" -> "\\left\\{";
+            case "vmatrix", "Vmatrix" -> "\\left|";
+            default -> null;
+        };
+        if (command == null) {
+            return content;
+        }
+        LaTeXNode fenced = new LaTeXNode(LaTeXNode.Type.COMMAND, command);
+        fenced.addChild(content);
+        return fenced;
+    }
+
+    private LaTeXNode parseArrayEnvironment(TokenStream stream, String envName, String explicitColumnSpec) {
         LaTeXNode arrayNode = new LaTeXNode(LaTeXNode.Type.ARRAY, "\\" + envName);
-        String columnSpec = extractPlainText(parseRequiredGroup(stream));
-        arrayNode.setMetadata("columnSpec", columnSpec);
-        arrayNode.setMetadata("columnCount", String.valueOf(countArrayColumns(columnSpec)));
-        arrayNode.setMetadata("columnLines", encodeColumnPartitionLines(columnSpec));
+        arrayNode.setMetadata("environment", envName);
 
         List<Integer> rowLines = new ArrayList<>();
         rowLines.add(0);
@@ -408,12 +435,51 @@ public class LaTeXParser {
             }
         }
 
+        String columnSpec = explicitColumnSpec;
+        if (columnSpec == null || columnSpec.isBlank()) {
+            int inferredColumns = resolveMaxColumns(arrayNode);
+            columnSpec = defaultColumnSpecForEnvironment(envName, inferredColumns);
+        }
+        arrayNode.setMetadata("columnSpec", columnSpec);
+        arrayNode.setMetadata("columnCount", String.valueOf(countArrayColumns(columnSpec)));
+        arrayNode.setMetadata("columnLines", encodeColumnPartitionLines(columnSpec));
+
         if (!arrayNode.getChildren().isEmpty() || seenContent || !currentCell.getChildren().isEmpty()) {
             arrayNode.setMetadata("rowLines", encodeRowPartitionLines(rowLines, arrayNode.getChildren().size()));
         } else {
             arrayNode.setMetadata("rowLines", "0");
         }
         return arrayNode;
+    }
+
+    private int resolveMaxColumns(LaTeXNode arrayNode) {
+        int maxColumns = 0;
+        for (LaTeXNode row : arrayNode.getChildren()) {
+            maxColumns = Math.max(maxColumns, row.getChildren().size());
+        }
+        return Math.max(maxColumns, 1);
+    }
+
+    private String defaultColumnSpecForEnvironment(String envName, int columns) {
+        int safeColumns = Math.max(columns, 1);
+        if (isMatrixLikeEnvironment(envName)) {
+            return "c".repeat(safeColumns);
+        }
+        if (isAlignedLikeEnvironment(envName)) {
+            StringBuilder spec = new StringBuilder(safeColumns);
+            for (int i = 0; i < safeColumns; i++) {
+                spec.append(i == 0 ? 'r' : 'l');
+            }
+            return spec.toString();
+        }
+        if ("cases".equals(envName)) {
+            StringBuilder spec = new StringBuilder(safeColumns);
+            for (int i = 0; i < safeColumns; i++) {
+                spec.append('l');
+            }
+            return spec.toString();
+        }
+        return "c".repeat(safeColumns);
     }
 
     private void finalizeArrayCell(LaTeXNode row, LaTeXNode cell) {
