@@ -70,7 +70,7 @@ Acceptance:
 - unsupported nodes are explicit
 
 Status:
-- not started
+- in progress (AST→MathIR converter, IR dump path, and MTEF writer adapter landed for the stable core subset)
 
 ### Phase 4 — MTEF template family completion
 Goal:

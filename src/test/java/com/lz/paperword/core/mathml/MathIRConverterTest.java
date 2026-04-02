@@ -1,0 +1,72 @@
+package com.lz.paperword.core.mathml;
+
+import com.lz.paperword.core.latex.LaTeXParser;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class MathIRConverterTest {
+
+    private final LaTeXParser parser = new LaTeXParser();
+
+    @Test
+    void testParseMathIrNormalizesRootsScriptsAndFractions() {
+        MathIRNode ir = parser.parseMathIR("\\frac{1}{\\sqrt[3]{x_i}}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(1, ir.getChildren().size());
+
+        MathIRNode fraction = ir.child(0);
+        assertEquals(MathIRNode.Type.FRACTION, fraction.getType());
+        assertEquals(MathIRNode.Type.SEQUENCE, fraction.child(0).getType());
+        assertEquals(MathIRNode.Type.NUMBER, fraction.child(0).child(0).getType());
+        assertEquals(MathIRNode.Type.SEQUENCE, fraction.child(1).getType());
+        assertEquals(MathIRNode.Type.ROOT, fraction.child(1).child(0).getType());
+        assertEquals(MathIRNode.Type.SEQUENCE, fraction.child(1).child(0).child(1).getType());
+        assertEquals(MathIRNode.Type.SUB, fraction.child(1).child(0).child(1).child(0).getType());
+    }
+
+    @Test
+    void testParseMathIrNormalizesBigOperatorLimits() {
+        MathIRNode ir = parser.parseMathIR("\\sum_{i=1}^{n} a_i");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.UNDEROVER, ir.child(0).getType());
+        assertEquals(MathIRNode.Type.OPERATOR, ir.child(0).child(0).getType());
+        assertEquals("big-operator", ir.child(0).child(0).getMetadata("role"));
+        assertEquals("underover", ir.child(0).child(0).getMetadata("limitPlacement"));
+        assertEquals(MathIRNode.Type.SUB, ir.child(1).getType());
+    }
+
+    @Test
+    void testParseMathIrNormalizesFencedMatrixEnvironment() {
+        MathIRNode ir = parser.parseMathIR("\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.FENCE, ir.child(0).getType());
+        assertEquals("(", ir.child(0).getMetadata("openDelimiter"));
+        assertEquals(")", ir.child(0).getMetadata("closeDelimiter"));
+        assertEquals(MathIRNode.Type.TABLE, ir.child(0).child(0).getType());
+        assertEquals("pmatrix", ir.child(0).child(0).getMetadata("environment"));
+    }
+
+    @Test
+    void testParseMathIrKeepsCasesStructureExplicit() {
+        MathIRNode ir = parser.parseMathIR("\\begin{cases}x&1\\\\y&2\\end{cases}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.TABLE, ir.child(0).getType());
+        assertEquals("cases", ir.child(0).getMetadata("environment"));
+        assertEquals("{", ir.child(0).getMetadata("openDelimiter"));
+        assertEquals(".", ir.child(0).getMetadata("closeDelimiter"));
+        assertEquals(MathIRNode.Type.TABLE_ROW, ir.child(0).child(0).getType());
+    }
+
+    @Test
+    void testDumpMathIrMarksUnsupportedCommandsExplicitly() {
+        String dump = parser.dumpMathIR("\\foo{1}");
+
+        assertTrue(dump.contains("UNSUPPORTED(\\foo)"));
+        assertTrue(dump.contains("latex=\\foo"));
+    }
+}

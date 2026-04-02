@@ -259,9 +259,24 @@ class LaTeXParserTest {
         LaTeXNode fence = ast.getChildren().get(0);
         assertEquals(LaTeXNode.Type.COMMAND, fence.getType());
         assertEquals("\\left(", fence.getValue());
+        assertEquals("(", fence.getMetadata("leftDelimiter"));
+        assertEquals(")", fence.getMetadata("rightDelimiter"));
         assertEquals(1, fence.getChildren().size());
         assertEquals(LaTeXNode.Type.ARRAY, fence.getChildren().get(0).getType());
         assertEquals("pmatrix", fence.getChildren().get(0).getMetadata("environment"));
+    }
+
+    @Test
+    void testParseLeftRightPreservesBothDelimiters() {
+        LaTeXNode ast = parser.parseLaTeX("\\left\\{x+1\\right]");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode fence = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, fence.getType());
+        assertEquals("\\left{", fence.getValue());
+        assertEquals("{", fence.getMetadata("leftDelimiter"));
+        assertEquals("]", fence.getMetadata("rightDelimiter"));
     }
 
     @Test

@@ -4,6 +4,9 @@ import com.lz.paperword.core.latex.LaTeXNode;
 import com.lz.paperword.core.layout.VerticalLayoutCompiler;
 import com.lz.paperword.core.layout.VerticalLayoutNodeFactory;
 import com.lz.paperword.core.layout.VerticalLayoutSpec;
+import com.lz.paperword.core.mathml.MathIRConverter;
+import com.lz.paperword.core.mathml.MathIRLowerer;
+import com.lz.paperword.core.mathml.MathIRNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -87,6 +90,8 @@ import java.util.Set;
 public class MtefWriter {
 
     private static final Logger log = LoggerFactory.getLogger(MtefWriter.class);
+    private final MathIRConverter mathIRConverter = new MathIRConverter();
+    private final MathIRLowerer mathIRLowerer = new MathIRLowerer();
     private final VerticalLayoutCompiler verticalLayoutCompiler = new VerticalLayoutCompiler();
     private final VerticalLayoutNodeFactory verticalLayoutNodeFactory = new VerticalLayoutNodeFactory();
     private final MtefPileRulerWriter pileRulerWriter = new MtefPileRulerWriter();
@@ -162,6 +167,18 @@ public class MtefWriter {
      * Returns the complete MTEF byte array including header.</p>
      */
     public byte[] write(LaTeXNode root) {
+        return write(mathIRConverter.convert(root));
+    }
+
+    /**
+     * Phase 3 入口：先面向 MathML-aligned IR，再落回现有的稳定 AST→MTEF 发射逻辑。
+     */
+    public byte[] write(MathIRNode root) {
+        LaTeXNode normalizedAst = mathIRLowerer.lower(root);
+        return writeNormalizedAst(normalizedAst);
+    }
+
+    private byte[] writeNormalizedAst(LaTeXNode root) {
         try {
             // 使用模板前缀模式（从已知正确的 MathType OLE 中提取前缀）
             if (TEMPLATE_MTEF_PREFIX != null) {

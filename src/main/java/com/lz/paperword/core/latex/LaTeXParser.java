@@ -1,5 +1,7 @@
 package com.lz.paperword.core.latex;
 
+import com.lz.paperword.core.mathml.MathIRConverter;
+import com.lz.paperword.core.mathml.MathIRNode;
 import com.lz.paperword.core.latex.LaTeXTokenizer.Token;
 import com.lz.paperword.core.latex.LaTeXTokenizer.TokenType;
 import org.jsoup.Jsoup;
@@ -99,6 +101,8 @@ public class LaTeXParser {
 
     /** 词法分析器实例，用于将 LaTeX 字符串拆分为 Token 序列 */
     private final LaTeXTokenizer tokenizer = new LaTeXTokenizer();
+    /** Phase 3 新增：将现有 AST 归一化为 MathML-aligned IR。 */
+    private final MathIRConverter mathIRConverter = new MathIRConverter();
 
     /**
      * 解析 HTML 内容，提取其中的纯文本和 LaTeX 公式段。
@@ -224,6 +228,20 @@ public class LaTeXParser {
         LaTeXNode root = new LaTeXNode(LaTeXNode.Type.ROOT);
         parseExpression(stream, root);
         return root;
+    }
+
+    /**
+     * 将 LaTeX 直接解析为 MathML-aligned IR，供 Phase 3 之后的语义层和诊断使用。
+     */
+    public MathIRNode parseMathIR(String latex) {
+        return mathIRConverter.convert(parseLaTeX(latex));
+    }
+
+    /**
+     * 生成可读的 IR 树 dump，便于 Linux 上做探针和测试断言。
+     */
+    public String dumpMathIR(String latex) {
+        return mathIRConverter.dump(parseMathIR(latex));
     }
 
     /**
@@ -375,6 +393,14 @@ public class LaTeXParser {
             return content;
         }
         LaTeXNode fenced = new LaTeXNode(LaTeXNode.Type.COMMAND, command);
+        fenced.setMetadata("leftDelimiter", normalizeDelimiter(command.substring("\\left".length())));
+        fenced.setMetadata("rightDelimiter", switch (envName) {
+            case "pmatrix" -> ")";
+            case "bmatrix" -> "]";
+            case "Bmatrix" -> "}";
+            case "vmatrix", "Vmatrix" -> "|";
+            default -> null;
+        });
         fenced.addChild(content);
         return fenced;
     }
@@ -700,11 +726,10 @@ public class LaTeXParser {
         String leftDelim = "(";
         if (stream.hasNext()) {
             Token delim = stream.next();
-            leftDelim = delim.value();
-            // 将转义的花括号或命令形式统一为标准形式
-            if (leftDelim.equals("\\{") || leftDelim.equals("\\lbrace")) leftDelim = "{";
+            leftDelim = normalizeDelimiter(delim.value());
         }
         node.setValue("\\left" + leftDelim);
+        node.setMetadata("leftDelimiter", leftDelim);
 
         // 解析定界符之间的内容，直到遇到 \right 命令
         LaTeXNode content = new LaTeXNode(LaTeXNode.Type.GROUP);
@@ -716,7 +741,9 @@ public class LaTeXParser {
             Token t = stream.peek();
             if (t.type() == TokenType.COMMAND && t.value().equals("\\right")) {
                 stream.next(); // 消费 \right
-                if (stream.hasNext()) stream.next(); // 消费右定界符字符
+                if (stream.hasNext()) {
+                    node.setMetadata("rightDelimiter", normalizeDelimiter(stream.next().value()));
+                }
                 break;
             }
             LaTeXNode child = parseAtom(stream);
@@ -728,6 +755,18 @@ public class LaTeXParser {
         }
         node.addChild(content);
         return node;
+    }
+
+    private String normalizeDelimiter(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "(";
+        }
+        return switch (raw) {
+            case "\\{", "\\lbrace" -> "{";
+            case "\\}", "\\rbrace" -> "}";
+            case "\\lvert", "\\rvert" -> "|";
+            default -> raw;
+        };
     }
 
     /**

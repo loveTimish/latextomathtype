@@ -158,6 +158,23 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteMathIrDirectlyForStableCoreSubset() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\begin{pmatrix}\\frac{1}{x}&\\sum_{i=1}^{n}a_i\\\\\\sqrt[3]{y}&z_0\\end{pmatrix}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "IR path should still emit MATRIX record for pmatrix");
+        assertTrue(containsRecord(mtef, MtefRecord.TMPL), "IR path should still emit TMPL records for fraction/root/scripts");
+    }
+
+    @Test
+    void testWriteUnsupportedMathIrFailsExplicitly() {
+        UnsupportedOperationException ex = assertThrows(UnsupportedOperationException.class,
+            () -> writer.write(parser.parseMathIR("\\foo{1}")));
+
+        assertTrue(ex.getMessage().contains("Unsupported MathIR node"));
+    }
+
+    @Test
     void testWriteArrayAdditionAsMatrix() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{array}{rrrr} & 1 & 2 & 3 \\\\ + & 4 & 5 & 6 \\\\ \\hline & 5 & 7 & 9\\end{array}");
         byte[] mtef = writer.write(ast);
