@@ -386,7 +386,8 @@ public class LaTeXParser {
             case "pmatrix" -> "\\left(";
             case "bmatrix" -> "\\left[";
             case "Bmatrix" -> "\\left\\{";
-            case "vmatrix", "Vmatrix" -> "\\left|";
+            case "vmatrix" -> "\\left|";
+            case "Vmatrix" -> "\\left\\lVert";
             default -> null;
         };
         if (command == null) {
@@ -398,7 +399,8 @@ public class LaTeXParser {
             case "pmatrix" -> ")";
             case "bmatrix" -> "]";
             case "Bmatrix" -> "}";
-            case "vmatrix", "Vmatrix" -> "|";
+            case "vmatrix" -> "|";
+            case "Vmatrix" -> "||";
             default -> null;
         });
         fenced.addChild(content);
@@ -765,6 +767,11 @@ public class LaTeXParser {
             case "\\{", "\\lbrace" -> "{";
             case "\\}", "\\rbrace" -> "}";
             case "\\lvert", "\\rvert" -> "|";
+            case "\\lVert", "\\rVert", "\\Vert" -> "||";
+            case "\\lfloor" -> "⌊";
+            case "\\rfloor" -> "⌋";
+            case "\\lceil" -> "⌈";
+            case "\\rceil" -> "⌉";
             default -> raw;
         };
     }

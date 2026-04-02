@@ -270,8 +270,7 @@ public class MtefTemplateBuilder {
      * @throws IOException 写入异常
      */
     public static void writeParenHeader(ByteArrayOutputStream out) throws IOException {
-        writeTemplateHeader(out, MtefRecord.TM_PAREN,
-            MtefRecord.TV_FENCE_L | MtefRecord.TV_FENCE_R, 0x00);
+        writeFenceHeader(out, MtefRecord.TM_PAREN, true, true);
     }
 
     /**
@@ -283,8 +282,7 @@ public class MtefTemplateBuilder {
      * @throws IOException 写入异常
      */
     public static void writeBracketHeader(ByteArrayOutputStream out) throws IOException {
-        writeTemplateHeader(out, MtefRecord.TM_BRACK,
-            MtefRecord.TV_FENCE_L | MtefRecord.TV_FENCE_R, 0x00);
+        writeFenceHeader(out, MtefRecord.TM_BRACK, true, true);
     }
 
     /**
@@ -296,8 +294,7 @@ public class MtefTemplateBuilder {
      * @throws IOException 写入异常
      */
     public static void writeBraceHeader(ByteArrayOutputStream out) throws IOException {
-        writeTemplateHeader(out, MtefRecord.TM_BRACE,
-            MtefRecord.TV_FENCE_L | MtefRecord.TV_FENCE_R, 0x00);
+        writeFenceHeader(out, MtefRecord.TM_BRACE, true, true);
     }
 
     /**
@@ -309,8 +306,27 @@ public class MtefTemplateBuilder {
      * @throws IOException 写入异常
      */
     public static void writeBarHeader(ByteArrayOutputStream out) throws IOException {
-        writeTemplateHeader(out, MtefRecord.TM_BAR,
-            MtefRecord.TV_FENCE_L | MtefRecord.TV_FENCE_R, 0x00);
+        writeFenceHeader(out, MtefRecord.TM_BAR, true, true);
+    }
+
+    public static void writeFenceHeader(ByteArrayOutputStream out, int selector,
+                                        boolean hasLeft, boolean hasRight) throws IOException {
+        int variation = 0;
+        if (hasLeft) variation |= MtefRecord.TV_FENCE_L;
+        if (hasRight) variation |= MtefRecord.TV_FENCE_R;
+        writeTemplateHeader(out, selector, variation, 0x00);
+    }
+
+    public static void writeDoubleBarHeader(ByteArrayOutputStream out, boolean hasLeft, boolean hasRight) throws IOException {
+        writeFenceHeader(out, MtefRecord.TM_DBAR, hasLeft, hasRight);
+    }
+
+    public static void writeFloorHeader(ByteArrayOutputStream out, boolean hasLeft, boolean hasRight) throws IOException {
+        writeFenceHeader(out, MtefRecord.TM_FLOOR, hasLeft, hasRight);
+    }
+
+    public static void writeCeilingHeader(ByteArrayOutputStream out, boolean hasLeft, boolean hasRight) throws IOException {
+        writeFenceHeader(out, MtefRecord.TM_CEILING, hasLeft, hasRight);
     }
 
     // ===== 上划线/下划线及装饰模板（Embellishments）=====

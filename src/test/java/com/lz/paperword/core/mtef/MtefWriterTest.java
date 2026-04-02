@@ -158,12 +158,51 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteVmatrixUsesDoubleBarTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{Vmatrix}1&2\\\\3&4\\end{Vmatrix}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_DBAR, 0x03, 0x00}),
+            "Vmatrix should use tmDBAR with both fences present");
+    }
+
+    @Test
+    void testWriteFloorFenceUsesFloorTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\left\\lfloor x+1 \\right\\rfloor");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_FLOOR, 0x03, 0x00}),
+            "floor fence should use tmFLOOR with both fences present");
+    }
+
+    @Test
+    void testWriteSingleSidedBarFenceKeepsOnlyPresentSide() {
+        LaTeXNode ast = parser.parseLaTeX("\\left. x \\right|");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BAR, 0x02, 0x00}),
+            "single-sided right bar fence should encode only the right fence bit");
+    }
+
+    @Test
     void testWriteMathIrDirectlyForStableCoreSubset() {
         byte[] mtef = writer.write(parser.parseMathIR("\\begin{pmatrix}\\frac{1}{x}&\\sum_{i=1}^{n}a_i\\\\\\sqrt[3]{y}&z_0\\end{pmatrix}"));
 
         assertNotNull(mtef);
         assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "IR path should still emit MATRIX record for pmatrix");
         assertTrue(containsRecord(mtef, MtefRecord.TMPL), "IR path should still emit TMPL records for fraction/root/scripts");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForExtendedFenceSubset() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\left\\lVert x+1 \\right.") );
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_DBAR, 0x01, 0x00}),
+            "IR path should preserve single-sided double-bar fences");
     }
 
     @Test

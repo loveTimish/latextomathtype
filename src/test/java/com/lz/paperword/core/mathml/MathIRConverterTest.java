@@ -51,6 +51,16 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrPreservesExtendedFenceMetadata() {
+        MathIRNode ir = parser.parseMathIR("\\left\\lVert x \\right.");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.FENCE, ir.child(0).getType());
+        assertEquals("||", ir.child(0).getMetadata("openDelimiter"));
+        assertEquals(".", ir.child(0).getMetadata("closeDelimiter"));
+    }
+
+    @Test
     void testParseMathIrKeepsCasesStructureExplicit() {
         MathIRNode ir = parser.parseMathIR("\\begin{cases}x&1\\\\y&2\\end{cases}");
 

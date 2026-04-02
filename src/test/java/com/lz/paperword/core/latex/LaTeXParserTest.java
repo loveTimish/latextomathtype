@@ -280,6 +280,32 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseLeftRightNormalizesExtendedFenceDelimiters() {
+        LaTeXNode ast = parser.parseLaTeX("\\left\\lfloor x \\right\\rceil");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode fence = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, fence.getType());
+        assertEquals("⌊", fence.getMetadata("leftDelimiter"));
+        assertEquals("⌉", fence.getMetadata("rightDelimiter"));
+    }
+
+    @Test
+    void testParseVmatrixEnvironmentWrapsArrayWithDoubleBarFence() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{Vmatrix}1&2\\\\3&4\\end{Vmatrix}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode fence = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, fence.getType());
+        assertEquals("\\left\\lVert", fence.getValue());
+        assertEquals("||", fence.getMetadata("leftDelimiter"));
+        assertEquals("||", fence.getMetadata("rightDelimiter"));
+        assertEquals("Vmatrix", fence.getChildren().get(0).getMetadata("environment"));
+    }
+
+    @Test
     void testParseAlignedEnvironmentPromotesToImplicitArray() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{aligned}a&=b\\\\c&=d\\end{aligned}");
         assertNotNull(ast);

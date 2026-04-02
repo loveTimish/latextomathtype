@@ -1230,6 +1230,12 @@ public class MtefWriter {
             return;
         }
 
+        if (cmd != null && cmd.startsWith("\\left")) {
+            if (tryWriteExplicitFence(out, node)) {
+                return;
+            }
+        }
+
         // 2. 查找字符映射表：将 LaTeX 命令（如 \alpha, \infty）转换为 MTEF CHAR 记录
         // 大算子（\sum, \int）在作为独立命令出现时也会命中这里
         MtefCharMap.CharEntry entry = MtefCharMap.lookup(cmd);
@@ -1291,38 +1297,6 @@ public class MtefWriter {
                     writeNodeWithEmbellishment(out, node.getChildren().get(0), MtefRecord.EMB_1DOT);
                 }
             }
-            case "\\left(" -> {
-                // 显式左圆括号分隔符：生成 TM_PAREN fence 模板
-                MtefTemplateBuilder.writeParenHeader(out);
-                writeSlot(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
-                writeCharRecord(out, MtefRecord.FN_EXPAND, '(');
-                writeCharRecord(out, MtefRecord.FN_EXPAND, ')');
-                out.write(MtefRecord.END);
-            }
-            case "\\left[" -> {
-                // 显式左方括号分隔符：生成 TM_BRACK fence 模板
-                MtefTemplateBuilder.writeBracketHeader(out);
-                writeSlot(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
-                writeCharRecord(out, MtefRecord.FN_EXPAND, '[');
-                writeCharRecord(out, MtefRecord.FN_EXPAND, ']');
-                out.write(MtefRecord.END);
-            }
-            case "\\left{", "\\left\\{" -> {
-                // 显式左花括号分隔符：生成 TM_BRACE fence 模板
-                MtefTemplateBuilder.writeBraceHeader(out);
-                writeSlot(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
-                writeCharRecord(out, MtefRecord.FN_EXPAND, '{');
-                writeCharRecord(out, MtefRecord.FN_EXPAND, '}');
-                out.write(MtefRecord.END);
-            }
-            case "\\left|" -> {
-                // 显式左竖线分隔符：生成 TM_BAR fence 模板（绝对值）
-                MtefTemplateBuilder.writeBarHeader(out);
-                writeSlot(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
-                writeCharRecord(out, MtefRecord.FN_EXPAND, '|');
-                writeCharRecord(out, MtefRecord.FN_EXPAND, '|');
-                out.write(MtefRecord.END);
-            }
             default -> {
                 // 4. 数学函数名（如 \sin, \cos, \log）→ 使用 FN_FUNCTION 字体逐字符写入
                 if (cmd.startsWith("\\")) {
@@ -1336,6 +1310,68 @@ public class MtefWriter {
             }
         }
     }
+
+    private boolean tryWriteExplicitFence(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        FenceSpec spec = resolveFenceSpec(node.getMetadata("leftDelimiter"), node.getMetadata("rightDelimiter"));
+        if (spec == null) {
+            return false;
+        }
+        writeFenceTemplate(out, spec, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
+        return true;
+    }
+
+    private FenceSpec resolveFenceSpec(String leftDelimiter, String rightDelimiter) {
+        String left = leftDelimiter == null ? "" : leftDelimiter;
+        String right = rightDelimiter == null ? "" : rightDelimiter;
+        if ("(".equals(left) || ")".equals(right)) {
+            return new FenceSpec(MtefRecord.TM_PAREN, '(', ')', !".".equals(left), !".".equals(right));
+        }
+        if ("[".equals(left) || "]".equals(right)) {
+            return new FenceSpec(MtefRecord.TM_BRACK, '[', ']', !".".equals(left), !".".equals(right));
+        }
+        if ("{".equals(left) || "\\{".equals(left) || "}".equals(right)) {
+            return new FenceSpec(MtefRecord.TM_BRACE, '{', '}', !".".equals(left), !".".equals(right));
+        }
+        if ("|".equals(left) || "|".equals(right)) {
+            return new FenceSpec(MtefRecord.TM_BAR, '|', '|', !".".equals(left), !".".equals(right));
+        }
+        if ("||".equals(left) || "||".equals(right)) {
+            return new FenceSpec(MtefRecord.TM_DBAR, 0x2016, 0x2016, !".".equals(left), !".".equals(right));
+        }
+        if ("⌊".equals(left) || "⌋".equals(right)) {
+            return new FenceSpec(MtefRecord.TM_FLOOR, 0x230A, 0x230B, !".".equals(left), !".".equals(right));
+        }
+        if ("⌈".equals(left) || "⌉".equals(right)) {
+            return new FenceSpec(MtefRecord.TM_CEILING, 0x2308, 0x2309, !".".equals(left), !".".equals(right));
+        }
+        return null;
+    }
+
+    private void writeFenceTemplate(ByteArrayOutputStream out, FenceSpec spec, LaTeXNode content) throws IOException {
+        switch (spec.selector()) {
+            case MtefRecord.TM_PAREN -> MtefTemplateBuilder.writeFenceHeader(out, MtefRecord.TM_PAREN, spec.hasLeft(), spec.hasRight());
+            case MtefRecord.TM_BRACK -> MtefTemplateBuilder.writeFenceHeader(out, MtefRecord.TM_BRACK, spec.hasLeft(), spec.hasRight());
+            case MtefRecord.TM_BRACE -> MtefTemplateBuilder.writeFenceHeader(out, MtefRecord.TM_BRACE, spec.hasLeft(), spec.hasRight());
+            case MtefRecord.TM_BAR -> MtefTemplateBuilder.writeFenceHeader(out, MtefRecord.TM_BAR, spec.hasLeft(), spec.hasRight());
+            case MtefRecord.TM_DBAR -> MtefTemplateBuilder.writeDoubleBarHeader(out, spec.hasLeft(), spec.hasRight());
+            case MtefRecord.TM_FLOOR -> MtefTemplateBuilder.writeFloorHeader(out, spec.hasLeft(), spec.hasRight());
+            case MtefRecord.TM_CEILING -> MtefTemplateBuilder.writeCeilingHeader(out, spec.hasLeft(), spec.hasRight());
+            default -> throw new IllegalArgumentException("Unsupported fence selector: " + spec.selector());
+        }
+        writeSlot(out, content);
+        if (needsFullAfterSlot(content)) {
+            out.write(MtefRecord.FULL);
+        }
+        if (spec.hasLeft()) {
+            writeCharRecord(out, MtefRecord.FN_EXPAND, spec.leftChar());
+        }
+        if (spec.hasRight()) {
+            writeCharRecord(out, MtefRecord.FN_EXPAND, spec.rightChar());
+        }
+        out.write(MtefRecord.END);
+    }
+
+    private record FenceSpec(int selector, int leftChar, int rightChar, boolean hasLeft, boolean hasRight) {}
 
     /**
      * 写入分数节点：生成 TM_FRACT 分数模板。

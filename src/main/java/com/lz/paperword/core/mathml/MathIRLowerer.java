@@ -172,17 +172,22 @@ public class MathIRLowerer {
 
     private LaTeXNode lowerFence(MathIRNode node) {
         String open = node.getMetadata("openDelimiter");
+        String close = node.getMetadata("closeDelimiter");
         String command = switch (open) {
             case "(" -> "\\left(";
             case "[" -> "\\left[";
             case "{", "\\{" -> "\\left{";
             case "|" -> "\\left|";
+            case "||" -> "\\left\\lVert";
+            case "⌊" -> "\\left\\lfloor";
+            case "⌈" -> "\\left\\lceil";
+            case "." -> "\\left.";
             default -> throw new UnsupportedOperationException(buildUnsupportedMessage(node));
         };
         LaTeXNode fence = new LaTeXNode(LaTeXNode.Type.COMMAND, command);
         copyMetadata(node, fence);
         fence.setMetadata("leftDelimiter", open);
-        fence.setMetadata("rightDelimiter", node.getMetadata("closeDelimiter"));
+        fence.setMetadata("rightDelimiter", close);
         fence.addChild(lowerArgument(node.child(0)));
         return fence;
     }
