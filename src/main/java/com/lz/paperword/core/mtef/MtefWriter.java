@@ -1690,6 +1690,13 @@ public class MtefWriter {
             writeMatrixNode(out, node);
             return;
         }
+        String environment = node.getMetadata("environment");
+        if ("cases".equals(environment)) {
+            LaTeXNode content = shallowCloneArray(node);
+            content.getMetadata().remove("environment");
+            writeFenceTemplate(out, new FenceSpec(MtefRecord.TM_BRACE, '{', '}', true, false), content);
+            return;
+        }
         VerticalLayoutCompiler.CrossMultiplicationLayout crossLayout = verticalLayoutCompiler.compileCrossMultiplicationArray(node);
         if (crossLayout != null) {
             // 十字交叉需要保留参考里的嵌套矩阵结构，不能压平成普通算术表格。

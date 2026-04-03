@@ -190,6 +190,17 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteCasesEnvironmentUsesLeftBraceFenceAndMatrixContent() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{cases}x&1\\\\y&2\\end{cases}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BRACE, 0x01, 0x00}),
+            "cases should use tmBRACE with only the left fence present");
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "cases content should still emit MATRIX record inside the fence");
+    }
+
+    @Test
     void testWriteVmatrixUsesDoubleBarTemplate() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{Vmatrix}1&2\\\\3&4\\end{Vmatrix}");
         byte[] mtef = writer.write(ast);
