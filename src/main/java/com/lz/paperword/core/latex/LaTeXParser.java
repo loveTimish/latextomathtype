@@ -471,6 +471,9 @@ public class LaTeXParser {
         arrayNode.setMetadata("columnSpec", columnSpec);
         arrayNode.setMetadata("columnCount", String.valueOf(countArrayColumns(columnSpec)));
         arrayNode.setMetadata("columnLines", encodeColumnPartitionLines(columnSpec));
+        if ("aligned".equals(envName)) {
+            arrayNode.setMetadata("alignmentMode", "relation-pairs");
+        }
 
         if (!arrayNode.getChildren().isEmpty() || seenContent || !currentCell.getChildren().isEmpty()) {
             arrayNode.setMetadata("rowLines", encodeRowPartitionLines(rowLines, arrayNode.getChildren().size()));
@@ -494,11 +497,7 @@ public class LaTeXParser {
             return "c".repeat(safeColumns);
         }
         if (isAlignedLikeEnvironment(envName)) {
-            StringBuilder spec = new StringBuilder(safeColumns);
-            for (int i = 0; i < safeColumns; i++) {
-                spec.append(i == 0 ? 'r' : 'l');
-            }
-            return spec.toString();
+            return buildAlternatingColumnSpec(safeColumns, 'r', 'l');
         }
         if ("cases".equals(envName)) {
             StringBuilder spec = new StringBuilder(safeColumns);
@@ -508,6 +507,14 @@ public class LaTeXParser {
             return spec.toString();
         }
         return "c".repeat(safeColumns);
+    }
+
+    private String buildAlternatingColumnSpec(int columns, char even, char odd) {
+        StringBuilder spec = new StringBuilder(Math.max(columns, 1));
+        for (int i = 0; i < Math.max(columns, 1); i++) {
+            spec.append(i % 2 == 0 ? even : odd);
+        }
+        return spec.toString();
     }
 
     private void finalizeArrayCell(LaTeXNode row, LaTeXNode cell) {

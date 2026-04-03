@@ -314,8 +314,23 @@ class LaTeXParserTest {
         LaTeXNode array = ast.getChildren().get(0);
         assertEquals(LaTeXNode.Type.ARRAY, array.getType());
         assertEquals("aligned", array.getMetadata("environment"));
+        assertEquals("relation-pairs", array.getMetadata("alignmentMode"));
         assertEquals("rl", array.getMetadata("columnSpec"));
         assertEquals(2, array.getChildren().size());
+    }
+
+    @Test
+    void testParseAlignedEnvironmentAlternatesColumnSpecAcrossMultiplePairs() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{aligned}a&=b&c&=d\\end{aligned}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("aligned", array.getMetadata("environment"));
+        assertEquals("relation-pairs", array.getMetadata("alignmentMode"));
+        assertEquals("rlrl", array.getMetadata("columnSpec"));
+        assertEquals("4", array.getMetadata("columnCount"));
     }
 
     @Test

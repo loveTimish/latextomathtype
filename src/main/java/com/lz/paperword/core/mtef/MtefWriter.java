@@ -1697,6 +1697,10 @@ public class MtefWriter {
             writeFenceTemplate(out, new FenceSpec(MtefRecord.TM_BRACE, '{', '}', true, false), content);
             return;
         }
+        if (isAlignedRelationPairArray(node)) {
+            writeAlignedRelationPile(out, node);
+            return;
+        }
         VerticalLayoutCompiler.CrossMultiplicationLayout crossLayout = verticalLayoutCompiler.compileCrossMultiplicationArray(node);
         if (crossLayout != null) {
             // 十字交叉需要保留参考里的嵌套矩阵结构，不能压平成普通算术表格。
@@ -1711,6 +1715,56 @@ public class MtefWriter {
         }
         LaTeXNode normalized = layoutSpec != null ? verticalLayoutNodeFactory.buildArrayNode(layoutSpec) : node;
         writeMatrixNode(out, normalized);
+    }
+
+    private void writeAlignedRelationPile(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        out.write(MtefRecord.PILE);
+        out.write(MtefRecord.OPT_LP_RULER);
+        out.write(0x01);
+        out.write(0x02);
+        pileRulerWriter.writeRuler(out, List.of(
+            new VerticalLayoutSpec.VerticalTabStop(0, VerticalLayoutSpec.TabStopKind.RIGHT, 240),
+            new VerticalLayoutSpec.VerticalTabStop(1, VerticalLayoutSpec.TabStopKind.RELATION, 480)
+        ));
+
+        for (LaTeXNode row : node.getChildren()) {
+            out.write(MtefRecord.LINE);
+            out.write(0x00);
+            writeTabChar(out);
+            if (!row.getChildren().isEmpty()) {
+                writeNode(out, row.getChildren().get(0));
+            }
+            writeTabChar(out);
+            if (row.getChildren().size() > 1) {
+                writeNode(out, row.getChildren().get(1));
+            }
+            writeTabChar(out);
+            out.write(MtefRecord.END);
+        }
+        out.write(MtefRecord.END);
+    }
+
+    private boolean isAlignedRelationPairArray(LaTeXNode node) {
+        if (node == null || node.getType() != LaTeXNode.Type.ARRAY) {
+            return false;
+        }
+        if (!"aligned".equals(node.getMetadata("environment"))) {
+            return false;
+        }
+        int columnCount = resolveArrayColumnCount(node);
+        if (columnCount != 2) {
+            return false;
+        }
+        for (LaTeXNode row : node.getChildren()) {
+            if (row.getChildren().size() > 2) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void writeTabChar(ByteArrayOutputStream out) throws IOException {
+        writeCharRecord(out, MtefRecord.FN_TEXT, '\t');
     }
 
     private void writeMatrixNode(ByteArrayOutputStream out, LaTeXNode normalized) throws IOException {

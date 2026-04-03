@@ -181,12 +181,17 @@ class MtefWriterTest {
     }
 
     @Test
-    void testWriteAlignedEnvironmentAsMatrixRecord() {
+    void testWriteAlignedEnvironmentAsPileWithRelationRuler() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{aligned}a&=b\\\\c&=d\\end{aligned}");
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "aligned environment should emit MATRIX record");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.PILE, MtefRecord.OPT_LP_RULER, 0x01, 0x02}),
+            "aligned should emit a ruler-backed PILE instead of a generic matrix");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.RULER, 0x02, 0x02, (byte) 0xF0, 0x00, 0x03, (byte) 0xE0, 0x01}),
+            "aligned should expose right/relation tab stops for the two-column pair");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) ((MtefRecord.FN_TEXT & 0x7F) | 0x80), 0x09, 0x00}),
+            "aligned pile lines should serialize tab characters between alignment segments");
     }
 
     @Test
@@ -237,6 +242,17 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "IR path should still emit MATRIX record for pmatrix");
         assertTrue(containsRecord(mtef, MtefRecord.TMPL), "IR path should still emit TMPL records for fraction/root/scripts");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForAlignedRelationPairs() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\begin{aligned}a&=b\\\\c&=d\\end{aligned}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.PILE, MtefRecord.OPT_LP_RULER, 0x01, 0x02}),
+            "IR path should preserve aligned relation-pair semantics");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.RULER, 0x02, 0x02, (byte) 0xF0, 0x00, 0x03, (byte) 0xE0, 0x01}),
+            "IR path should keep the aligned relation tab stops");
     }
 
     @Test
