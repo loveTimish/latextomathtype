@@ -42,7 +42,7 @@ public class MathIRConverter {
     );
 
     private static final Set<String> ARC_ACCENTS = Set.of(
-        "\\arc", "\\overarc"
+        "\\arc", "\\overarc", "\\overparen", "\\wideparen"
     );
 
     private static final Set<String> HORIZONTAL_BRACES = Set.of(

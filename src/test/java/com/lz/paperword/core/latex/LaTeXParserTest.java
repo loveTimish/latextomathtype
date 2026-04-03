@@ -454,6 +454,32 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseOverparenAsUnaryCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\overparen{AB}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode overparen = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, overparen.getType());
+        assertEquals("\\overparen", overparen.getValue());
+        assertEquals(1, overparen.getChildren().size());
+        assertEquals("AB", flatten(overparen.getChildren().get(0)));
+    }
+
+    @Test
+    void testParseWideparenAsUnaryCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\wideparen{AB}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode wideparen = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, wideparen.getType());
+        assertEquals("\\wideparen", wideparen.getValue());
+        assertEquals(1, wideparen.getChildren().size());
+        assertEquals("AB", flatten(wideparen.getChildren().get(0)));
+    }
+
+    @Test
     void testParseOverbraceAsUnaryCommand() {
         LaTeXNode ast = parser.parseLaTeX("\\overbrace{a+b+c}");
         assertNotNull(ast);

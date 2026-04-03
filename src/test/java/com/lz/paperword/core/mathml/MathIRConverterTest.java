@@ -171,6 +171,28 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrNormalizesOverparenToDedicatedArcNode() {
+        MathIRNode ir = parser.parseMathIR("\\overparen{AB}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.ARC, ir.child(0).getType());
+        assertEquals("\\overparen", ir.child(0).getMetadata("latexCommand"));
+        assertEquals("top", ir.child(0).getMetadata("placement"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+    }
+
+    @Test
+    void testParseMathIrNormalizesWideparenToDedicatedArcNode() {
+        MathIRNode ir = parser.parseMathIR("\\wideparen{AB}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.ARC, ir.child(0).getType());
+        assertEquals("\\wideparen", ir.child(0).getMetadata("latexCommand"));
+        assertEquals("top", ir.child(0).getMetadata("placement"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+    }
+
+    @Test
     void testParseMathIrNormalizesOverbraceWithNoAnnotation() {
         MathIRNode ir = parser.parseMathIR("\\overbrace{x+y}");
 

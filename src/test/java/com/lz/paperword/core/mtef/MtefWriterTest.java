@@ -178,6 +178,26 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteOverparenUsesTmArcTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\overparen{AB}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARC, 0x00, 0x00}),
+            "overparen should reuse tmARC");
+    }
+
+    @Test
+    void testWriteWideparenUsesTmArcTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\wideparen{AB}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARC, 0x00, 0x00}),
+            "wideparen should reuse tmARC");
+    }
+
+    @Test
     void testWriteOverbraceUsesTmHBRACEWithTopVariation() {
         LaTeXNode ast = parser.parseLaTeX("\\overbrace{x+1}");
         byte[] mtef = writer.write(ast);
@@ -467,6 +487,24 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARC, 0x00, 0x00}),
             "IR path should lower overarc to tmARC");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForOverparenArcTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\overparen{AB}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARC, 0x00, 0x00}),
+            "IR path should lower overparen to tmARC");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForWideparenArcTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\wideparen{AB}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARC, 0x00, 0x00}),
+            "IR path should lower wideparen to tmARC");
     }
 
     @Test
