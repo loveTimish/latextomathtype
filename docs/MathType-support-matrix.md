@@ -10,7 +10,7 @@ This file is generated from the current codebase and then manually curated as im
 
 ## Parser coverage signals
 - linear: no direct hits
-- environments: matrix, pmatrix, bmatrix, cases, aligned, split, longdivision
+- environments: matrix, pmatrix, bmatrix, cases, aligned, align, align*, split, longdivision
 
 ## Official MTEF template coverage
 | Template | Selector | Status | Builder path | Writer path |
@@ -20,9 +20,9 @@ This file is generated from the current codebase and then manually curated as im
 | `TM_BRACE` | 2 | implemented | `writeBraceHeader` | `writeCommandNode` |
 | `TM_BRACK` | 3 | implemented | `writeBracketHeader` | `writeParenFence / writeCommandNode` |
 | `TM_BAR` | 4 | implemented | `writeBarHeader` | `writeCommandNode` |
-| `TM_DBAR` | 5 | declared-only | `—` | `—` |
-| `TM_FLOOR` | 6 | declared-only | `—` | `—` |
-| `TM_CEILING` | 7 | declared-only | `—` | `—` |
+| `TM_DBAR` | 5 | implemented | `—` | `fence header writer (single-sided)` |
+| `TM_FLOOR` | 6 | implemented | `—` | `fence header writer (single-sided)` |
+| `TM_CEILING` | 7 | implemented | `—` | `fence header writer (single-sided)` |
 | `TM_OBRACK` | 8 | declared-only | `—` | `—` |
 | `TM_INTERVAL` | 9 | declared-only | `—` | `—` |
 | `TM_ROOT` | 10 | implemented | `writeSqrtHeader/writeNthRootHeader` | `writeSqrtNode` |
