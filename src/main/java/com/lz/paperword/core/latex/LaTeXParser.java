@@ -471,7 +471,7 @@ public class LaTeXParser {
         arrayNode.setMetadata("columnSpec", columnSpec);
         arrayNode.setMetadata("columnCount", String.valueOf(countArrayColumns(columnSpec)));
         arrayNode.setMetadata("columnLines", encodeColumnPartitionLines(columnSpec));
-        if ("aligned".equals(envName)) {
+        if (usesRelationPairAlignment(envName)) {
             arrayNode.setMetadata("alignmentMode", "relation-pairs");
         }
 
@@ -507,6 +507,10 @@ public class LaTeXParser {
             return spec.toString();
         }
         return "c".repeat(safeColumns);
+    }
+
+    private boolean usesRelationPairAlignment(String envName) {
+        return Set.of("aligned", "split").contains(envName);
     }
 
     private String buildAlternatingColumnSpec(int columns, char even, char odd) {

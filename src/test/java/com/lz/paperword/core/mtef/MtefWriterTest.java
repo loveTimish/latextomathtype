@@ -209,6 +209,18 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteSplitEnvironmentAsPileWithRelationRuler() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{split}a&=b\\\\c&=d\\end{split}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.PILE, MtefRecord.OPT_LP_RULER, 0x01, 0x02}),
+            "split should share the aligned pile path instead of falling back to matrix");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.RULER, 0x02, 0x02, (byte) 0xF0, 0x00, 0x03, (byte) 0xE0, 0x01}),
+            "split should expose the same right/relation tab stops as aligned");
+    }
+
+    @Test
     void testWriteCasesEnvironmentUsesLeftBraceFenceAndMatrixContent() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{cases}x&1\\\\y&2\\end{cases}");
         byte[] mtef = writer.write(ast);
@@ -276,6 +288,17 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.RULER, 0x04, 0x02, (byte) 0xF0, 0x00, 0x03, (byte) 0xE0, 0x01, 0x02, (byte) 0xD0, 0x02, 0x03, (byte) 0xC0, 0x03}),
             "IR path should preserve all aligned relation-pair tab stops");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForSplitRelationPairs() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\begin{split}a&=b\\\\c&=d\\end{split}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.PILE, MtefRecord.OPT_LP_RULER, 0x01, 0x02}),
+            "IR path should route split through the aligned pile semantics");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.RULER, 0x02, 0x02, (byte) 0xF0, 0x00, 0x03, (byte) 0xE0, 0x01}),
+            "IR path should preserve split relation-pair tab stops");
     }
 
     @Test

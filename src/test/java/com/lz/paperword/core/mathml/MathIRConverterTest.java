@@ -97,6 +97,17 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrKeepsSplitRelationPairMetadata() {
+        MathIRNode ir = parser.parseMathIR("\\begin{split}a&=b\\\\c&=d\\end{split}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.TABLE, ir.child(0).getType());
+        assertEquals("split", ir.child(0).getMetadata("environment"));
+        assertEquals("relation-pairs", ir.child(0).getMetadata("alignmentMode"));
+        assertEquals("rl", ir.child(0).getMetadata("columnSpec"));
+    }
+
+    @Test
     void testDumpMathIrMarksUnsupportedCommandsExplicitly() {
         String dump = parser.dumpMathIR("\\foo{1}");
 

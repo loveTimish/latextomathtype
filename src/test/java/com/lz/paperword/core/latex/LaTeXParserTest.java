@@ -334,6 +334,20 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseSplitEnvironmentPromotesToRelationPairArray() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{split}a&=b\\\\c&=d\\end{split}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("split", array.getMetadata("environment"));
+        assertEquals("relation-pairs", array.getMetadata("alignmentMode"));
+        assertEquals("rl", array.getMetadata("columnSpec"));
+        assertEquals(2, array.getChildren().size());
+    }
+
+    @Test
     void testParseCasesEnvironmentPromotesToImplicitArray() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{cases}x&1\\\\y&2\\end{cases}");
         assertNotNull(ast);

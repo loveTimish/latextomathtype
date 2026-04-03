@@ -1756,7 +1756,7 @@ public class MtefWriter {
         if (node == null || node.getType() != LaTeXNode.Type.ARRAY) {
             return false;
         }
-        if (!"aligned".equals(node.getMetadata("environment"))) {
+        if (!usesAlignedRelationEnvironment(node.getMetadata("environment"))) {
             return false;
         }
         if (!"relation-pairs".equals(node.getMetadata("alignmentMode"))) {
@@ -1772,6 +1772,10 @@ public class MtefWriter {
             }
         }
         return true;
+    }
+
+    private boolean usesAlignedRelationEnvironment(String environment) {
+        return "aligned".equals(environment) || "split".equals(environment);
     }
 
     private void writeTabChar(ByteArrayOutputStream out) throws IOException {
