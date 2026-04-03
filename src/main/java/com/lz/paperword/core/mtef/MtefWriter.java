@@ -1335,7 +1335,7 @@ public class MtefWriter {
             }
             case "\\overbrace", "\\underbrace" -> writeHorizontalBrace(out, node);
             case "\\overbracket", "\\underbracket" -> writeHorizontalBracket(out, node);
-            case "\\bra", "\\ket" -> writeDiracNode(out, node);
+            case "\\bra", "\\ket", "\\braket" -> writeDiracNode(out, node);
             default -> {
                 // 4. 数学函数名（如 \sin, \cos, \log）→ 使用 FN_FUNCTION 字体逐字符写入
                 if (cmd.startsWith("\\")) {
@@ -1422,26 +1422,30 @@ public class MtefWriter {
     }
 
     /**
-     * 写入 Dirac 记号节点（\bra / \ket），使用 TM_DIRAC 模板结构。
-     * 当前仅支持单侧最小切片：
-     * bra  = left slot  + ⟨ + |
-     * ket  = right slot + | + ⟩
+     * 写入 Dirac 记号节点（\bra / \ket / \braket），使用 TM_DIRAC 模板结构。
+     * 槽位顺序严格遵循 DiracBoxClass：left slot → right slot → ⟨ → | → ⟩。
      */
     private void writeDiracNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
-        boolean hasLeft = "\\bra".equals(node.getValue());
-        boolean hasRight = "\\ket".equals(node.getValue());
-        LaTeXNode content = node.getChildren().isEmpty() ? null : node.getChildren().get(0);
+        String command = node.getValue();
+        boolean hasLeft = "\\bra".equals(command) || "\\braket".equals(command);
+        boolean hasRight = "\\ket".equals(command) || "\\braket".equals(command);
+        LaTeXNode leftContent = hasLeft ? childAt(node, 0) : null;
+        LaTeXNode rightContent = switch (command) {
+            case "\\ket" -> childAt(node, 0);
+            case "\\braket" -> childAt(node, 1);
+            default -> null;
+        };
 
         MtefTemplateBuilder.writeDiracHeader(out, hasLeft, hasRight);
         if (hasLeft) {
-            writeSlot(out, content);
-            if (needsFullAfterSlot(content)) {
+            writeSlot(out, leftContent);
+            if (needsFullAfterSlot(leftContent)) {
                 out.write(MtefRecord.FULL);
             }
         }
         if (hasRight) {
-            writeSlot(out, content);
-            if (needsFullAfterSlot(content)) {
+            writeSlot(out, rightContent);
+            if (needsFullAfterSlot(rightContent)) {
                 out.write(MtefRecord.FULL);
             }
         }

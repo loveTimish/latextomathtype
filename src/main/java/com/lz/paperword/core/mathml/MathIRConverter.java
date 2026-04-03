@@ -149,7 +149,7 @@ public class MathIRConverter {
         if (isHorizontalFenceCommand(command)) {
             return convertHorizontalFenceNode(node, null);
         }
-        if ("\\bra".equals(command) || "\\ket".equals(command)) {
+        if ("\\bra".equals(command) || "\\ket".equals(command) || "\\braket".equals(command)) {
             return convertDiracNode(node, command);
         }
         if (isEnclosureCommand(command)) {
@@ -241,10 +241,13 @@ public class MathIRConverter {
         copyMetadata(node, dirac);
         dirac.setMetadata("latexCommand", command);
         boolean isBra = "\\bra".equals(command);
-        dirac.setMetadata("leftPresent", Boolean.toString(isBra));
-        dirac.setMetadata("rightPresent", Boolean.toString(!isBra));
-        dirac.addChild(convertArgument(isBra ? childAt(node, 0) : null));
-        dirac.addChild(convertArgument(isBra ? null : childAt(node, 0)));
+        boolean isKet = "\\ket".equals(command);
+        boolean isBraket = "\\braket".equals(command);
+        dirac.setMetadata("leftPresent", Boolean.toString(isBra || isBraket));
+        dirac.setMetadata("rightPresent", Boolean.toString(isKet || isBraket));
+        dirac.setMetadata("middleDelimiter", firstNonBlank(node.getMetadata("middleDelimiter"), "|"));
+        dirac.addChild(convertArgument(isKet ? null : childAt(node, 0)));
+        dirac.addChild(convertArgument(isBra ? null : childAt(node, isBraket ? 1 : 0)));
         return dirac;
     }
 

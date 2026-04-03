@@ -470,7 +470,7 @@ public class MtefTemplateBuilder {
 
     /**
      * 写入 Dirac 记号模板（TM_DIRAC）的头部。
-     * <p>最小切片仅使用单侧槽位：bra = left slot + ⟨|，ket = right slot + |⟩。</p>
+     * <p>DiracBoxClass 槽位顺序为：left slot、right slot、左尖括号（可选）、竖线、右尖括号（可选）。</p>
      *
      * @param out 输出字节流
      * @param hasLeft 是否存在左侧 bra 槽位

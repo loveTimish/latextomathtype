@@ -341,6 +341,7 @@ public class LaTeXParser {
                  "\\bra", "\\ket",
                  "\\overbrace", "\\underbrace", "\\overbracket", "\\underbracket",
                  "\\boxed", "\\cancel", "\\bcancel", "\\xcancel" -> parseUnaryCommand(stream, cmd);
+            case "\\braket" -> parseBraketCommand(stream, cmd);
             case "\\text", "\\mathrm", "\\mathbf", "\\mathit",
                  "\\mathcal", "\\mathbb" -> parseTextCommand(stream, cmd);
             case "\\sum", "\\int", "\\iint", "\\iiint", "\\oint",
@@ -807,6 +808,59 @@ public class LaTeXParser {
     }
 
     /**
+     * 解析标准双槽 Dirac 记号 \braket{a|b}。
+     *
+     * <p>该命令不是普通一元命令：必须把花括号中的顶层竖线拆成左槽/右槽两部分，
+     * 供后续 MathIR 和 MTEF tmDIRAC 全链路使用，而不是退化成普通字符拼接。</p>
+     */
+    private LaTeXNode parseBraketCommand(TokenStream stream, String cmd) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.COMMAND, cmd);
+        node.setMetadata("middleDelimiter", "|");
+
+        LaTeXNode argument = parseRequiredGroup(stream);
+        DiracSlots slots = splitDiracSlots(argument);
+        if (slots == null) {
+            node.addChild(argument);
+            return node;
+        }
+
+        node.addChild(slots.left());
+        node.addChild(slots.right());
+        return node;
+    }
+
+    private DiracSlots splitDiracSlots(LaTeXNode argument) {
+        if (argument == null || argument.getType() != LaTeXNode.Type.GROUP) {
+            return null;
+        }
+
+        int separatorIndex = -1;
+        for (int index = 0; index < argument.getChildren().size(); index++) {
+            LaTeXNode child = argument.getChildren().get(index);
+            if (child.getType() == LaTeXNode.Type.CHAR && "|".equals(child.getValue())) {
+                if (separatorIndex >= 0) {
+                    return null;
+                }
+                separatorIndex = index;
+            }
+        }
+
+        if (separatorIndex <= 0 || separatorIndex >= argument.getChildren().size() - 1) {
+            return null;
+        }
+
+        LaTeXNode left = new LaTeXNode(LaTeXNode.Type.GROUP);
+        LaTeXNode right = new LaTeXNode(LaTeXNode.Type.GROUP);
+        for (int index = 0; index < separatorIndex; index++) {
+            left.addChild(argument.getChildren().get(index));
+        }
+        for (int index = separatorIndex + 1; index < argument.getChildren().size(); index++) {
+            right.addChild(argument.getChildren().get(index));
+        }
+        return new DiracSlots(left, right);
+    }
+
+    /**
      * 解析文本/字体命令（如 \text{内容}、\mathrm{ABC}、\mathbb{R}）。
      *
      * <p>创建 TEXT 类型节点（区别于 COMMAND），表示非数学的文本内容。
@@ -1144,4 +1198,6 @@ public class LaTeXParser {
             }
         }
     }
+
+    private record DiracSlots(LaTeXNode left, LaTeXNode right) {}
 }

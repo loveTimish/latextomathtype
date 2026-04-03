@@ -243,16 +243,16 @@ public class MathIRLowerer {
         MathIRNode right = node.child(1);
         boolean hasLeft = Boolean.parseBoolean(node.getMetadata("leftPresent")) || hasMeaningfulContent(left);
         boolean hasRight = Boolean.parseBoolean(node.getMetadata("rightPresent")) || hasMeaningfulContent(right);
-        if (hasLeft && hasRight) {
-            throw new UnsupportedOperationException(buildUnsupportedMessage(node));
-        }
         String command = node.getMetadata("latexCommand");
         if (command == null || command.isBlank()) {
-            command = hasLeft ? "\\bra" : "\\ket";
+            command = hasLeft && hasRight ? "\\braket" : (hasLeft ? "\\bra" : "\\ket");
         }
         LaTeXNode dirac = new LaTeXNode(LaTeXNode.Type.COMMAND, command);
         copyMetadata(node, dirac);
-        if (hasLeft) {
+        if (hasLeft && hasRight) {
+            dirac.addChild(lowerArgument(left));
+            dirac.addChild(lowerArgument(right));
+        } else if (hasLeft) {
             dirac.addChild(lowerArgument(left));
         } else if (hasRight) {
             dirac.addChild(lowerArgument(right));

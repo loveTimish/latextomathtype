@@ -45,7 +45,7 @@ This file is generated from the current codebase and then manually curated as im
 | `TM_SUB` | 27 | implemented | `writeSubscriptHeader` | `writeSubscriptNode / writeSupSubAttachment` |
 | `TM_SUP` | 28 | implemented | `writeSuperscriptHeader` | `writeSuperscriptNode / writeSupSubAttachment` |
 | `TM_SUBSUP` | 29 | implemented | `writeSubSuperscriptHeader` | `writeSuperscriptNode / writeSupSubAttachment` |
-| `TM_DIRAC` | 30 | declared-only | `—` | `—` |
+| `TM_DIRAC` | 30 | implemented | `writeDiracHeader` | `writeDiracNode` (`\\bra` / `\\ket` / `\\braket`) |
 | `TM_VEC` | 31 | implemented | `writeVecHeader` | `writeCommandNode` |
 | `TM_TILDE` | 32 | implemented | `writeTildeHeader` | `writeCommandNode` |
 | `TM_HAT` | 33 | implemented | `writeHatHeader` | `writeCommandNode` |

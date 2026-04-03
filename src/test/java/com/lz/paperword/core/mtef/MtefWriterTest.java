@@ -226,6 +226,26 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteBraketUsesTmDiracWithDualVariation() {
+        LaTeXNode ast = parser.parseLaTeX("\\braket{a|b}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_DIRAC, 0x03, 0x00}),
+            "braket should use tmDIRAC with both left and right slice bits");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE8, 0x27}),
+            "braket should write U+27E8 left angle bracket with FN_EXPAND font");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x7C, 0x00}),
+            "braket should write the Dirac separator bar with FN_EXPAND font");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE9, 0x27}),
+            "braket should write U+27E9 right angle bracket with FN_EXPAND font");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x61, 0x00}),
+            "braket should serialize the left slot content explicitly");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x62, 0x00}),
+            "braket should serialize the right slot content explicitly");
+    }
+
+    @Test
     void testWriteOverbraceUsesTmHBRACEWithTopVariation() {
         LaTeXNode ast = parser.parseLaTeX("\\overbrace{x+1}");
         byte[] mtef = writer.write(ast);
@@ -555,6 +575,19 @@ class MtefWriterTest {
             "IR path should lower ket to tmDIRAC right slice");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE9, 0x27}),
             "IR path should keep the right angle bracket character");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForBraketDiracTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\braket{a|b}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_DIRAC, 0x03, 0x00}),
+            "IR path should lower braket to tmDIRAC with both slice bits");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x61, 0x00}),
+            "IR path should keep the left Dirac slot content");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x62, 0x00}),
+            "IR path should keep the right Dirac slot content");
     }
 
     @Test

@@ -506,6 +506,21 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseBraketAsBinaryDiracCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\braket{\\psi|\\phi}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode braket = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, braket.getType());
+        assertEquals("\\braket", braket.getValue());
+        assertEquals("|", braket.getMetadata("middleDelimiter"));
+        assertEquals(2, braket.getChildren().size());
+        assertEquals("\\psi", braket.getChildren().get(0).getChildren().get(0).getValue());
+        assertEquals("\\phi", braket.getChildren().get(1).getChildren().get(0).getValue());
+    }
+
+    @Test
     void testParseOverbraceAsUnaryCommand() {
         LaTeXNode ast = parser.parseLaTeX("\\overbrace{a+b+c}");
         assertNotNull(ast);

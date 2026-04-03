@@ -223,6 +223,22 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrNormalizesBraketToDualSlotDirac() {
+        MathIRNode ir = parser.parseMathIR("\\braket{\\psi|\\phi}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.DIRAC, ir.child(0).getType());
+        assertEquals("\\braket", ir.child(0).getMetadata("latexCommand"));
+        assertEquals("true", ir.child(0).getMetadata("leftPresent"));
+        assertEquals("true", ir.child(0).getMetadata("rightPresent"));
+        assertEquals("|", ir.child(0).getMetadata("middleDelimiter"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+        assertEquals(MathIRNode.Type.IDENT, ir.child(0).child(0).child(0).getType());
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(1).getType());
+        assertEquals(MathIRNode.Type.IDENT, ir.child(0).child(1).child(0).getType());
+    }
+
+    @Test
     void testParseMathIrNormalizesOverbraceWithNoAnnotation() {
         MathIRNode ir = parser.parseMathIR("\\overbrace{x+y}");
 

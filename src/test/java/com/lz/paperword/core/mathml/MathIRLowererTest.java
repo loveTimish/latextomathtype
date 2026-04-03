@@ -36,4 +36,18 @@ class MathIRLowererTest {
         assertEquals("\\ket", lowered.getChildren().get(0).getValue());
         assertEquals(1, lowered.getChildren().get(0).getChildren().size());
     }
+
+    @Test
+    void testLowerBraketDiracNodeBackToBinaryCommand() {
+        MathIRNode ir = parser.parseMathIR("\\braket{\\psi|\\phi}");
+
+        LaTeXNode lowered = lowerer.lower(ir);
+
+        assertEquals(LaTeXNode.Type.ROOT, lowered.getType());
+        assertEquals(1, lowered.getChildren().size());
+        assertEquals(LaTeXNode.Type.COMMAND, lowered.getChildren().get(0).getType());
+        assertEquals("\\braket", lowered.getChildren().get(0).getValue());
+        assertEquals("|", lowered.getChildren().get(0).getMetadata("middleDelimiter"));
+        assertEquals(2, lowered.getChildren().get(0).getChildren().size());
+    }
 }
