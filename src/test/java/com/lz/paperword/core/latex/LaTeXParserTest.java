@@ -426,4 +426,30 @@ class LaTeXParserTest {
         }
         return builder.toString();
     }
+
+    @Test
+    void testParseOverbraceAsUnaryCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\overbrace{a+b+c}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode overbrace = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, overbrace.getType());
+        assertEquals("\\overbrace", overbrace.getValue());
+        assertEquals(1, overbrace.getChildren().size());
+        assertEquals("a+b+c", flatten(overbrace.getChildren().get(0)));
+    }
+
+    @Test
+    void testParseUnderbraceAsUnaryCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\underbrace{a+b+c}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode underbrace = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, underbrace.getType());
+        assertEquals("\\underbrace", underbrace.getValue());
+        assertEquals(1, underbrace.getChildren().size());
+        assertEquals("a+b+c", flatten(underbrace.getChildren().get(0)));
+    }
 }

@@ -29,6 +29,7 @@ public class MathIRLowerer {
             case OVER -> lowerOver(node);
             case UNDEROVER -> lowerUnderOver(node);
             case FENCE -> lowerFence(node);
+            case HBRACE -> lowerHorizontalBrace(node);
             case ENCLOSURE -> lowerEnclosure(node);
             case TABLE -> lowerContainer(node, LaTeXNode.Type.ARRAY);
             case TABLE_ROW -> lowerContainer(node, LaTeXNode.Type.ROW);
@@ -208,6 +209,20 @@ public class MathIRLowerer {
         copyMetadata(node, enclosure);
         enclosure.addChild(lowerArgument(node.child(0)));
         return enclosure;
+    }
+
+    private LaTeXNode lowerHorizontalBrace(MathIRNode node) {
+        String command = node.getMetadata("latexCommand");
+        LaTeXNode hbrace = new LaTeXNode(LaTeXNode.Type.COMMAND, command);
+        copyMetadata(node, hbrace);
+        hbrace.addChild(lowerArgument(node.child(0)));
+        // Child 1 is the annotation (subscript or superscript), if present
+        MathIRNode annotation = node.child(1);
+        if (annotation != null && !annotation.getChildren().isEmpty()) {
+            hbrace.addChild(lowerArgument(annotation));
+        }
+        hbrace.setMetadata("placement", node.getMetadata("placement"));
+        return hbrace;
     }
 
     private LaTeXNode lowerLongDivision(MathIRNode node) {

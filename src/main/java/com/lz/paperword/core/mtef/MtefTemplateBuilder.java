@@ -425,4 +425,33 @@ public class MtefTemplateBuilder {
     public static void writeTildeHeader(ByteArrayOutputStream out) throws IOException {
         writeTemplateHeader(out, MtefRecord.TM_TILDE, 0x00, 0x00);
     }
+
+    /**
+     * 写入水平大括号模板（TM_HBRACE）的头部。
+     * <p>生成内容上方（overbrace，⏞）或内容下方（underbrace，⏟）的水平可拉伸大括号。
+     * 调用方写入头部后需写入两个槽位：
+     * <ol>
+     *   <li>main slot：被括住的内容 LINE</li>
+     *   <li>small slot：标注文字（下标/上标内容）LINE，使用 SUB 缩小字号</li>
+     * </ol>
+     * 之后需要写入可拉伸的大括号字符（使用 FN_EXPAND 字体），然后用 END 关闭模板。
+     * @param out 输出字节流
+     * @param onTop 是否将大括号放在内容上方（true = overbrace，false = underbrace）
+     * @throws IOException 写入异常
+     */
+    public static void writeHBraceHeader(ByteArrayOutputStream out, boolean onTop) throws IOException {
+        int variation = onTop ? MtefRecord.TV_HB_TOP : 0x0000;
+        writeTemplateHeader(out, MtefRecord.TM_HBRACE, variation, 0x00);
+    }
+
+    /**
+     * 写入水平方括号模板（TM_HBRACK）的头部（预留占位，暂不用于默认 LaTeX 输入）。
+     * @param out 输出字节流
+     * @param onTop 是否将方括号放在内容上方
+     * @throws IOException 写入异常
+     */
+    public static void writeHBrackHeader(ByteArrayOutputStream out, boolean onTop) throws IOException {
+        int variation = onTop ? MtefRecord.TV_HB_TOP : 0x0000;
+        writeTemplateHeader(out, MtefRecord.TM_HBRACK, variation, 0x00);
+    }
 }

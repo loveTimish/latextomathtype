@@ -34,11 +34,15 @@ public class MathIRConverter {
     );
 
     private static final Set<String> OVER_ACCENTS = Set.of(
-        "\\overline", "\\bar", "\\hat", "\\tilde", "\\vec", "\\dot", "\\overbrace"
+        "\\overline", "\\bar", "\\hat", "\\tilde", "\\vec", "\\dot"
     );
 
     private static final Set<String> UNDER_ACCENTS = Set.of(
-        "\\underline", "\\underbrace"
+        "\\underline"
+    );
+
+    private static final Set<String> HORIZONTAL_BRACES = Set.of(
+        "\\overbrace", "\\underbrace"
     );
 
     private static final Set<String> SPACING_COMMANDS = Set.of(
@@ -134,6 +138,9 @@ public class MathIRConverter {
         if (command.startsWith("\\left")) {
             return convertFenceNode(node);
         }
+        if (isHorizontalBraceCommand(command)) {
+            return convertHorizontalBraceNode(node, null);
+        }
         if (isEnclosureCommand(command)) {
             return convertEnclosureNode(node, command);
         }
@@ -198,6 +205,17 @@ public class MathIRConverter {
         return enclosure;
     }
 
+    private MathIRNode convertHorizontalBraceNode(LaTeXNode node, LaTeXNode annotation) {
+        String command = node == null ? null : node.getValue();
+        MathIRNode hbrace = new MathIRNode(MathIRNode.Type.HBRACE);
+        copyMetadata(node, hbrace);
+        hbrace.setMetadata("latexCommand", command);
+        hbrace.setMetadata("placement", "\\overbrace".equals(command) ? "top" : "bottom");
+        hbrace.addChild(convertArgument(childAt(node, 0)));
+        hbrace.addChild(convertArgument(annotation));
+        return hbrace;
+    }
+
     private MathIRNode convertFractionNode(LaTeXNode node) {
         MathIRNode fraction = new MathIRNode(MathIRNode.Type.FRACTION);
         copyMetadata(node, fraction);
@@ -221,6 +239,10 @@ public class MathIRConverter {
     private MathIRNode convertSuperscriptNode(LaTeXNode node) {
         LaTeXNode baseAst = childAt(node, 0);
         LaTeXNode supAst = childAt(node, 1);
+
+        if (isHorizontalBraceScript(baseAst, true)) {
+            return convertHorizontalBraceNode(baseAst, supAst);
+        }
 
         if (baseAst != null && baseAst.getType() == LaTeXNode.Type.SUBSCRIPT) {
             LaTeXNode innerBase = childAt(baseAst, 0);
@@ -259,6 +281,10 @@ public class MathIRConverter {
     private MathIRNode convertSubscriptNode(LaTeXNode node) {
         LaTeXNode baseAst = childAt(node, 0);
         LaTeXNode subAst = childAt(node, 1);
+
+        if (isHorizontalBraceScript(baseAst, false)) {
+            return convertHorizontalBraceNode(baseAst, subAst);
+        }
 
         if (baseAst != null && baseAst.getType() == LaTeXNode.Type.SUPERSCRIPT) {
             LaTeXNode innerBase = childAt(baseAst, 0);
@@ -391,6 +417,17 @@ public class MathIRConverter {
             || "\\cancel".equals(command)
             || "\\bcancel".equals(command)
             || "\\xcancel".equals(command);
+    }
+
+    private boolean isHorizontalBraceCommand(String command) {
+        return HORIZONTAL_BRACES.contains(command);
+    }
+
+    private boolean isHorizontalBraceScript(LaTeXNode node, boolean overScript) {
+        return node != null
+            && node.getType() == LaTeXNode.Type.COMMAND
+            && ((overScript && "\\overbrace".equals(node.getValue()))
+            || (!overScript && "\\underbrace".equals(node.getValue())));
     }
 
     private String enclosureNotation(String command) {

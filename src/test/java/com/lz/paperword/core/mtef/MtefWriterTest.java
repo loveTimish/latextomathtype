@@ -102,9 +102,9 @@ class MtefWriterTest {
 
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x50, 0x00}),
-            "limit should use tmLIM with lower-slot and summation-style placement");
+            "limit should use tmLim with lower-slot and summation-style placement");
         assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.SYM}),
-            "tmLIM path should not emit a separate SYM operator record");
+            "tmLim path should not emit a separate SYM operator record");
     }
 
     @Test
@@ -155,6 +155,36 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_STRIKE, 0x06, 0x00}),
             "xcancel should use tmSTRIKE with both diagonal variations enabled");
+    }
+
+    @Test
+    void testWriteOverbraceUsesTmHBRACEWithTopVariation() {
+        LaTeXNode ast = parser.parseLaTeX("\\overbrace{x+1}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_HBRACE, 0x01, 0x00}),
+            "overbrace should use tmHBRACE with TV_HB_TOP variation bit set");
+        // Should contain 0x23DE (⏞ overbrace character) in FN_EXPAND (encoded)
+        // encodeTypeface(FN_EXPAND = 22) → (22 | 0x80) = 0x96
+        // mtcode: 0x23DE → low byte 0xDE, high byte 0x23
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xDE, 0x23}),
+            "overbrace should write U+23DE overbrace character with FN_EXPAND font");
+    }
+
+    @Test
+    void testWriteUnderbraceUsesTmHBRACEWithNoTopVariation() {
+        LaTeXNode ast = parser.parseLaTeX("\\underbrace{x+1}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_HBRACE, 0x00, 0x00}),
+            "underbrace should use tmHBRACE with TV_HB_TOP variation bit clear");
+        // Should contain 0x23DF (⏟ underbrace character) in FN_EXPAND (encoded)
+        // encodeTypeface(FN_EXPAND = 22) → (22 | 0x80) = 0x96
+        // mtcode: 0x23DF → low byte 0xDF, high byte 0x23
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xDF, 0x23}),
+            "underbrace should write U+23DF underbrace character with FN_EXPAND font");
     }
 
     @Test
@@ -259,7 +289,7 @@ class MtefWriterTest {
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.PILE, MtefRecord.OPT_LP_RULER, 0x01, 0x02}),
             "align* should share the aligned pile path for the supported relation-pair subset");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.RULER, 0x02, 0x02, (byte) 0xF0, 0x00, 0x03, (byte) 0xE0, 0x01}),
-            "align* should expose the same right/relation tab stops as aligned");
+            "align* should preserve the aligned relation-pair tab stops");
     }
 
     @Test
@@ -418,6 +448,7 @@ class MtefWriterTest {
 
         assertNotNull(mtef);
         assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "division template should emit MATRIX record");
+        assertTrue(containsRecord(mtef, MtefRecord.TMPL), "long division should emit TMPL record");
     }
 
     @Test
@@ -452,7 +483,7 @@ class MtefWriterTest {
     @Test
     void testWriteMultiplicationArrayKeepsExplicitSpacerCells() {
         LaTeXNode ast = parser.parseLaTeX(
-            "\\begin{array}{rrrrrr}{} & {} & {1} & {2} & {3} & {} \\\\ {\\times} & {} & {} & {4} & {5} & {} \\\\ \\hline {} & {} & {6} & {1} & {5} & {} \\\\ {+} & {4} & {9} & {2} & {} & {} \\\\ \\hline {} & {5} & {5} & {3} & {5} & {}\\end{array}"
+            "\\begin{array}{rrrrrr}{} & {} & {1} & {2} & {3} & {} \\\\ {\\times} & {} & {} & {4} & {5} & {} \\\\ \\hline {} & {} & {6} & {1} & {5} & {} \\\\ {+} & {4} & {9} & {2} & {} & {}\\end{array}"
         );
         byte[] mtef = writer.write(ast);
 

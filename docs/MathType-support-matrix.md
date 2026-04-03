@@ -39,8 +39,8 @@ This file is generated from the current codebase and then manually curated as im
 | `TM_INTOP` | 21 | declared-only | `—` | `—` |
 | `TM_SUMOP` | 22 | declared-only | `—` | `—` |
 | `TM_LIM` | 23 | declared-only | `—` | `—` |
-| `TM_HBRACE` | 24 | declared-only | `—` | `—` |
-| `TM_HBRACK` | 25 | declared-only | `—` | `—` |
+| `TM_HBRACE` | 24 | implemented | `writeHBraceHeader` | `writeHorizontalBrace (\overbrace / \underbrace)` |
+| `TM_HBRACK` | 25 | implemented | `writeHBrackHeader` | `declared but not wired to default LaTeX input (reserved for horizontal square brackets)` |
 | `TM_LDIV` | 26 | implemented | `writeLongDivisionHeader` | `writeLongDivisionNode` |
 | `TM_SUB` | 27 | implemented | `writeSubscriptHeader` | `writeSubscriptNode / writeSupSubAttachment` |
 | `TM_SUP` | 28 | implemented | `writeSuperscriptHeader` | `writeSuperscriptNode / writeSupSubAttachment` |

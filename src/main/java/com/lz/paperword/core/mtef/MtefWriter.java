@@ -910,7 +910,10 @@ public class MtefWriter {
     private boolean generatesTemplate(LaTeXNode node) {
         return switch (node.getType()) {
             case SUPERSCRIPT, SUBSCRIPT, SQRT, FRACTION, LONG_DIVISION -> true;
-            default -> false;
+            default -> switch (node.getValue()) {
+                case "\\overbrace", "\\underbrace" -> true;
+                default -> false;
+            };
         };
     }
 
@@ -1329,6 +1332,7 @@ public class MtefWriter {
                     writeNodeWithEmbellishment(out, node.getChildren().get(0), MtefRecord.EMB_1DOT);
                 }
             }
+            case "\\overbrace", "\\underbrace" -> writeHorizontalBrace(out, node);
             default -> {
                 // 4. 数学函数名（如 \sin, \cos, \log）→ 使用 FN_FUNCTION 字体逐字符写入
                 if (cmd.startsWith("\\")) {
@@ -1353,6 +1357,54 @@ public class MtefWriter {
         MtefTemplateBuilder.writeStrikeHeader(out, variation);
         writeSlot(out, content);
         out.write(MtefRecord.END);
+    }
+
+    /**
+     * 写入水平大括号节点（overbrace / underbrace），使用 TM_HBRACE 模板结构。
+     * <p>结构顺序（参考 Wiris MTEF 文档 HFenceBoxClass）：
+     * <ol>
+     *   <li>TM_HBRACE 模板头（TV_HB_TOP = 1 表示大括号在上方）</li>
+     *   <li>主内容 slot：被括住的表达式 LINE</li>
+     *   <li>标注 slot：下标/上标文字 LINE（自动缩小字号）</li>
+     *   <li>FN_EXPAND 字体的大括号字符（U+23DE 表示顶部大括号 ⏞，U+23DF 表示底部大括号 ⏟）</li>
+     *   <li>END：关闭模板</li>
+     * </ol>
+     */
+    private void writeHorizontalBrace(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        boolean isOverBrace = "\\overbrace".equals(node.getValue());
+        LaTeXNode mainContent = node.getChildren().isEmpty() ? null : node.getChildren().get(0);
+        LaTeXNode annotation = node.getChildren().size() >= 2 ? node.getChildren().get(1) : null;
+
+        // 写入模板头
+        MtefTemplateBuilder.writeHBraceHeader(out, isOverBrace);
+
+        // 第一个 slot：主内容
+        writeSlot(out, mainContent);
+
+        // 第二个 slot：标注（可选，如果存在则写入），使用 SUB 字号缩小
+        if (annotation != null && !isEmptyContent(annotation)) {
+            out.write(MtefRecord.SUB);
+            writeSlot(out, annotation);
+            // 标注结束后需要 FULL 恢复字号，因为后面还有大括号字符
+            out.write(MtefRecord.FULL);
+        }
+
+        // 写入可拉伸大括号字符到 FN_EXPAND
+        int braceCode = isOverBrace ? 0x23DE : 0x23DF;
+        writeCharRecord(out, MtefRecord.FN_EXPAND, braceCode);
+
+        out.write(MtefRecord.END);
+    }
+
+    private boolean isEmptyContent(LaTeXNode node) {
+        if (node == null) {
+            return true;
+        }
+        if (node.getType() == LaTeXNode.Type.GROUP && node.getChildren().isEmpty()) {
+            return true;
+        }
+        String text = node.getValue();
+        return text != null && text.isBlank();
     }
 
     private boolean tryWriteExplicitFence(ByteArrayOutputStream out, LaTeXNode node) throws IOException {

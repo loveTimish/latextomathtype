@@ -147,4 +147,30 @@ class MathIRConverterTest {
         assertTrue(dump.contains("UNSUPPORTED(\\foo)"));
         assertTrue(dump.contains("latex=\\foo"));
     }
+
+    @Test
+    void testParseMathIrNormalizesOverbraceWithNoAnnotation() {
+        MathIRNode ir = parser.parseMathIR("\\overbrace{x+y}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.HBRACE, ir.child(0).getType());
+        assertEquals("\\overbrace", ir.child(0).getMetadata("latexCommand"));
+        assertEquals("top", ir.child(0).getMetadata("placement"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+        // convertArgument(null) returns empty SEQUENCE, not null
+        assertNotNull(ir.child(0).child(1));
+        assertEquals(0, ir.child(0).child(1).getChildren().size());
+    }
+
+    @Test
+    void testParseMathIrNormalizesUnderbraceWithAnnotationSubscript() {
+        MathIRNode ir = parser.parseMathIR("\\underbrace{x+y}_{i=1}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.HBRACE, ir.child(0).getType());
+        assertEquals("\\underbrace", ir.child(0).getMetadata("latexCommand"));
+        assertEquals("bottom", ir.child(0).getMetadata("placement"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+        assertNotNull(ir.child(0).child(1));
+    }
 }
