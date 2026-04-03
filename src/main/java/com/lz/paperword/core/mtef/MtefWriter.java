@@ -1507,6 +1507,9 @@ public class MtefWriter {
         if ("⟨".equals(left) || "⟩".equals(right)) {
             return new FenceSpec(MtefRecord.TM_ANGLE, 0x27E8, 0x27E9, hasLeft, hasRight, left, right);
         }
+        if ("⟦".equals(left) || "⟧".equals(right)) {
+            return new FenceSpec(MtefRecord.TM_OBRACK, 0x27E6, 0x27E7, hasLeft, hasRight, left, right);
+        }
         if ("(".equals(left) || ")".equals(right)) {
             return new FenceSpec(MtefRecord.TM_PAREN, '(', ')', hasLeft, hasRight, left, right);
         }
@@ -1556,6 +1559,7 @@ public class MtefWriter {
     private void writeFenceTemplate(ByteArrayOutputStream out, FenceSpec spec, LaTeXNode content) throws IOException {
         switch (spec.selector()) {
             case MtefRecord.TM_ANGLE -> MtefTemplateBuilder.writeAngleHeader(out, spec.hasLeft(), spec.hasRight());
+            case MtefRecord.TM_OBRACK -> MtefTemplateBuilder.writeOpenBracketHeader(out, spec.hasLeft(), spec.hasRight());
             case MtefRecord.TM_PAREN -> MtefTemplateBuilder.writeFenceHeader(out, MtefRecord.TM_PAREN, spec.hasLeft(), spec.hasRight());
             case MtefRecord.TM_BRACK -> MtefTemplateBuilder.writeFenceHeader(out, MtefRecord.TM_BRACK, spec.hasLeft(), spec.hasRight());
             case MtefRecord.TM_BRACE -> MtefTemplateBuilder.writeFenceHeader(out, MtefRecord.TM_BRACE, spec.hasLeft(), spec.hasRight());

@@ -559,6 +559,7 @@ public class MathIRConverter {
             case "[" -> "]";
             case "{", "\\{" -> "}";
             case "⟨" -> "⟩";
+            case "⟦" -> "⟧";
             case "|" -> "|";
             default -> left;
         };

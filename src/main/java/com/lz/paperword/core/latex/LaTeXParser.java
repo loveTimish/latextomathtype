@@ -784,6 +784,8 @@ public class LaTeXParser {
             case "\\}", "\\rbrace" -> "}";
             case "\\langle" -> "⟨";
             case "\\rangle" -> "⟩";
+            case "\\llbracket" -> "⟦";
+            case "\\rrbracket" -> "⟧";
             case "\\lvert", "\\rvert" -> "|";
             case "\\lVert", "\\rVert", "\\Vert" -> "||";
             case "\\lfloor" -> "⌊";

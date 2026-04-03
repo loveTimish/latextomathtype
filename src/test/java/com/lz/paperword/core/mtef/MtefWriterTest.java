@@ -486,6 +486,20 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteOpenBracketFenceUsesOpenBracketTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\left\\llbracket x+1 \\right\\rrbracket");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_OBRACK, 0x03, 0x00}),
+            "open bracket fence should use tmOBRACK with both fences present");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE6, 0x27}),
+            "open bracket fence should keep the left white bracket as FN_EXPAND char");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE7, 0x27}),
+            "open bracket fence should keep the right white bracket as FN_EXPAND char");
+    }
+
+    @Test
     void testWriteSingleSidedBarFenceKeepsOnlyPresentSide() {
         LaTeXNode ast = parser.parseLaTeX("\\left. x \\right|");
         byte[] mtef = writer.write(ast);
@@ -594,6 +608,19 @@ class MtefWriterTest {
             "IR path should keep the left angle bracket character");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE9, 0x27}),
             "IR path should keep the right angle bracket character");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForOpenBracketFenceSubset() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\left\\llbracket x+1 \\right\\rrbracket"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_OBRACK, 0x03, 0x00}),
+            "IR path should lower white square brackets to tmOBRACK");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE6, 0x27}),
+            "IR path should keep the left white bracket character");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE7, 0x27}),
+            "IR path should keep the right white bracket character");
     }
 
     @Test

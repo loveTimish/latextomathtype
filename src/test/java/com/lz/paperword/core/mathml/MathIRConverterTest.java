@@ -72,6 +72,17 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrPreservesOpenBracketFenceMetadata() {
+        MathIRNode ir = parser.parseMathIR("\\left\\llbracket x+y \\right\\rrbracket");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.FENCE, ir.child(0).getType());
+        assertEquals("⟦", ir.child(0).getMetadata("openDelimiter"));
+        assertEquals("⟧", ir.child(0).getMetadata("closeDelimiter"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+    }
+
+    @Test
     void testParseMathIrNormalizesBoxedEnclosure() {
         MathIRNode ir = parser.parseMathIR("\\boxed{x+1}");
 
