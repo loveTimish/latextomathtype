@@ -458,6 +458,34 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteMixedIntervalFenceUsesTmInterval() {
+        LaTeXNode ast = parser.parseLaTeX("\\left( x+1 \\right]");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTERVAL, 0x30, 0x00}),
+            "mixed ( ] fences should use tmINTERVAL with left-LP and right-RB variation bits");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x28, 0x00}),
+            "interval should keep the left parenthesis as an FN_EXPAND char");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x5D, 0x00}),
+            "interval should keep the right bracket as an FN_EXPAND char");
+    }
+
+    @Test
+    void testWriteReversedIntervalFenceUsesTmInterval() {
+        LaTeXNode ast = parser.parseLaTeX("\\left] x \\right(");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTERVAL, 0x03, 0x00}),
+            "reversed ] ( fences should use tmINTERVAL with left-RB and right-LP variation bits");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x5D, 0x00}),
+            "reversed interval should keep the left bracket glyph");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x28, 0x00}),
+            "reversed interval should keep the right parenthesis glyph");
+    }
+
+    @Test
     void testWriteMathIrDirectlyForStableCoreSubset() {
         byte[] mtef = writer.write(parser.parseMathIR("\\begin{pmatrix}\\frac{1}{x}&\\sum_{i=1}^{n}a_i\\\\\\sqrt[3]{y}&z_0\\end{pmatrix}"));
 
@@ -515,6 +543,15 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_DBAR, 0x01, 0x00}),
             "IR path should preserve single-sided double-bar fences");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForIntervalFenceSubset() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\left( x+1 \\right]") );
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTERVAL, 0x30, 0x00}),
+            "IR path should lower mixed paren/bracket fences to tmINTERVAL");
     }
 
     @Test

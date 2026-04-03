@@ -351,6 +351,30 @@ public class MtefTemplateBuilder {
         writeTemplateHeader(out, selector, variation, 0x00);
     }
 
+    public static void writeIntervalHeader(ByteArrayOutputStream out,
+                                           String leftDelimiter,
+                                           String rightDelimiter) throws IOException {
+        writeTemplateHeader(out, MtefRecord.TM_INTERVAL,
+            encodeIntervalVariation(leftDelimiter, rightDelimiter), 0x00);
+    }
+
+    private static int encodeIntervalVariation(String leftDelimiter, String rightDelimiter) {
+        return encodeIntervalSide(leftDelimiter, true) | encodeIntervalSide(rightDelimiter, false);
+    }
+
+    private static int encodeIntervalSide(String delimiter, boolean isLeft) {
+        if (delimiter == null || delimiter.isBlank()) {
+            throw new IllegalArgumentException("interval delimiter must not be blank");
+        }
+        return switch (delimiter) {
+            case "(" -> isLeft ? MtefRecord.TV_INTV_LEFT_LP : MtefRecord.TV_INTV_RIGHT_LP;
+            case ")" -> isLeft ? MtefRecord.TV_INTV_LEFT_RP : MtefRecord.TV_INTV_RIGHT_RP;
+            case "[" -> isLeft ? MtefRecord.TV_INTV_LEFT_LB : MtefRecord.TV_INTV_RIGHT_LB;
+            case "]" -> isLeft ? MtefRecord.TV_INTV_LEFT_RB : MtefRecord.TV_INTV_RIGHT_RB;
+            default -> throw new IllegalArgumentException("unsupported interval delimiter: " + delimiter);
+        };
+    }
+
     public static void writeDoubleBarHeader(ByteArrayOutputStream out, boolean hasLeft, boolean hasRight) throws IOException {
         writeFenceHeader(out, MtefRecord.TM_DBAR, hasLeft, hasRight);
     }

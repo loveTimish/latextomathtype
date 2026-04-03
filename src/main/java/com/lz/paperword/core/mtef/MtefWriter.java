@@ -1482,28 +1482,58 @@ public class MtefWriter {
     private FenceSpec resolveFenceSpec(String leftDelimiter, String rightDelimiter) {
         String left = leftDelimiter == null ? "" : leftDelimiter;
         String right = rightDelimiter == null ? "" : rightDelimiter;
+        boolean hasLeft = !".".equals(left);
+        boolean hasRight = !".".equals(right);
+
+        if (hasLeft && hasRight && isIntervalDelimiter(left) && isIntervalDelimiter(right)
+            && !isMatchedParenPair(left, right) && !isMatchedBracketPair(left, right)) {
+            return new FenceSpec(MtefRecord.TM_INTERVAL, intervalChar(left), intervalChar(right), true, true,
+                left, right);
+        }
         if ("(".equals(left) || ")".equals(right)) {
-            return new FenceSpec(MtefRecord.TM_PAREN, '(', ')', !".".equals(left), !".".equals(right));
+            return new FenceSpec(MtefRecord.TM_PAREN, '(', ')', hasLeft, hasRight, left, right);
         }
         if ("[".equals(left) || "]".equals(right)) {
-            return new FenceSpec(MtefRecord.TM_BRACK, '[', ']', !".".equals(left), !".".equals(right));
+            return new FenceSpec(MtefRecord.TM_BRACK, '[', ']', hasLeft, hasRight, left, right);
         }
         if ("{".equals(left) || "\\{".equals(left) || "}".equals(right)) {
-            return new FenceSpec(MtefRecord.TM_BRACE, '{', '}', !".".equals(left), !".".equals(right));
+            return new FenceSpec(MtefRecord.TM_BRACE, '{', '}', hasLeft, hasRight, left, right);
         }
         if ("|".equals(left) || "|".equals(right)) {
-            return new FenceSpec(MtefRecord.TM_BAR, '|', '|', !".".equals(left), !".".equals(right));
+            return new FenceSpec(MtefRecord.TM_BAR, '|', '|', hasLeft, hasRight, left, right);
         }
         if ("||".equals(left) || "||".equals(right)) {
-            return new FenceSpec(MtefRecord.TM_DBAR, 0x2016, 0x2016, !".".equals(left), !".".equals(right));
+            return new FenceSpec(MtefRecord.TM_DBAR, 0x2016, 0x2016, hasLeft, hasRight, left, right);
         }
         if ("⌊".equals(left) || "⌋".equals(right)) {
-            return new FenceSpec(MtefRecord.TM_FLOOR, 0x230A, 0x230B, !".".equals(left), !".".equals(right));
+            return new FenceSpec(MtefRecord.TM_FLOOR, 0x230A, 0x230B, hasLeft, hasRight, left, right);
         }
         if ("⌈".equals(left) || "⌉".equals(right)) {
-            return new FenceSpec(MtefRecord.TM_CEILING, 0x2308, 0x2309, !".".equals(left), !".".equals(right));
+            return new FenceSpec(MtefRecord.TM_CEILING, 0x2308, 0x2309, hasLeft, hasRight, left, right);
         }
         return null;
+    }
+
+    private boolean isIntervalDelimiter(String delimiter) {
+        return "(".equals(delimiter) || ")".equals(delimiter) || "[".equals(delimiter) || "]".equals(delimiter);
+    }
+
+    private boolean isMatchedParenPair(String left, String right) {
+        return "(".equals(left) && ")".equals(right);
+    }
+
+    private boolean isMatchedBracketPair(String left, String right) {
+        return "[".equals(left) && "]".equals(right);
+    }
+
+    private int intervalChar(String delimiter) {
+        return switch (delimiter) {
+            case "(" -> '(';
+            case ")" -> ')';
+            case "[" -> '[';
+            case "]" -> ']';
+            default -> throw new IllegalArgumentException("Unsupported interval delimiter: " + delimiter);
+        };
     }
 
     private void writeFenceTemplate(ByteArrayOutputStream out, FenceSpec spec, LaTeXNode content) throws IOException {
@@ -1515,6 +1545,7 @@ public class MtefWriter {
             case MtefRecord.TM_DBAR -> MtefTemplateBuilder.writeDoubleBarHeader(out, spec.hasLeft(), spec.hasRight());
             case MtefRecord.TM_FLOOR -> MtefTemplateBuilder.writeFloorHeader(out, spec.hasLeft(), spec.hasRight());
             case MtefRecord.TM_CEILING -> MtefTemplateBuilder.writeCeilingHeader(out, spec.hasLeft(), spec.hasRight());
+            case MtefRecord.TM_INTERVAL -> MtefTemplateBuilder.writeIntervalHeader(out, spec.leftDelimiter(), spec.rightDelimiter());
             default -> throw new IllegalArgumentException("Unsupported fence selector: " + spec.selector());
         }
         writeSlot(out, content);
@@ -1530,7 +1561,8 @@ public class MtefWriter {
         out.write(MtefRecord.END);
     }
 
-    private record FenceSpec(int selector, int leftChar, int rightChar, boolean hasLeft, boolean hasRight) {}
+    private record FenceSpec(int selector, int leftChar, int rightChar, boolean hasLeft, boolean hasRight,
+                             String leftDelimiter, String rightDelimiter) {}
 
     /**
      * 写入分数节点：生成 TM_FRACT 分数模板。
@@ -1825,7 +1857,7 @@ public class MtefWriter {
         if ("cases".equals(environment)) {
             LaTeXNode content = shallowCloneArray(node);
             content.getMetadata().remove("environment");
-            writeFenceTemplate(out, new FenceSpec(MtefRecord.TM_BRACE, '{', '}', true, false), content);
+            writeFenceTemplate(out, new FenceSpec(MtefRecord.TM_BRACE, '{', '}', true, false, "{", "."), content);
             return;
         }
         if (isAlignedRelationArray(node)) {

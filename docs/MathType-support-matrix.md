@@ -4,9 +4,9 @@ This file is generated from the current codebase and then manually curated as im
 
 ## Snapshot
 - Declared official TM_* templates in `MtefRecord`: **39**
-- Templates with both builder + writer path: **18**
+- Templates with both builder + writer path: **19**
 - Templates with builder helper only: **0**
-- Templates only declared in constants: **21**
+- Templates only declared in constants: **20**
 
 ## Parser coverage signals
 - linear: no direct hits
@@ -24,7 +24,7 @@ This file is generated from the current codebase and then manually curated as im
 | `TM_FLOOR` | 6 | implemented | `—` | `fence header writer (single-sided)` |
 | `TM_CEILING` | 7 | implemented | `—` | `fence header writer (single-sided)` |
 | `TM_OBRACK` | 8 | declared-only | `—` | `—` |
-| `TM_INTERVAL` | 9 | declared-only | `—` | `—` |
+| `TM_INTERVAL` | 9 | implemented | `writeIntervalHeader` | `writeFenceTemplate` (`\left( … \right]`, `\left] … \right(` etc.) |
 | `TM_ROOT` | 10 | implemented | `writeSqrtHeader/writeNthRootHeader` | `writeSqrtNode` |
 | `TM_FRACT` | 11 | implemented | `writeFractionHeader` | `writeFractionNode` |
 | `TM_UBAR` | 12 | implemented | `writeUnderlineHeader` | `writeCommandNode` |

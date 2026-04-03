@@ -281,6 +281,24 @@ public final class MtefRecord {
     /** n 次根：显示根指数槽位 */
     public static final int TV_ROOT_NTH = 1;
 
+    // --- 区间变体（Interval variations）---
+    /** 左侧为左圆括号 ( */
+    public static final int TV_INTV_LEFT_LP  = 0x0000;
+    /** 左侧为右圆括号 ) */
+    public static final int TV_INTV_LEFT_RP  = 0x0001;
+    /** 左侧为左方括号 [ */
+    public static final int TV_INTV_LEFT_LB  = 0x0002;
+    /** 左侧为右方括号 ] */
+    public static final int TV_INTV_LEFT_RB  = 0x0003;
+    /** 右侧为左圆括号 ( */
+    public static final int TV_INTV_RIGHT_LP = 0x0000;
+    /** 右侧为右圆括号 ) */
+    public static final int TV_INTV_RIGHT_RP = 0x0010;
+    /** 右侧为左方括号 [ */
+    public static final int TV_INTV_RIGHT_LB = 0x0020;
+    /** 右侧为右方括号 ] */
+    public static final int TV_INTV_RIGHT_RB = 0x0030;
+
     // --- 分数变体（Fraction variations）---
     /** 小型分数（行内缩小版） */
     public static final int TV_FR_SMALL = 0x0001;

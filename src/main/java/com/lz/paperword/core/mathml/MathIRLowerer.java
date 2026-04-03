@@ -179,12 +179,17 @@ public class MathIRLowerer {
         String close = node.getMetadata("closeDelimiter");
         String command = switch (open) {
             case "(" -> "\\left(";
+            case ")" -> "\\left)";
             case "[" -> "\\left[";
+            case "]" -> "\\left]";
             case "{", "\\{" -> "\\left{";
+            case "}" -> "\\left}";
             case "|" -> "\\left|";
             case "||" -> "\\left\\lVert";
             case "⌊" -> "\\left\\lfloor";
+            case "⌋" -> "\\left\\rfloor";
             case "⌈" -> "\\left\\lceil";
+            case "⌉" -> "\\left\\rceil";
             case "." -> "\\left.";
             default -> throw new UnsupportedOperationException(buildUnsupportedMessage(node));
         };
