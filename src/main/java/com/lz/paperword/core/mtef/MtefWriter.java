@@ -1775,7 +1775,10 @@ public class MtefWriter {
     }
 
     private boolean usesAlignedRelationEnvironment(String environment) {
-        return "aligned".equals(environment) || "split".equals(environment);
+        return "aligned".equals(environment)
+            || "align".equals(environment)
+            || "align*".equals(environment)
+            || "split".equals(environment);
     }
 
     private void writeTabChar(ByteArrayOutputStream out) throws IOException {

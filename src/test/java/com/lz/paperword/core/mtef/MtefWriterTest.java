@@ -221,6 +221,28 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteAlignStarEnvironmentAsPileWithRelationRuler() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{align*}a&=b\\\\c&=d\\end{align*}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.PILE, MtefRecord.OPT_LP_RULER, 0x01, 0x02}),
+            "align* should share the aligned pile path for the supported relation-pair subset");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.RULER, 0x02, 0x02, (byte) 0xF0, 0x00, 0x03, (byte) 0xE0, 0x01}),
+            "align* should expose the same right/relation tab stops as aligned");
+    }
+
+    @Test
+    void testWriteAlignOddColumnShapeFallsBackToMatrixBoundary() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{align}a&=b&c\\end{align}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX),
+            "odd-column align stays on the generic matrix boundary until a fuller align model exists");
+    }
+
+    @Test
     void testWriteCasesEnvironmentUsesLeftBraceFenceAndMatrixContent() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{cases}x&1\\\\y&2\\end{cases}");
         byte[] mtef = writer.write(ast);
@@ -299,6 +321,17 @@ class MtefWriterTest {
             "IR path should route split through the aligned pile semantics");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.RULER, 0x02, 0x02, (byte) 0xF0, 0x00, 0x03, (byte) 0xE0, 0x01}),
             "IR path should preserve split relation-pair tab stops");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForAlignStarRelationPairs() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\begin{align*}a&=b\\\\c&=d\\end{align*}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.PILE, MtefRecord.OPT_LP_RULER, 0x01, 0x02}),
+            "IR path should route align* through the aligned pile semantics for the supported subset");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.RULER, 0x02, 0x02, (byte) 0xF0, 0x00, 0x03, (byte) 0xE0, 0x01}),
+            "IR path should preserve align* relation-pair tab stops");
     }
 
     @Test

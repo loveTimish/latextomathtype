@@ -108,6 +108,17 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrKeepsAlignStarRelationPairMetadata() {
+        MathIRNode ir = parser.parseMathIR("\\begin{align*}a&=b\\\\c&=d\\end{align*}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.TABLE, ir.child(0).getType());
+        assertEquals("align*", ir.child(0).getMetadata("environment"));
+        assertEquals("relation-pairs", ir.child(0).getMetadata("alignmentMode"));
+        assertEquals("rl", ir.child(0).getMetadata("columnSpec"));
+    }
+
+    @Test
     void testDumpMathIrMarksUnsupportedCommandsExplicitly() {
         String dump = parser.dumpMathIR("\\foo{1}");
 

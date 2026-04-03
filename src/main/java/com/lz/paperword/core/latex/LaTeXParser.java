@@ -378,7 +378,7 @@ public class LaTeXParser {
     }
 
     private boolean isAlignedLikeEnvironment(String envName) {
-        return Set.of("aligned", "align", "split").contains(envName);
+        return Set.of("aligned", "align", "align*", "split").contains(envName);
     }
 
     private LaTeXNode wrapEnvironmentFence(String envName, LaTeXNode content) {
@@ -510,7 +510,7 @@ public class LaTeXParser {
     }
 
     private boolean usesRelationPairAlignment(String envName) {
-        return Set.of("aligned", "split").contains(envName);
+        return Set.of("aligned", "align", "align*", "split").contains(envName);
     }
 
     private String buildAlternatingColumnSpec(int columns, char even, char odd) {

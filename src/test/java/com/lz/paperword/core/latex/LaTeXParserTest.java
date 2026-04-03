@@ -348,6 +348,20 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseAlignStarEnvironmentPromotesToRelationPairArray() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{align*}a&=b\\\\c&=d\\end{align*}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals("align*", array.getMetadata("environment"));
+        assertEquals("relation-pairs", array.getMetadata("alignmentMode"));
+        assertEquals("rl", array.getMetadata("columnSpec"));
+        assertEquals(2, array.getChildren().size());
+    }
+
+    @Test
     void testParseCasesEnvironmentPromotesToImplicitArray() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{cases}x&1\\\\y&2\\end{cases}");
         assertNotNull(ast);
