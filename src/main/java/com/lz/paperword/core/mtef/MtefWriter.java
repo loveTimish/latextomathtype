@@ -141,7 +141,17 @@ public class MtefWriter {
      * 包括：求和 ∑、大并集 ⋃、大交集 ⋂、大析取 ⋁、大合取 ⋀。
      */
     private static final Set<String> BIG_OP_SUM_LIKE = Set.of(
-        "\\sum", "\\bigcup", "\\bigcap", "\\bigvee", "\\bigwedge"
+        "\\sum", "\\bigvee", "\\bigwedge"
+    );
+
+    /** 并集类大算子 — 使用 TM_UNION 模板。 */
+    private static final Set<String> BIG_OP_UNION_LIKE = Set.of(
+        "\\bigcup"
+    );
+
+    /** 交集类大算子 — 使用 TM_INTER 模板。 */
+    private static final Set<String> BIG_OP_INTER_LIKE = Set.of(
+        "\\bigcap"
     );
 
     /** 余积类大算子 — 使用 TM_COPROD 模板，而非 sum-like / prod fallback。 */
@@ -2459,7 +2469,7 @@ public class MtefWriter {
     }
 
     /**
-     * 写入大算子模板头部（根据命令类型选择积分/求和/求积模板）。
+     * 写入大算子模板头部（根据命令类型选择积分/求和/求积/并交模板）。
      *
      * <p>注意：此方法只写入 TMPL 头部，不写入内容 slot。
      * 调用者需要在此方法之后写入内容 LINE，然后调用 writeBigOpFooter 关闭模板。</p>
@@ -2482,11 +2492,17 @@ public class MtefWriter {
         } else if (BIG_OP_COPROD_LIKE.contains(cmd)) {
             // 余积：∐ → TM_COPROD 模板
             MtefTemplateBuilder.writeCoproductHeader(out, hasLower, hasUpper);
+        } else if (BIG_OP_UNION_LIKE.contains(cmd)) {
+            // 大并集：⋃ → TM_UNION 模板
+            MtefTemplateBuilder.writeUnionHeader(out, hasLower, hasUpper);
+        } else if (BIG_OP_INTER_LIKE.contains(cmd)) {
+            // 大交集：⋂ → TM_INTER 模板
+            MtefTemplateBuilder.writeIntersectionHeader(out, hasLower, hasUpper);
         } else if ("\\prod".equals(cmd)) {
             // 求积：∏ → TM_PRODUCT 模板
             MtefTemplateBuilder.writeProductHeader(out, hasLower, hasUpper);
         } else {
-            // 求和及其他：∑ ⋃ ⋂ ⋁ ⋀ → TM_SUM 模板
+            // 求和及剩余 sum-like：∑ ⋁ ⋀ → TM_SUM 模板
             MtefTemplateBuilder.writeSumHeader(out, hasLower, hasUpper);
         }
     }
@@ -2525,6 +2541,8 @@ public class MtefWriter {
         if (node.getType() != LaTeXNode.Type.COMMAND) return false;
         String cmd = node.getValue();
         return BIG_OP_SUM_LIKE.contains(cmd)
+            || BIG_OP_UNION_LIKE.contains(cmd)
+            || BIG_OP_INTER_LIKE.contains(cmd)
             || BIG_OP_COPROD_LIKE.contains(cmd)
             || BIG_OP_INT_LIKE.contains(cmd)
             || BIG_OP_LIMIT_LIKE.contains(cmd);

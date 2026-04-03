@@ -142,6 +142,30 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteBigcupUsesDedicatedUnionTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\bigcup_{i=1}^{n} A_i");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UNION, 0x30, 0x00}),
+            "bigcup should use tmUNION with both upper/lower limit bits");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+            "bigcup should not fall back to tmSUM");
+    }
+
+    @Test
+    void testWriteBigcapUsesDedicatedIntersectionTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\bigcap_{i=1}^{n} A_i");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTER, 0x30, 0x00}),
+            "bigcap should use tmINTER with both upper/lower limit bits");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+            "bigcap should not fall back to tmSUM");
+    }
+
+    @Test
     void testWriteBoxedUsesTmBoxTemplate() {
         LaTeXNode ast = parser.parseLaTeX("\\boxed{x+1}");
         byte[] mtef = writer.write(ast);
@@ -770,6 +794,28 @@ class MtefWriterTest {
             "IR path should lower \\coprod to tmCOPROD");
         assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
             "IR path should not route \\coprod through tmSUM fallback");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForUnionTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\bigcup_{i=1}^{n} A_i"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UNION, 0x30, 0x00}),
+            "IR path should lower \\bigcup to tmUNION");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+            "IR path should not route \\bigcup through tmSUM fallback");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForIntersectionTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\bigcap_{i=1}^{n} A_i"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTER, 0x30, 0x00}),
+            "IR path should lower \\bigcap to tmINTER");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+            "IR path should not route \\bigcap through tmSUM fallback");
     }
 
     @Test

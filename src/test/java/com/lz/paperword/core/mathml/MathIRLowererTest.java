@@ -123,4 +123,30 @@ class MathIRLowererTest {
         assertEquals(LaTeXNode.Type.SUBSCRIPT, lowered.getChildren().get(0).getChildren().get(0).getType());
         assertEquals("\\coprod", lowered.getChildren().get(0).getChildren().get(0).getChildren().get(0).getValue());
     }
+
+    @Test
+    void testLowerUnionBigOperatorBackToBigcupCommandShape() {
+        MathIRNode ir = parser.parseMathIR("\\bigcup_{i=1}^{n} A_i");
+
+        LaTeXNode lowered = lowerer.lower(ir);
+
+        assertNotNull(lowered);
+        assertEquals(LaTeXNode.Type.ROOT, lowered.getType());
+        assertEquals(2, lowered.getChildren().size());
+        assertEquals(LaTeXNode.Type.SUPERSCRIPT, lowered.getChildren().get(0).getType());
+        assertEquals("\\bigcup", lowered.getChildren().get(0).getChildren().get(0).getChildren().get(0).getValue());
+    }
+
+    @Test
+    void testLowerIntersectionBigOperatorBackToBigcapCommandShape() {
+        MathIRNode ir = parser.parseMathIR("\\bigcap_{i=1}^{n} A_i");
+
+        LaTeXNode lowered = lowerer.lower(ir);
+
+        assertNotNull(lowered);
+        assertEquals(LaTeXNode.Type.ROOT, lowered.getType());
+        assertEquals(2, lowered.getChildren().size());
+        assertEquals(LaTeXNode.Type.SUPERSCRIPT, lowered.getChildren().get(0).getType());
+        assertEquals("\\bigcap", lowered.getChildren().get(0).getChildren().get(0).getChildren().get(0).getValue());
+    }
 }

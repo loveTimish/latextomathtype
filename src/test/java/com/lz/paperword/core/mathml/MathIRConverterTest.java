@@ -52,6 +52,30 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrNormalizesBigcupLimitsToDedicatedUnionOperator() {
+        MathIRNode ir = parser.parseMathIR("\\bigcup_{i=1}^{n} A_i");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.UNDEROVER, ir.child(0).getType());
+        assertEquals(MathIRNode.Type.OPERATOR, ir.child(0).child(0).getType());
+        assertEquals("\\bigcup", ir.child(0).child(0).getMetadata("latexCommand"));
+        assertEquals("big-operator", ir.child(0).child(0).getMetadata("role"));
+        assertEquals("underover", ir.child(0).child(0).getMetadata("limitPlacement"));
+    }
+
+    @Test
+    void testParseMathIrNormalizesBigcapLimitsToDedicatedIntersectionOperator() {
+        MathIRNode ir = parser.parseMathIR("\\bigcap_{i=1}^{n} A_i");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.UNDEROVER, ir.child(0).getType());
+        assertEquals(MathIRNode.Type.OPERATOR, ir.child(0).child(0).getType());
+        assertEquals("\\bigcap", ir.child(0).child(0).getMetadata("latexCommand"));
+        assertEquals("big-operator", ir.child(0).child(0).getMetadata("role"));
+        assertEquals("underover", ir.child(0).child(0).getMetadata("limitPlacement"));
+    }
+
+    @Test
     void testParseMathIrNormalizesFencedMatrixEnvironment() {
         MathIRNode ir = parser.parseMathIR("\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}");
 
