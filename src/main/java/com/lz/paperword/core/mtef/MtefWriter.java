@@ -1301,6 +1301,7 @@ public class MtefWriter {
             case "\\cancel" -> writeStrikeNode(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0), MtefRecord.TV_ST_UP);
             case "\\bcancel" -> writeStrikeNode(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0), MtefRecord.TV_ST_DOWN);
             case "\\xcancel" -> writeStrikeNode(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0), MtefRecord.TV_ST_UP | MtefRecord.TV_ST_DOWN);
+            case "\\xrightarrow", "\\xleftarrow" -> writeArrowNode(out, node);
             case "\\vec" -> {
                 // 向量箭头装饰：生成 TM_HAT 模板 + FN_EXPAND 组合右箭头字符 (U+20D7)
                 MtefTemplateBuilder.writeVecHeader(out);
@@ -1353,6 +1354,19 @@ public class MtefWriter {
     private void writeBoxNode(ByteArrayOutputStream out, LaTeXNode content) throws IOException {
         MtefTemplateBuilder.writeBoxHeader(out);
         writeSlot(out, content);
+        out.write(MtefRecord.END);
+    }
+
+    private void writeArrowNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        boolean pointsLeft = "\\xleftarrow".equals(node.getValue());
+        LaTeXNode topAnnotation = childAt(node, 0);
+
+        MtefTemplateBuilder.writeArrowHeader(out, pointsLeft, true, false);
+        writeSlot(out, topAnnotation);
+        if (needsFullAfterSlot(topAnnotation)) {
+            out.write(MtefRecord.FULL);
+        }
+        writeCharRecord(out, MtefRecord.FN_EXPAND, pointsLeft ? 0x2190 : 0x2192);
         out.write(MtefRecord.END);
     }
 

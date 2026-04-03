@@ -137,6 +137,7 @@ public class LaTeXTokenizer {
         "arc", "overarc", "overparen", "wideparen",
         "bra", "ket", "braket",
         "overbrace", "underbrace", "overbracket", "underbracket",
+        "xrightarrow", "xleftarrow",
         "text", "mathrm", "mathbf", "mathit", "mathcal", "mathbb",
         "quad", "qquad",
         "not"

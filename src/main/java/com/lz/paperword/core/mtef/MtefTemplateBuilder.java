@@ -414,6 +414,26 @@ public class MtefTemplateBuilder {
     }
 
     /**
+     * 写入可伸缩箭头模板（TM_ARROW）的头部。
+     *
+     * <p>当前用于最小切片：单线左/右箭头，带上方标注槽位。</p>
+     */
+    public static void writeArrowHeader(ByteArrayOutputStream out,
+                                        boolean pointsLeft,
+                                        boolean hasTop,
+                                        boolean hasBottom) throws IOException {
+        int variation = MtefRecord.TV_AR_SINGLE;
+        if (hasTop) {
+            variation |= MtefRecord.TV_AR_TOP;
+        }
+        if (hasBottom) {
+            variation |= MtefRecord.TV_AR_BOTTOM;
+        }
+        variation |= pointsLeft ? MtefRecord.TV_AR_LEFT : MtefRecord.TV_AR_RIGHT;
+        writeTemplateHeader(out, MtefRecord.TM_ARROW, variation, 0x00);
+    }
+
+    /**
      * 写入向量箭头模板（TM_VEC）的头部。
      * <p>生成字符上方的右向箭头（→），用于表示向量。
      * variation = TV_VE_RIGHT 表示箭头指向右方。

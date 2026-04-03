@@ -246,6 +246,30 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteXrightarrowUsesTmArrowTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\xrightarrow{n\\to\\infty}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x24, 0x00}),
+            "xrightarrow should use tmARROW with top-slot + right-arrow variation");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0x92, 0x21}),
+            "xrightarrow should serialize the expandable right arrow glyph in FN_EXPAND");
+    }
+
+    @Test
+    void testWriteXleftarrowUsesTmArrowTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\xleftarrow{f}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x14, 0x00}),
+            "xleftarrow should use tmARROW with top-slot + left-arrow variation");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0x90, 0x21}),
+            "xleftarrow should serialize the expandable left arrow glyph in FN_EXPAND");
+    }
+
+    @Test
     void testWriteOverbraceUsesTmHBRACEWithTopVariation() {
         LaTeXNode ast = parser.parseLaTeX("\\overbrace{x+1}");
         byte[] mtef = writer.write(ast);
@@ -625,6 +649,28 @@ class MtefWriterTest {
             "IR path should keep the left Dirac slot content");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x62, 0x00}),
             "IR path should keep the right Dirac slot content");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForXrightarrowArrowTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\xrightarrow{f}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x24, 0x00}),
+            "IR path should lower xrightarrow to tmARROW");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0x92, 0x21}),
+            "IR path should keep the expandable right arrow glyph");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForXleftarrowArrowTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\xleftarrow{g}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x14, 0x00}),
+            "IR path should lower xleftarrow to tmARROW");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0x90, 0x21}),
+            "IR path should keep the expandable left arrow glyph");
     }
 
     @Test

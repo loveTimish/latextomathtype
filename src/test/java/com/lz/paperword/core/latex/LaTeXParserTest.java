@@ -571,4 +571,35 @@ class LaTeXParserTest {
         assertEquals(1, underbracket.getChildren().size());
         assertEquals("a+b+c", flatten(underbracket.getChildren().get(0)));
     }
+
+    @Test
+    void testParseXrightarrowAsDedicatedArrowCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\xrightarrow{n\\to\\infty}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode arrow = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, arrow.getType());
+        assertEquals("\\xrightarrow", arrow.getValue());
+        assertEquals("TM_ARROW", arrow.getMetadata("templateFamily"));
+        assertEquals("right", arrow.getMetadata("arrowDirection"));
+        assertEquals("top", arrow.getMetadata("annotationPlacement"));
+        assertEquals(1, arrow.getChildren().size());
+        assertEquals("n\\to\\infty", flatten(arrow.getChildren().get(0)));
+    }
+
+    @Test
+    void testParseXleftarrowAsDedicatedArrowCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\xleftarrow{f}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode arrow = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, arrow.getType());
+        assertEquals("\\xleftarrow", arrow.getValue());
+        assertEquals("TM_ARROW", arrow.getMetadata("templateFamily"));
+        assertEquals("left", arrow.getMetadata("arrowDirection"));
+        assertEquals(1, arrow.getChildren().size());
+        assertEquals("f", flatten(arrow.getChildren().get(0)));
+    }
 }

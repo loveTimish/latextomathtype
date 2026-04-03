@@ -29,6 +29,7 @@ public class MathIRLowerer {
             case OVER -> lowerOver(node);
             case UNDEROVER -> lowerUnderOver(node);
             case FENCE -> lowerFence(node);
+            case ARROW -> lowerArrow(node);
             case HBRACE, HBRACK -> lowerHorizontalFence(node);
             case DIRAC -> lowerDirac(node);
             case ARC -> lowerArc(node);
@@ -199,6 +200,21 @@ public class MathIRLowerer {
         fence.setMetadata("rightDelimiter", close);
         fence.addChild(lowerArgument(node.child(0)));
         return fence;
+    }
+
+    private LaTeXNode lowerArrow(MathIRNode node) {
+        String command = node.getMetadata("latexCommand");
+        if (command == null || command.isBlank()) {
+            command = "left".equals(node.getMetadata("direction")) ? "\\xleftarrow" : "\\xrightarrow";
+        }
+        LaTeXNode arrow = new LaTeXNode(LaTeXNode.Type.COMMAND, command);
+        copyMetadata(node, arrow);
+        arrow.setMetadata("templateFamily", "TM_ARROW");
+        arrow.setMetadata("arrowDirection", "left".equals(node.getMetadata("direction")) ? "left" : "right");
+        arrow.setMetadata("arrowVariant", node.getMetadata("variant"));
+        arrow.setMetadata("annotationPlacement", "top");
+        arrow.addChild(lowerArgument(node.child(0)));
+        return arrow;
     }
 
     private LaTeXNode lowerArc(MathIRNode node) {

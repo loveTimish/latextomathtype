@@ -149,6 +149,9 @@ public class MathIRConverter {
         if (isHorizontalFenceCommand(command)) {
             return convertHorizontalFenceNode(node, null);
         }
+        if ("\\xrightarrow".equals(command) || "\\xleftarrow".equals(command)) {
+            return convertArrowNode(node, command);
+        }
         if ("\\bra".equals(command) || "\\ket".equals(command) || "\\braket".equals(command)) {
             return convertDiracNode(node, command);
         }
@@ -234,6 +237,18 @@ public class MathIRConverter {
         fence.addChild(convertArgument(childAt(node, 0)));
         fence.addChild(convertArgument(annotation));
         return fence;
+    }
+
+    private MathIRNode convertArrowNode(LaTeXNode node, String command) {
+        MathIRNode arrow = new MathIRNode(MathIRNode.Type.ARROW);
+        copyMetadata(node, arrow);
+        arrow.setMetadata("latexCommand", command);
+        arrow.setMetadata("direction", "\\xleftarrow".equals(command) ? "left" : "right");
+        arrow.setMetadata("variant", firstNonBlank(node.getMetadata("arrowVariant"), "single"));
+        arrow.setMetadata("topPresent", "true");
+        arrow.setMetadata("bottomPresent", "false");
+        arrow.addChild(convertArgument(childAt(node, 0)));
+        return arrow;
     }
 
     private MathIRNode convertDiracNode(LaTeXNode node, String command) {

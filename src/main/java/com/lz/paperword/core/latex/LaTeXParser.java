@@ -341,6 +341,7 @@ public class LaTeXParser {
                  "\\bra", "\\ket",
                  "\\overbrace", "\\underbrace", "\\overbracket", "\\underbracket",
                  "\\boxed", "\\cancel", "\\bcancel", "\\xcancel" -> parseUnaryCommand(stream, cmd);
+            case "\\xrightarrow", "\\xleftarrow" -> parseExtensibleArrowCommand(stream, cmd);
             case "\\braket" -> parseBraketCommand(stream, cmd);
             case "\\text", "\\mathrm", "\\mathbf", "\\mathit",
                  "\\mathcal", "\\mathbb" -> parseTextCommand(stream, cmd);
@@ -858,6 +859,22 @@ public class LaTeXParser {
             right.addChild(argument.getChildren().get(index));
         }
         return new DiracSlots(left, right);
+    }
+
+    /**
+     * 解析最小切片的可伸缩箭头命令（\xrightarrow / \xleftarrow）。
+     *
+     * <p>当前只支持最清晰的一刀：单个必需参数作为箭头上方标注，
+     * 暂不扩展到底部可选标注和双向/双线/鱼叉等其它 arrow family。</p>
+     */
+    private LaTeXNode parseExtensibleArrowCommand(TokenStream stream, String cmd) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.COMMAND, cmd);
+        node.setMetadata("templateFamily", "TM_ARROW");
+        node.setMetadata("arrowDirection", "\\xleftarrow".equals(cmd) ? "left" : "right");
+        node.setMetadata("arrowVariant", "single");
+        node.setMetadata("annotationPlacement", "top");
+        node.addChild(parseRequiredGroup(stream));
+        return node;
     }
 
     /**

@@ -311,6 +311,26 @@ public final class MtefRecord {
     /** 双横线（如双下划线） */
     public static final int TV_BAR_DOUBLE = 0x0001;
 
+    // --- 箭头变体（Arrow variations）---
+    /** 单线箭头 */
+    public static final int TV_AR_SINGLE = 0x0000;
+    /** 双线箭头 */
+    public static final int TV_AR_DOUBLE = 0x0001;
+    /** 鱼叉箭头 */
+    public static final int TV_AR_HARPOON = 0x0002;
+    /** 存在上方标注槽位 */
+    public static final int TV_AR_TOP = 0x0004;
+    /** 存在下方标注槽位 */
+    public static final int TV_AR_BOTTOM = 0x0008;
+    /** 左向单线箭头 / 大线上小线（双线或鱼叉时） */
+    public static final int TV_AR_LEFT = 0x0010;
+    /** 右向单线箭头 / 小线上大线（双线或鱼叉时） */
+    public static final int TV_AR_RIGHT = 0x0020;
+    /** 双线/鱼叉时的大线上小线别名 */
+    public static final int TV_AR_LOS = TV_AR_LEFT;
+    /** 双线/鱼叉时的小线上大线别名 */
+    public static final int TV_AR_SOL = TV_AR_RIGHT;
+
     // --- 积分变体（Integral variations）---
     /** 单重积分 ∫ */
     public static final int TV_INT_1       = 0x0001;

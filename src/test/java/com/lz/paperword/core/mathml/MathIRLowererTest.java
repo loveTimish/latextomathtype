@@ -50,4 +50,32 @@ class MathIRLowererTest {
         assertEquals("|", lowered.getChildren().get(0).getMetadata("middleDelimiter"));
         assertEquals(2, lowered.getChildren().get(0).getChildren().size());
     }
+
+    @Test
+    void testLowerXrightarrowArrowNodeBackToDedicatedCommand() {
+        MathIRNode ir = parser.parseMathIR("\\xrightarrow{f}");
+
+        LaTeXNode lowered = lowerer.lower(ir);
+
+        assertEquals(LaTeXNode.Type.ROOT, lowered.getType());
+        assertEquals(1, lowered.getChildren().size());
+        assertEquals(LaTeXNode.Type.COMMAND, lowered.getChildren().get(0).getType());
+        assertEquals("\\xrightarrow", lowered.getChildren().get(0).getValue());
+        assertEquals("TM_ARROW", lowered.getChildren().get(0).getMetadata("templateFamily"));
+        assertEquals(1, lowered.getChildren().get(0).getChildren().size());
+    }
+
+    @Test
+    void testLowerXleftarrowArrowNodeBackToDedicatedCommand() {
+        MathIRNode ir = parser.parseMathIR("\\xleftarrow{g}");
+
+        LaTeXNode lowered = lowerer.lower(ir);
+
+        assertEquals(LaTeXNode.Type.ROOT, lowered.getType());
+        assertEquals(1, lowered.getChildren().size());
+        assertEquals(LaTeXNode.Type.COMMAND, lowered.getChildren().get(0).getType());
+        assertEquals("\\xleftarrow", lowered.getChildren().get(0).getValue());
+        assertEquals("left", lowered.getChildren().get(0).getMetadata("arrowDirection"));
+        assertEquals(1, lowered.getChildren().get(0).getChildren().size());
+    }
 }

@@ -32,6 +32,7 @@ public class MathIRNode {
         OVER,
         UNDEROVER,
         FENCE,
+        ARROW,
         HBRACE,
         HBRACK,
         DIRAC,
