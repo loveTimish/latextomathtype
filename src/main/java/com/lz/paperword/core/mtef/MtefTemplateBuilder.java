@@ -178,6 +178,34 @@ public class MtefTemplateBuilder {
         writeTemplateHeader(out, MtefRecord.TM_SUBSUP, 0x00, 0x00);
     }
 
+    /**
+     * 写入“前置上标”模板头部。
+     *
+     * <p>在 MTEF v5 官方规范中，左侧脚本不再使用旧版 v3/v4 的 tmLSCRIPT(44) 选择器，
+     * 而是复用 TM_SUP / TM_SUB / TM_SUBSUP，并通过 {@link MtefRecord#TV_SU_PRECEDES}
+     * 变体位声明“script precedes scripted item, else follows”。</p>
+     *
+     * <p>调用方仍需按现有 TM_SUP 约定写入 slot：NULL base 占位 + 上标内容；
+     * 只是“被附着的基底”将出现在模板之后，而不是之前。</p>
+     */
+    public static void writeLeadingSuperscriptHeader(ByteArrayOutputStream out) throws IOException {
+        writeTemplateHeader(out, MtefRecord.TM_SUP, MtefRecord.TV_SU_PRECEDES, 0x00);
+    }
+
+    /**
+     * 写入“前置下标”模板头部（MTEF v5：TM_SUB + TV_SU_PRECEDES）。
+     */
+    public static void writeLeadingSubscriptHeader(ByteArrayOutputStream out) throws IOException {
+        writeTemplateHeader(out, MtefRecord.TM_SUB, MtefRecord.TV_SU_PRECEDES, 0x00);
+    }
+
+    /**
+     * 写入“前置上下标”模板头部（MTEF v5：TM_SUBSUP + TV_SU_PRECEDES）。
+     */
+    public static void writeLeadingSubSuperscriptHeader(ByteArrayOutputStream out) throws IOException {
+        writeTemplateHeader(out, MtefRecord.TM_SUBSUP, MtefRecord.TV_SU_PRECEDES, 0x00);
+    }
+
     // ===== 大型运算符模板（Big Operators）=====
 
     /**

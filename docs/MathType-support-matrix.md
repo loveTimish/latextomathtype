@@ -42,9 +42,9 @@ This file is generated from the current codebase and then manually curated as im
 | `TM_HBRACE` | 24 | implemented | `writeHBraceHeader` | `writeHorizontalBrace (\overbrace / \underbrace)` |
 | `TM_HBRACK` | 25 | implemented | `writeHBrackHeader` | `writeHorizontalBracket (\overbracket / \underbracket)` |
 | `TM_LDIV` | 26 | implemented | `writeLongDivisionHeader` | `writeLongDivisionNode` |
-| `TM_SUB` | 27 | implemented | `writeSubscriptHeader` | `writeSubscriptNode / writeSupSubAttachment` |
-| `TM_SUP` | 28 | implemented | `writeSuperscriptHeader` | `writeSuperscriptNode / writeSupSubAttachment` |
-| `TM_SUBSUP` | 29 | implemented | `writeSubSuperscriptHeader` | `writeSuperscriptNode / writeSupSubAttachment` |
+| `TM_SUB` | 27 | implemented | `writeSubscriptHeader` | `writeSubscriptNode / writeSupSubAttachment / writeLeadingScriptAttachment` |
+| `TM_SUP` | 28 | implemented | `writeSuperscriptHeader` | `writeSuperscriptNode / writeSupSubAttachment / writeLeadingScriptAttachment` |
+| `TM_SUBSUP` | 29 | implemented | `writeSubSuperscriptHeader` | `writeSuperscriptNode / writeSupSubAttachment / writeLeadingScriptAttachment` |
 | `TM_DIRAC` | 30 | implemented | `writeDiracHeader` | `writeDiracNode` (`\\bra` / `\\ket` / `\\braket`) |
 | `TM_VEC` | 31 | implemented | `writeVecHeader` | `writeCommandNode` |
 | `TM_TILDE` | 32 | implemented | `writeTildeHeader` | `writeCommandNode` |
@@ -59,4 +59,5 @@ This file is generated from the current codebase and then manually curated as im
 - `implemented` means the repository contains both a template builder helper and an explicit writer path using that template family.
 - `builder-only` means helper code exists but no explicit writer use was mapped in this first pass.
 - `declared-only` means the official template constant exists in `MtefRecord`, but no builder/writer path was found yet.
+- Left-script / prescript input such as `{}^{a}x` is emitted in **MTEF v5 form** via `TM_SUB` / `TM_SUP` / `TM_SUBSUP` plus `TV_SU_PRECEDES`, rather than the legacy v3/v4 `TM_LSCRIPT(44)` selector.
 - This matrix measures **code-path existence**, not semantic completeness. For example, integrals may be implemented while still missing full variation coverage (double/triple/loop).

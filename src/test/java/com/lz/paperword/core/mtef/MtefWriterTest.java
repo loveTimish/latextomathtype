@@ -1054,6 +1054,57 @@ class MtefWriterTest {
         assertTrue(digitStream.contains("5"), "显式商值应被写出");
     }
 
+    @Test
+    void testWriteLeadingSuperscriptUsesPrecedesVariation() {
+        LaTeXNode ast = parser.parseLaTeX("{}^{a}x");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] tmpl = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUP, 0x01, 0x00};
+        byte[] xChar = new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x78, 0x00};
+        assertTrue(containsBytes(mtef, tmpl), "leading superscript should use tmSUP + tvSU_PRECEDES");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LSCRIPT, 0x00, 0x00}),
+            "v5 stream should not rely on legacy tmLSCRIPT selector");
+        assertTrue(indexOfBytes(mtef, tmpl) < indexOfBytes(mtef, xChar),
+            "pre-script template must appear before the scripted item");
+    }
+
+    @Test
+    void testWriteLeadingSubscriptUsesPrecedesVariation() {
+        LaTeXNode ast = parser.parseLaTeX("{}_{i}x");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] tmpl = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUB, 0x01, 0x00};
+        byte[] xChar = new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x78, 0x00};
+        assertTrue(containsBytes(mtef, tmpl), "leading subscript should use tmSUB + tvSU_PRECEDES");
+        assertTrue(indexOfBytes(mtef, tmpl) < indexOfBytes(mtef, xChar),
+            "pre-script template must appear before the scripted item");
+    }
+
+    @Test
+    void testWriteLeadingSubSupUsesPrecedesVariation() {
+        LaTeXNode ast = parser.parseLaTeX("{}_{i}^{n}x");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] tmpl = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUBSUP, 0x01, 0x00};
+        byte[] xChar = new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x78, 0x00};
+        assertTrue(containsBytes(mtef, tmpl), "leading sub/sup should use tmSUBSUP + tvSU_PRECEDES");
+        assertTrue(indexOfBytes(mtef, tmpl) < indexOfBytes(mtef, xChar),
+            "combined pre-script template must appear before the scripted item");
+    }
+
+    @Test
+    void testWriteLeadingSupSubReversedSourceOrderStillUsesPrecedesVariation() {
+        LaTeXNode ast = parser.parseLaTeX("{}^{n}_{i}x");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUBSUP, 0x01, 0x00}),
+            "{}^{n}_{i}x should normalize to the same tmSUBSUP + tvSU_PRECEDES encoding");
+    }
+
     private boolean containsRecord(byte[] bytes, int recordType) {
         for (int i = 12; i < bytes.length; i++) {
             if ((bytes[i] & 0xFF) == recordType) {
@@ -1064,6 +1115,10 @@ class MtefWriterTest {
     }
 
     private boolean containsBytes(byte[] bytes, byte[] needle) {
+        return indexOfBytes(bytes, needle) >= 0;
+    }
+
+    private int indexOfBytes(byte[] bytes, byte[] needle) {
         outer:
         for (int i = 0; i <= bytes.length - needle.length; i++) {
             for (int j = 0; j < needle.length; j++) {
@@ -1071,9 +1126,9 @@ class MtefWriterTest {
                     continue outer;
                 }
             }
-            return true;
+            return i;
         }
-        return false;
+        return -1;
     }
 
     private boolean containsAscii(byte[] bytes, String needle) {

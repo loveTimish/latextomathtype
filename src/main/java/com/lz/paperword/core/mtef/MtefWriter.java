@@ -876,6 +876,20 @@ public class MtefWriter {
                 return; // 大算子消费了所有剩余兄弟节点，直接返回
             }
 
+            // ========== 左侧上下标（leading scripts / prescripts）检测 ==========
+            // 形如 {}^{a}x、{}_{i}x、{}_{i}^{n}x。对 MTEF v5，优先使用
+            // TM_SUB / TM_SUP / TM_SUBSUP + TV_SU_PRECEDES，而不是旧版 v3/v4 的 tmLSCRIPT(44)。
+            LeadingScriptInfo leadingScript = extractLeadingScript(child);
+            if (leadingScript != null && i + 1 < nodes.size()) {
+                writeLeadingScriptAttachment(out, leadingScript);
+                writeNode(out, nodes.get(i + 1)); // scripted item 紧随模板出现
+                if (i + 1 < nodes.size() - 1) {
+                    out.write(MtefRecord.FULL);
+                }
+                i++; // 连同被附着的基底节点一起消费
+                continue;
+            }
+
             // ========== 括号表达式检测 ==========
             // 检测 '(' 或 '[' 开头的括号对，匹配对应的 ')' 或 ']'。
             // MathType 要求括号内容使用 TM_PAREN / TM_BRACK fence 模板。
@@ -940,6 +954,81 @@ public class MtefWriter {
                 default -> false;
             };
         };
+    }
+
+    /**
+     * leading scripts（左侧上下标 / prescripts）的归一化视图。
+     *
+     * @param lower 下标内容，可为 null
+     * @param upper 上标内容，可为 null
+     */
+    private record LeadingScriptInfo(LaTeXNode lower, LaTeXNode upper) {}
+
+    /**
+     * 提取形如 {}^{a}、{}_{i}、{}_{i}^{n}、{}^{n}_{i} 的“空基底 + 脚本”模式。
+     * 这类结构在 MTEF v5 中应编码为 tvSU_PRECEDES 变体，并让真实基底作为后继兄弟节点出现。
+     */
+    private LeadingScriptInfo extractLeadingScript(LaTeXNode node) {
+        if (node == null) {
+            return null;
+        }
+        if (node.getType() == LaTeXNode.Type.SUPERSCRIPT) {
+            LaTeXNode base = childAt(node, 0);
+            LaTeXNode upper = childAt(node, 1);
+            if (isExplicitEmptyBase(base)) {
+                return new LeadingScriptInfo(null, upper);
+            }
+            if (base != null && base.getType() == LaTeXNode.Type.SUBSCRIPT && isExplicitEmptyBase(childAt(base, 0))) {
+                return new LeadingScriptInfo(childAt(base, 1), upper);
+            }
+        }
+        if (node.getType() == LaTeXNode.Type.SUBSCRIPT) {
+            LaTeXNode base = childAt(node, 0);
+            LaTeXNode lower = childAt(node, 1);
+            if (isExplicitEmptyBase(base)) {
+                return new LeadingScriptInfo(lower, null);
+            }
+            if (base != null && base.getType() == LaTeXNode.Type.SUPERSCRIPT && isExplicitEmptyBase(childAt(base, 0))) {
+                return new LeadingScriptInfo(lower, childAt(base, 1));
+            }
+        }
+        return null;
+    }
+
+    private boolean isExplicitEmptyBase(LaTeXNode node) {
+        return node != null
+            && node.getType() == LaTeXNode.Type.GROUP
+            && node.getChildren().isEmpty();
+    }
+
+    private void writeLeadingScriptAttachment(ByteArrayOutputStream out, LeadingScriptInfo leadingScript) throws IOException {
+        LaTeXNode lower = leadingScript.lower();
+        LaTeXNode upper = leadingScript.upper();
+
+        if (lower != null && upper != null) {
+            MtefTemplateBuilder.writeLeadingSubSuperscriptHeader(out);
+            out.write(MtefRecord.SUB);
+            writeNullLine(out);
+            writeSlot(out, lower);
+            writeSlot(out, upper);
+            out.write(MtefRecord.END);
+            return;
+        }
+        if (lower != null) {
+            MtefTemplateBuilder.writeLeadingSubscriptHeader(out);
+            out.write(MtefRecord.SUB);
+            writeSlot(out, lower);
+            writeNullLine(out);
+            out.write(MtefRecord.END);
+            return;
+        }
+        if (upper != null) {
+            MtefTemplateBuilder.writeLeadingSuperscriptHeader(out);
+            out.write(MtefRecord.SUB);
+            writeNullLine(out);
+            writeSlot(out, upper);
+            out.write(MtefRecord.END);
+        }
     }
 
     /**
