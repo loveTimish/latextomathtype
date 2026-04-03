@@ -1335,6 +1335,7 @@ public class MtefWriter {
             }
             case "\\overbrace", "\\underbrace" -> writeHorizontalBrace(out, node);
             case "\\overbracket", "\\underbracket" -> writeHorizontalBracket(out, node);
+            case "\\bra", "\\ket" -> writeDiracNode(out, node);
             default -> {
                 // 4. 数学函数名（如 \sin, \cos, \log）→ 使用 FN_FUNCTION 字体逐字符写入
                 if (cmd.startsWith("\\")) {
@@ -1417,6 +1418,40 @@ public class MtefWriter {
         }
 
         writeCharRecord(out, MtefRecord.FN_EXPAND, onTop ? topCharCode : bottomCharCode);
+        out.write(MtefRecord.END);
+    }
+
+    /**
+     * 写入 Dirac 记号节点（\bra / \ket），使用 TM_DIRAC 模板结构。
+     * 当前仅支持单侧最小切片：
+     * bra  = left slot  + ⟨ + |
+     * ket  = right slot + | + ⟩
+     */
+    private void writeDiracNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        boolean hasLeft = "\\bra".equals(node.getValue());
+        boolean hasRight = "\\ket".equals(node.getValue());
+        LaTeXNode content = node.getChildren().isEmpty() ? null : node.getChildren().get(0);
+
+        MtefTemplateBuilder.writeDiracHeader(out, hasLeft, hasRight);
+        if (hasLeft) {
+            writeSlot(out, content);
+            if (needsFullAfterSlot(content)) {
+                out.write(MtefRecord.FULL);
+            }
+        }
+        if (hasRight) {
+            writeSlot(out, content);
+            if (needsFullAfterSlot(content)) {
+                out.write(MtefRecord.FULL);
+            }
+        }
+        if (hasLeft) {
+            writeCharRecord(out, MtefRecord.FN_EXPAND, 0x27E8);
+        }
+        writeCharRecord(out, MtefRecord.FN_EXPAND, '|');
+        if (hasRight) {
+            writeCharRecord(out, MtefRecord.FN_EXPAND, 0x27E9);
+        }
         out.write(MtefRecord.END);
     }
 

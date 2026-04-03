@@ -34,6 +34,7 @@ public class MathIRNode {
         FENCE,
         HBRACE,
         HBRACK,
+        DIRAC,
         ARC,
         ENCLOSURE,
         TABLE,

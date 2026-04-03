@@ -198,6 +198,34 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteBraUsesTmDiracWithLeftVariation() {
+        LaTeXNode ast = parser.parseLaTeX("\\bra{\\psi}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_DIRAC, 0x01, 0x00}),
+            "bra should use tmDIRAC with left slice variation");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE8, 0x27}),
+            "bra should write U+27E8 left angle bracket with FN_EXPAND font");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x7C, 0x00}),
+            "bra should write the Dirac vertical bar with FN_EXPAND font");
+    }
+
+    @Test
+    void testWriteKetUsesTmDiracWithRightVariation() {
+        LaTeXNode ast = parser.parseLaTeX("\\ket{\\psi}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_DIRAC, 0x02, 0x00}),
+            "ket should use tmDIRAC with right slice variation");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x7C, 0x00}),
+            "ket should write the Dirac vertical bar with FN_EXPAND font");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE9, 0x27}),
+            "ket should write U+27E9 right angle bracket with FN_EXPAND font");
+    }
+
+    @Test
     void testWriteOverbraceUsesTmHBRACEWithTopVariation() {
         LaTeXNode ast = parser.parseLaTeX("\\overbrace{x+1}");
         byte[] mtef = writer.write(ast);
@@ -505,6 +533,28 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARC, 0x00, 0x00}),
             "IR path should lower wideparen to tmARC");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForBraDiracTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\bra{\\psi}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_DIRAC, 0x01, 0x00}),
+            "IR path should lower bra to tmDIRAC left slice");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE8, 0x27}),
+            "IR path should keep the left angle bracket character");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForKetDiracTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\ket{\\psi}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_DIRAC, 0x02, 0x00}),
+            "IR path should lower ket to tmDIRAC right slice");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE9, 0x27}),
+            "IR path should keep the right angle bracket character");
     }
 
     @Test

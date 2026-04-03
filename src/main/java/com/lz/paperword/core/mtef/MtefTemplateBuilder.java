@@ -467,4 +467,24 @@ public class MtefTemplateBuilder {
         int variation = onTop ? MtefRecord.TV_HB_TOP : 0x0000;
         writeTemplateHeader(out, MtefRecord.TM_HBRACK, variation, 0x00);
     }
+
+    /**
+     * 写入 Dirac 记号模板（TM_DIRAC）的头部。
+     * <p>最小切片仅使用单侧槽位：bra = left slot + ⟨|，ket = right slot + |⟩。</p>
+     *
+     * @param out 输出字节流
+     * @param hasLeft 是否存在左侧 bra 槽位
+     * @param hasRight 是否存在右侧 ket 槽位
+     * @throws IOException 写入异常
+     */
+    public static void writeDiracHeader(ByteArrayOutputStream out, boolean hasLeft, boolean hasRight) throws IOException {
+        int variation = 0x0000;
+        if (hasLeft) {
+            variation |= MtefRecord.TV_DI_LEFT;
+        }
+        if (hasRight) {
+            variation |= MtefRecord.TV_DI_RIGHT;
+        }
+        writeTemplateHeader(out, MtefRecord.TM_DIRAC, variation, 0x00);
+    }
 }

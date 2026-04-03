@@ -135,6 +135,7 @@ public class LaTeXTokenizer {
         "bigcup", "bigcap", "bigvee", "bigwedge",
         "overline", "underline", "hat", "tilde", "vec", "bar", "dot",
         "arc", "overarc", "overparen", "wideparen",
+        "bra", "ket",
         "overbrace", "underbrace", "overbracket", "underbracket",
         "text", "mathrm", "mathbf", "mathit", "mathcal", "mathbb",
         "quad", "qquad",

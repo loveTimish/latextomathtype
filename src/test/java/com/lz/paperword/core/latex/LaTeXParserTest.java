@@ -480,6 +480,32 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseBraAsUnaryCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\bra{\\psi}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode bra = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, bra.getType());
+        assertEquals("\\bra", bra.getValue());
+        assertEquals(1, bra.getChildren().size());
+        assertEquals("\\psi", bra.getChildren().get(0).getChildren().get(0).getValue());
+    }
+
+    @Test
+    void testParseKetAsUnaryCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\ket{\\psi}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode ket = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, ket.getType());
+        assertEquals("\\ket", ket.getValue());
+        assertEquals(1, ket.getChildren().size());
+        assertEquals("\\psi", ket.getChildren().get(0).getChildren().get(0).getValue());
+    }
+
+    @Test
     void testParseOverbraceAsUnaryCommand() {
         LaTeXNode ast = parser.parseLaTeX("\\overbrace{a+b+c}");
         assertNotNull(ast);

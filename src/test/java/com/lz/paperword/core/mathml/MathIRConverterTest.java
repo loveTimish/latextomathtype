@@ -193,6 +193,36 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrNormalizesBraToDiracLeftSlice() {
+        MathIRNode ir = parser.parseMathIR("\\bra{\\psi}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.DIRAC, ir.child(0).getType());
+        assertEquals("\\bra", ir.child(0).getMetadata("latexCommand"));
+        assertEquals("true", ir.child(0).getMetadata("leftPresent"));
+        assertEquals("false", ir.child(0).getMetadata("rightPresent"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+        assertEquals(MathIRNode.Type.IDENT, ir.child(0).child(0).child(0).getType());
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(1).getType());
+        assertEquals(0, ir.child(0).child(1).getChildren().size());
+    }
+
+    @Test
+    void testParseMathIrNormalizesKetToDiracRightSlice() {
+        MathIRNode ir = parser.parseMathIR("\\ket{\\psi}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.DIRAC, ir.child(0).getType());
+        assertEquals("\\ket", ir.child(0).getMetadata("latexCommand"));
+        assertEquals("false", ir.child(0).getMetadata("leftPresent"));
+        assertEquals("true", ir.child(0).getMetadata("rightPresent"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+        assertEquals(0, ir.child(0).child(0).getChildren().size());
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(1).getType());
+        assertEquals(MathIRNode.Type.IDENT, ir.child(0).child(1).child(0).getType());
+    }
+
+    @Test
     void testParseMathIrNormalizesOverbraceWithNoAnnotation() {
         MathIRNode ir = parser.parseMathIR("\\overbrace{x+y}");
 

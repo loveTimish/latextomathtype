@@ -149,6 +149,9 @@ public class MathIRConverter {
         if (isHorizontalFenceCommand(command)) {
             return convertHorizontalFenceNode(node, null);
         }
+        if ("\\bra".equals(command) || "\\ket".equals(command)) {
+            return convertDiracNode(node, command);
+        }
         if (isEnclosureCommand(command)) {
             return convertEnclosureNode(node, command);
         }
@@ -231,6 +234,18 @@ public class MathIRConverter {
         fence.addChild(convertArgument(childAt(node, 0)));
         fence.addChild(convertArgument(annotation));
         return fence;
+    }
+
+    private MathIRNode convertDiracNode(LaTeXNode node, String command) {
+        MathIRNode dirac = new MathIRNode(MathIRNode.Type.DIRAC);
+        copyMetadata(node, dirac);
+        dirac.setMetadata("latexCommand", command);
+        boolean isBra = "\\bra".equals(command);
+        dirac.setMetadata("leftPresent", Boolean.toString(isBra));
+        dirac.setMetadata("rightPresent", Boolean.toString(!isBra));
+        dirac.addChild(convertArgument(isBra ? childAt(node, 0) : null));
+        dirac.addChild(convertArgument(isBra ? null : childAt(node, 0)));
+        return dirac;
     }
 
     private MathIRNode convertFractionNode(LaTeXNode node) {

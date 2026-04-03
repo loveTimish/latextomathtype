@@ -352,6 +352,12 @@ public final class MtefRecord {
     /** 大括号在上方（否则在下方） */
     public static final int TV_HB_TOP = 0x0001;
 
+    // --- Dirac 记号变体（Dirac variations）---
+    /** 存在左侧 bra 部分 */
+    public static final int TV_DI_LEFT  = 0x0001;
+    /** 存在右侧 ket 部分 */
+    public static final int TV_DI_RIGHT = 0x0002;
+
     // ======================== 修饰类型（Embellishment Types）========================
     // 修饰（Embellishment）是附加在字符上方或下方的装饰性标记。
     // 在 MTEF 中，修饰记录跟在被修饰的 CHAR 记录之后。

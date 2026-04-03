@@ -30,6 +30,7 @@ public class MathIRLowerer {
             case UNDEROVER -> lowerUnderOver(node);
             case FENCE -> lowerFence(node);
             case HBRACE, HBRACK -> lowerHorizontalFence(node);
+            case DIRAC -> lowerDirac(node);
             case ARC -> lowerArc(node);
             case ENCLOSURE -> lowerEnclosure(node);
             case TABLE -> lowerContainer(node, LaTeXNode.Type.ARRAY);
@@ -235,6 +236,28 @@ public class MathIRLowerer {
         }
         fence.setMetadata("placement", node.getMetadata("placement"));
         return fence;
+    }
+
+    private LaTeXNode lowerDirac(MathIRNode node) {
+        MathIRNode left = node.child(0);
+        MathIRNode right = node.child(1);
+        boolean hasLeft = Boolean.parseBoolean(node.getMetadata("leftPresent")) || hasMeaningfulContent(left);
+        boolean hasRight = Boolean.parseBoolean(node.getMetadata("rightPresent")) || hasMeaningfulContent(right);
+        if (hasLeft && hasRight) {
+            throw new UnsupportedOperationException(buildUnsupportedMessage(node));
+        }
+        String command = node.getMetadata("latexCommand");
+        if (command == null || command.isBlank()) {
+            command = hasLeft ? "\\bra" : "\\ket";
+        }
+        LaTeXNode dirac = new LaTeXNode(LaTeXNode.Type.COMMAND, command);
+        copyMetadata(node, dirac);
+        if (hasLeft) {
+            dirac.addChild(lowerArgument(left));
+        } else if (hasRight) {
+            dirac.addChild(lowerArgument(right));
+        }
+        return dirac;
     }
 
     private LaTeXNode lowerLongDivision(MathIRNode node) {
