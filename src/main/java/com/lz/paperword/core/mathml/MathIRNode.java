@@ -32,6 +32,7 @@ public class MathIRNode {
         OVER,
         UNDEROVER,
         FENCE,
+        ENCLOSURE,
         TABLE,
         TABLE_ROW,
         TABLE_CELL,

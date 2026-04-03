@@ -128,6 +128,36 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteBoxedUsesTmBoxTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\boxed{x+1}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00}),
+            "boxed should use tmBOX with all four square sides enabled");
+    }
+
+    @Test
+    void testWriteCancelUsesTmStrikeUpVariation() {
+        LaTeXNode ast = parser.parseLaTeX("\\cancel{x}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_STRIKE, 0x02, 0x00}),
+            "cancel should use tmSTRIKE with the up-diagonal slash variation");
+    }
+
+    @Test
+    void testWriteXcancelUsesTmStrikeCrossVariation() {
+        LaTeXNode ast = parser.parseLaTeX("\\xcancel{x}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_STRIKE, 0x06, 0x00}),
+            "xcancel should use tmSTRIKE with both diagonal variations enabled");
+    }
+
+    @Test
     void testCharMapLookup() {
         MtefCharMap.CharEntry alpha = MtefCharMap.lookup("\\alpha");
         assertNotNull(alpha);
@@ -341,6 +371,17 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_DBAR, 0x01, 0x00}),
             "IR path should preserve single-sided double-bar fences");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForBoxAndStrikeEnclosures() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\boxed{\\xcancel{x}}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00}),
+            "IR path should lower boxed to tmBOX");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_STRIKE, 0x06, 0x00}),
+            "IR path should lower xcancel to tmSTRIKE with both diagonal bits");
     }
 
     @Test

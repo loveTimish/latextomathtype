@@ -275,6 +275,23 @@ public class MtefTemplateBuilder {
         writeTemplateHeader(out, MtefRecord.TM_LDIV, hasUpper ? 0x0001 : 0x0000, 0x00);
     }
 
+    // ===== 包围/删除线模板（Enclosures）=====
+
+    public static void writeStrikeHeader(ByteArrayOutputStream out, int variation) throws IOException {
+        writeTemplateHeader(out, MtefRecord.TM_STRIKE, variation, 0x00);
+    }
+
+    public static void writeBoxHeader(ByteArrayOutputStream out) throws IOException {
+        writeBoxHeader(out, MtefRecord.TV_BX_LEFT
+            | MtefRecord.TV_BX_RIGHT
+            | MtefRecord.TV_BX_TOP
+            | MtefRecord.TV_BX_BOTTOM);
+    }
+
+    public static void writeBoxHeader(ByteArrayOutputStream out, int variation) throws IOException {
+        writeTemplateHeader(out, MtefRecord.TM_BOX, variation, 0x00);
+    }
+
     // ===== 围栏/括号模板（Fences）=====
 
     /**

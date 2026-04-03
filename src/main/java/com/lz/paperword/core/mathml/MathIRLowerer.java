@@ -29,6 +29,7 @@ public class MathIRLowerer {
             case OVER -> lowerOver(node);
             case UNDEROVER -> lowerUnderOver(node);
             case FENCE -> lowerFence(node);
+            case ENCLOSURE -> lowerEnclosure(node);
             case TABLE -> lowerContainer(node, LaTeXNode.Type.ARRAY);
             case TABLE_ROW -> lowerContainer(node, LaTeXNode.Type.ROW);
             case TABLE_CELL -> lowerContainer(node, LaTeXNode.Type.CELL);
@@ -190,6 +191,23 @@ public class MathIRLowerer {
         fence.setMetadata("rightDelimiter", close);
         fence.addChild(lowerArgument(node.child(0)));
         return fence;
+    }
+
+    private LaTeXNode lowerEnclosure(MathIRNode node) {
+        String command = node.getMetadata("latexCommand");
+        if (command == null || command.isBlank()) {
+            command = switch (node.getMetadata("notation")) {
+                case "box" -> "\\boxed";
+                case "updiagonalstrike" -> "\\cancel";
+                case "downdiagonalstrike" -> "\\bcancel";
+                case "updiagonalstrike downdiagonalstrike" -> "\\xcancel";
+                default -> throw new UnsupportedOperationException(buildUnsupportedMessage(node));
+            };
+        }
+        LaTeXNode enclosure = new LaTeXNode(LaTeXNode.Type.COMMAND, command);
+        copyMetadata(node, enclosure);
+        enclosure.addChild(lowerArgument(node.child(0)));
+        return enclosure;
     }
 
     private LaTeXNode lowerLongDivision(MathIRNode node) {

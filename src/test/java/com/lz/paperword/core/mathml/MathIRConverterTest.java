@@ -61,6 +61,28 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrNormalizesBoxedEnclosure() {
+        MathIRNode ir = parser.parseMathIR("\\boxed{x+1}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.ENCLOSURE, ir.child(0).getType());
+        assertEquals("box", ir.child(0).getMetadata("notation"));
+        assertEquals("\\boxed", ir.child(0).getMetadata("latexCommand"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+    }
+
+    @Test
+    void testParseMathIrNormalizesCancelEnclosure() {
+        MathIRNode ir = parser.parseMathIR("\\xcancel{x}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.ENCLOSURE, ir.child(0).getType());
+        assertEquals("updiagonalstrike downdiagonalstrike", ir.child(0).getMetadata("notation"));
+        assertEquals("\\xcancel", ir.child(0).getMetadata("latexCommand"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+    }
+
+    @Test
     void testParseMathIrKeepsCasesStructureExplicit() {
         MathIRNode ir = parser.parseMathIR("\\begin{cases}x&1\\\\y&2\\end{cases}");
 

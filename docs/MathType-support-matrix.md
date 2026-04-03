@@ -51,8 +51,8 @@ This file is generated from the current codebase and then manually curated as im
 | `TM_HAT` | 33 | implemented | `writeHatHeader` | `writeCommandNode` |
 | `TM_ARC` | 34 | declared-only | `—` | `—` |
 | `TM_JSTATUS` | 35 | declared-only | `—` | `—` |
-| `TM_STRIKE` | 36 | declared-only | `—` | `—` |
-| `TM_BOX` | 37 | declared-only | `—` | `—` |
+| `TM_STRIKE` | 36 | implemented | `writeStrikeHeader` | `writeCommandNode` (`\\cancel` / `\\bcancel` / `\\xcancel`) |
+| `TM_BOX` | 37 | implemented | `writeBoxHeader` | `writeCommandNode` (`\\boxed`) |
 | `TM_LSCRIPT` | 44 | declared-only | `—` | `—` |
 
 ## Notes

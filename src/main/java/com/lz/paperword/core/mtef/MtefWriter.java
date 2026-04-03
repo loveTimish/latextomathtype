@@ -1294,6 +1294,10 @@ public class MtefWriter {
                     out.write(MtefRecord.END);
                 }
             }
+            case "\\boxed" -> writeBoxNode(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
+            case "\\cancel" -> writeStrikeNode(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0), MtefRecord.TV_ST_UP);
+            case "\\bcancel" -> writeStrikeNode(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0), MtefRecord.TV_ST_DOWN);
+            case "\\xcancel" -> writeStrikeNode(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0), MtefRecord.TV_ST_UP | MtefRecord.TV_ST_DOWN);
             case "\\vec" -> {
                 // 向量箭头装饰：生成 TM_HAT 模板 + FN_EXPAND 组合右箭头字符 (U+20D7)
                 MtefTemplateBuilder.writeVecHeader(out);
@@ -1337,6 +1341,18 @@ public class MtefWriter {
                 writeChildren(out, node);
             }
         }
+    }
+
+    private void writeBoxNode(ByteArrayOutputStream out, LaTeXNode content) throws IOException {
+        MtefTemplateBuilder.writeBoxHeader(out);
+        writeSlot(out, content);
+        out.write(MtefRecord.END);
+    }
+
+    private void writeStrikeNode(ByteArrayOutputStream out, LaTeXNode content, int variation) throws IOException {
+        MtefTemplateBuilder.writeStrikeHeader(out, variation);
+        writeSlot(out, content);
+        out.write(MtefRecord.END);
     }
 
     private boolean tryWriteExplicitFence(ByteArrayOutputStream out, LaTeXNode node) throws IOException {

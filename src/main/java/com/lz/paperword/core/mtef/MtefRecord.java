@@ -328,6 +328,26 @@ public final class MtefRecord {
     /** 半箭头（鱼叉形）⇀ */
     public static final int TV_VE_HARPOON = 0x0008;
 
+    // --- 删除线变体（Strike variations）---
+    /** 水平删除线 */
+    public static final int TV_ST_HORIZ = 0x0001;
+    /** 从左下到右上的斜杠（/） */
+    public static final int TV_ST_UP    = 0x0002;
+    /** 从左上到右下的反斜杠（\\） */
+    public static final int TV_ST_DOWN  = 0x0004;
+
+    // --- 方框变体（Box variations）---
+    /** 圆角边框 */
+    public static final int TV_BX_ROUND  = 0x0001;
+    /** 显示左边框 */
+    public static final int TV_BX_LEFT   = 0x0002;
+    /** 显示右边框 */
+    public static final int TV_BX_RIGHT  = 0x0004;
+    /** 显示上边框 */
+    public static final int TV_BX_TOP    = 0x0008;
+    /** 显示下边框 */
+    public static final int TV_BX_BOTTOM = 0x0010;
+
     // --- 水平大括号变体（HBrace variations）---
     /** 大括号在上方（否则在下方） */
     public static final int TV_HB_TOP = 0x0001;

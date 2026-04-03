@@ -280,6 +280,32 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseBoxedCommandAsUnaryEnclosure() {
+        LaTeXNode ast = parser.parseLaTeX("\\boxed{x+1}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode boxed = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, boxed.getType());
+        assertEquals("\\boxed", boxed.getValue());
+        assertEquals(1, boxed.getChildren().size());
+        assertEquals("x+1", flatten(boxed.getChildren().get(0)));
+    }
+
+    @Test
+    void testParseCancelCommandAsUnaryEnclosure() {
+        LaTeXNode ast = parser.parseLaTeX("\\xcancel{x+1}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode cancel = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, cancel.getType());
+        assertEquals("\\xcancel", cancel.getValue());
+        assertEquals(1, cancel.getChildren().size());
+        assertEquals("x+1", flatten(cancel.getChildren().get(0)));
+    }
+
+    @Test
     void testParseLeftRightNormalizesExtendedFenceDelimiters() {
         LaTeXNode ast = parser.parseLaTeX("\\left\\lfloor x \\right\\rceil");
         assertNotNull(ast);

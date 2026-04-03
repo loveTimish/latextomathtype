@@ -134,6 +134,9 @@ public class MathIRConverter {
         if (command.startsWith("\\left")) {
             return convertFenceNode(node);
         }
+        if (isEnclosureCommand(command)) {
+            return convertEnclosureNode(node, command);
+        }
         if (OVER_ACCENTS.contains(command)) {
             MathIRNode over = new MathIRNode(MathIRNode.Type.OVER);
             copyMetadata(node, over);
@@ -184,6 +187,15 @@ public class MathIRConverter {
         fence.setMetadata("latexCommand", node.getValue());
         fence.addChild(convertArgument(childAt(node, 0)));
         return fence;
+    }
+
+    private MathIRNode convertEnclosureNode(LaTeXNode node, String command) {
+        MathIRNode enclosure = new MathIRNode(MathIRNode.Type.ENCLOSURE);
+        copyMetadata(node, enclosure);
+        enclosure.setMetadata("latexCommand", command);
+        enclosure.setMetadata("notation", enclosureNotation(command));
+        enclosure.addChild(convertArgument(childAt(node, 0)));
+        return enclosure;
     }
 
     private MathIRNode convertFractionNode(LaTeXNode node) {
@@ -372,6 +384,23 @@ public class MathIRConverter {
             return command.substring(1);
         }
         return new String(Character.toChars(entry.mtcode()));
+    }
+
+    private boolean isEnclosureCommand(String command) {
+        return "\\boxed".equals(command)
+            || "\\cancel".equals(command)
+            || "\\bcancel".equals(command)
+            || "\\xcancel".equals(command);
+    }
+
+    private String enclosureNotation(String command) {
+        return switch (command) {
+            case "\\boxed" -> "box";
+            case "\\cancel" -> "updiagonalstrike";
+            case "\\bcancel" -> "downdiagonalstrike";
+            case "\\xcancel" -> "updiagonalstrike downdiagonalstrike";
+            default -> command;
+        };
     }
 
     private boolean isBigOperatorCommand(String command) {
