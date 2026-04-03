@@ -195,6 +195,20 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteAlignedEnvironmentWithMultipleRelationPairsAsPile() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{aligned}a&=b&c&=d\\end{aligned}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.PILE, MtefRecord.OPT_LP_RULER, 0x01, 0x02}),
+            "multi-pair aligned should still emit a ruler-backed PILE");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.RULER, 0x04, 0x02, (byte) 0xF0, 0x00, 0x03, (byte) 0xE0, 0x01, 0x02, (byte) 0xD0, 0x02, 0x03, (byte) 0xC0, 0x03}),
+            "multi-pair aligned should expose alternating right/relation tab stops for every pair");
+        assertTrue(countOccurrences(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) ((MtefRecord.FN_TEXT & 0x7F) | 0x80), 0x09, 0x00}) >= 5,
+            "multi-pair aligned should serialize one tab per column plus the closing tab");
+    }
+
+    @Test
     void testWriteCasesEnvironmentUsesLeftBraceFenceAndMatrixContent() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{cases}x&1\\\\y&2\\end{cases}");
         byte[] mtef = writer.write(ast);
@@ -253,6 +267,15 @@ class MtefWriterTest {
             "IR path should preserve aligned relation-pair semantics");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.RULER, 0x02, 0x02, (byte) 0xF0, 0x00, 0x03, (byte) 0xE0, 0x01}),
             "IR path should keep the aligned relation tab stops");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForAlignedMultipleRelationPairs() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\begin{aligned}a&=b&c&=d\\end{aligned}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.RULER, 0x04, 0x02, (byte) 0xF0, 0x00, 0x03, (byte) 0xE0, 0x01, 0x02, (byte) 0xD0, 0x02, 0x03, (byte) 0xC0, 0x03}),
+            "IR path should preserve all aligned relation-pair tab stops");
     }
 
     @Test

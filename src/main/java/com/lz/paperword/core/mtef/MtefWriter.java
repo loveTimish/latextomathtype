@@ -1697,7 +1697,7 @@ public class MtefWriter {
             writeFenceTemplate(out, new FenceSpec(MtefRecord.TM_BRACE, '{', '}', true, false), content);
             return;
         }
-        if (isAlignedRelationPairArray(node)) {
+        if (isAlignedRelationArray(node)) {
             writeAlignedRelationPile(out, node);
             return;
         }
@@ -1718,25 +1718,22 @@ public class MtefWriter {
     }
 
     private void writeAlignedRelationPile(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        int columnCount = resolveArrayColumnCount(node);
+
         out.write(MtefRecord.PILE);
         out.write(MtefRecord.OPT_LP_RULER);
         out.write(0x01);
         out.write(0x02);
-        pileRulerWriter.writeRuler(out, List.of(
-            new VerticalLayoutSpec.VerticalTabStop(0, VerticalLayoutSpec.TabStopKind.RIGHT, 240),
-            new VerticalLayoutSpec.VerticalTabStop(1, VerticalLayoutSpec.TabStopKind.RELATION, 480)
-        ));
+        pileRulerWriter.writeRuler(out, buildAlignedRelationTabStops(columnCount));
 
         for (LaTeXNode row : node.getChildren()) {
             out.write(MtefRecord.LINE);
             out.write(0x00);
-            writeTabChar(out);
-            if (!row.getChildren().isEmpty()) {
-                writeNode(out, row.getChildren().get(0));
-            }
-            writeTabChar(out);
-            if (row.getChildren().size() > 1) {
-                writeNode(out, row.getChildren().get(1));
+            for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+                writeTabChar(out);
+                if (columnIndex < row.getChildren().size()) {
+                    writeNode(out, row.getChildren().get(columnIndex));
+                }
             }
             writeTabChar(out);
             out.write(MtefRecord.END);
@@ -1744,19 +1741,33 @@ public class MtefWriter {
         out.write(MtefRecord.END);
     }
 
-    private boolean isAlignedRelationPairArray(LaTeXNode node) {
+    private List<VerticalLayoutSpec.VerticalTabStop> buildAlignedRelationTabStops(int columnCount) {
+        List<VerticalLayoutSpec.VerticalTabStop> tabStops = new ArrayList<>();
+        for (int columnIndex = 0; columnIndex < columnCount; columnIndex++) {
+            VerticalLayoutSpec.TabStopKind kind = columnIndex % 2 == 0
+                ? VerticalLayoutSpec.TabStopKind.RIGHT
+                : VerticalLayoutSpec.TabStopKind.RELATION;
+            tabStops.add(new VerticalLayoutSpec.VerticalTabStop(columnIndex, kind, (columnIndex + 1) * 240));
+        }
+        return tabStops;
+    }
+
+    private boolean isAlignedRelationArray(LaTeXNode node) {
         if (node == null || node.getType() != LaTeXNode.Type.ARRAY) {
             return false;
         }
         if (!"aligned".equals(node.getMetadata("environment"))) {
             return false;
         }
+        if (!"relation-pairs".equals(node.getMetadata("alignmentMode"))) {
+            return false;
+        }
         int columnCount = resolveArrayColumnCount(node);
-        if (columnCount != 2) {
+        if (columnCount <= 0 || (columnCount % 2) != 0) {
             return false;
         }
         for (LaTeXNode row : node.getChildren()) {
-            if (row.getChildren().size() > 2) {
+            if (row.getChildren().size() > columnCount) {
                 return false;
             }
         }
