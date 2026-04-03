@@ -45,6 +45,10 @@ public class MathIRConverter {
         "\\overbrace", "\\underbrace"
     );
 
+    private static final Set<String> HORIZONTAL_BRACKETS = Set.of(
+        "\\overbracket", "\\underbracket"
+    );
+
     private static final Set<String> SPACING_COMMANDS = Set.of(
         "\\,", "\\;", "\\:", "\\!", "\\quad", "\\qquad", "\\hspace", "\\hskip"
     );
@@ -138,8 +142,8 @@ public class MathIRConverter {
         if (command.startsWith("\\left")) {
             return convertFenceNode(node);
         }
-        if (isHorizontalBraceCommand(command)) {
-            return convertHorizontalBraceNode(node, null);
+        if (isHorizontalFenceCommand(command)) {
+            return convertHorizontalFenceNode(node, null);
         }
         if (isEnclosureCommand(command)) {
             return convertEnclosureNode(node, command);
@@ -205,15 +209,16 @@ public class MathIRConverter {
         return enclosure;
     }
 
-    private MathIRNode convertHorizontalBraceNode(LaTeXNode node, LaTeXNode annotation) {
+    private MathIRNode convertHorizontalFenceNode(LaTeXNode node, LaTeXNode annotation) {
         String command = node == null ? null : node.getValue();
-        MathIRNode hbrace = new MathIRNode(MathIRNode.Type.HBRACE);
-        copyMetadata(node, hbrace);
-        hbrace.setMetadata("latexCommand", command);
-        hbrace.setMetadata("placement", "\\overbrace".equals(command) ? "top" : "bottom");
-        hbrace.addChild(convertArgument(childAt(node, 0)));
-        hbrace.addChild(convertArgument(annotation));
-        return hbrace;
+        MathIRNode.Type type = isHorizontalBracketCommand(command) ? MathIRNode.Type.HBRACK : MathIRNode.Type.HBRACE;
+        MathIRNode fence = new MathIRNode(type);
+        copyMetadata(node, fence);
+        fence.setMetadata("latexCommand", command);
+        fence.setMetadata("placement", isTopHorizontalFence(command) ? "top" : "bottom");
+        fence.addChild(convertArgument(childAt(node, 0)));
+        fence.addChild(convertArgument(annotation));
+        return fence;
     }
 
     private MathIRNode convertFractionNode(LaTeXNode node) {
@@ -240,8 +245,8 @@ public class MathIRConverter {
         LaTeXNode baseAst = childAt(node, 0);
         LaTeXNode supAst = childAt(node, 1);
 
-        if (isHorizontalBraceScript(baseAst, true)) {
-            return convertHorizontalBraceNode(baseAst, supAst);
+        if (isHorizontalFenceScript(baseAst, true)) {
+            return convertHorizontalFenceNode(baseAst, supAst);
         }
 
         if (baseAst != null && baseAst.getType() == LaTeXNode.Type.SUBSCRIPT) {
@@ -282,8 +287,8 @@ public class MathIRConverter {
         LaTeXNode baseAst = childAt(node, 0);
         LaTeXNode subAst = childAt(node, 1);
 
-        if (isHorizontalBraceScript(baseAst, false)) {
-            return convertHorizontalBraceNode(baseAst, subAst);
+        if (isHorizontalFenceScript(baseAst, false)) {
+            return convertHorizontalFenceNode(baseAst, subAst);
         }
 
         if (baseAst != null && baseAst.getType() == LaTeXNode.Type.SUPERSCRIPT) {
@@ -423,11 +428,28 @@ public class MathIRConverter {
         return HORIZONTAL_BRACES.contains(command);
     }
 
-    private boolean isHorizontalBraceScript(LaTeXNode node, boolean overScript) {
-        return node != null
-            && node.getType() == LaTeXNode.Type.COMMAND
-            && ((overScript && "\\overbrace".equals(node.getValue()))
-            || (!overScript && "\\underbrace".equals(node.getValue())));
+    private boolean isHorizontalBracketCommand(String command) {
+        return HORIZONTAL_BRACKETS.contains(command);
+    }
+
+    private boolean isHorizontalFenceCommand(String command) {
+        return isHorizontalBraceCommand(command) || isHorizontalBracketCommand(command);
+    }
+
+    private boolean isHorizontalFenceScript(LaTeXNode node, boolean overScript) {
+        if (node == null || node.getType() != LaTeXNode.Type.COMMAND) {
+            return false;
+        }
+        String command = node.getValue();
+        return overScript ? isTopHorizontalFence(command) : isBottomHorizontalFence(command);
+    }
+
+    private boolean isTopHorizontalFence(String command) {
+        return "\\overbrace".equals(command) || "\\overbracket".equals(command);
+    }
+
+    private boolean isBottomHorizontalFence(String command) {
+        return "\\underbrace".equals(command) || "\\underbracket".equals(command);
     }
 
     private String enclosureNotation(String command) {

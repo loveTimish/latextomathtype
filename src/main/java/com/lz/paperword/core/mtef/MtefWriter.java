@@ -911,7 +911,7 @@ public class MtefWriter {
         return switch (node.getType()) {
             case SUPERSCRIPT, SUBSCRIPT, SQRT, FRACTION, LONG_DIVISION -> true;
             default -> switch (node.getValue()) {
-                case "\\overbrace", "\\underbrace" -> true;
+                case "\\overbrace", "\\underbrace", "\\overbracket", "\\underbracket" -> true;
                 default -> false;
             };
         };
@@ -1333,6 +1333,7 @@ public class MtefWriter {
                 }
             }
             case "\\overbrace", "\\underbrace" -> writeHorizontalBrace(out, node);
+            case "\\overbracket", "\\underbracket" -> writeHorizontalBracket(out, node);
             default -> {
                 // 4. 数学函数名（如 \sin, \cos, \log）→ 使用 FN_FUNCTION 字体逐字符写入
                 if (cmd.startsWith("\\")) {
@@ -1361,38 +1362,54 @@ public class MtefWriter {
 
     /**
      * 写入水平大括号节点（overbrace / underbrace），使用 TM_HBRACE 模板结构。
-     * <p>结构顺序（参考 Wiris MTEF 文档 HFenceBoxClass）：
-     * <ol>
-     *   <li>TM_HBRACE 模板头（TV_HB_TOP = 1 表示大括号在上方）</li>
-     *   <li>主内容 slot：被括住的表达式 LINE</li>
-     *   <li>标注 slot：下标/上标文字 LINE（自动缩小字号）</li>
-     *   <li>FN_EXPAND 字体的大括号字符（U+23DE 表示顶部大括号 ⏞，U+23DF 表示底部大括号 ⏟）</li>
-     *   <li>END：关闭模板</li>
-     * </ol>
      */
     private void writeHorizontalBrace(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
-        boolean isOverBrace = "\\overbrace".equals(node.getValue());
+        writeHorizontalFence(out, node,
+            "\\overbrace".equals(node.getValue()),
+            MtefRecord.TM_HBRACE,
+            0x23DE,
+            0x23DF);
+    }
+
+    /**
+     * 写入水平方括号节点（overbracket / underbracket），使用 TM_HBRACK 模板结构。
+     */
+    private void writeHorizontalBracket(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        writeHorizontalFence(out, node,
+            "\\overbracket".equals(node.getValue()),
+            MtefRecord.TM_HBRACK,
+            0x23B4,
+            0x23B5);
+    }
+
+    /**
+     * 写入水平 fence 节点（brace / bracket），使用 HFenceBoxClass 槽位顺序：
+     * main slot → small slot → expanding fence char → END。
+     */
+    private void writeHorizontalFence(ByteArrayOutputStream out,
+                                      LaTeXNode node,
+                                      boolean onTop,
+                                      int templateType,
+                                      int topCharCode,
+                                      int bottomCharCode) throws IOException {
         LaTeXNode mainContent = node.getChildren().isEmpty() ? null : node.getChildren().get(0);
         LaTeXNode annotation = node.getChildren().size() >= 2 ? node.getChildren().get(1) : null;
 
-        // 写入模板头
-        MtefTemplateBuilder.writeHBraceHeader(out, isOverBrace);
+        if (templateType == MtefRecord.TM_HBRACE) {
+            MtefTemplateBuilder.writeHBraceHeader(out, onTop);
+        } else {
+            MtefTemplateBuilder.writeHBrackHeader(out, onTop);
+        }
 
-        // 第一个 slot：主内容
         writeSlot(out, mainContent);
 
-        // 第二个 slot：标注（可选，如果存在则写入），使用 SUB 字号缩小
         if (annotation != null && !isEmptyContent(annotation)) {
             out.write(MtefRecord.SUB);
             writeSlot(out, annotation);
-            // 标注结束后需要 FULL 恢复字号，因为后面还有大括号字符
             out.write(MtefRecord.FULL);
         }
 
-        // 写入可拉伸大括号字符到 FN_EXPAND
-        int braceCode = isOverBrace ? 0x23DE : 0x23DF;
-        writeCharRecord(out, MtefRecord.FN_EXPAND, braceCode);
-
+        writeCharRecord(out, MtefRecord.FN_EXPAND, onTop ? topCharCode : bottomCharCode);
         out.write(MtefRecord.END);
     }
 

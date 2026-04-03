@@ -40,7 +40,7 @@ This file is generated from the current codebase and then manually curated as im
 | `TM_SUMOP` | 22 | declared-only | `—` | `—` |
 | `TM_LIM` | 23 | declared-only | `—` | `—` |
 | `TM_HBRACE` | 24 | implemented | `writeHBraceHeader` | `writeHorizontalBrace (\overbrace / \underbrace)` |
-| `TM_HBRACK` | 25 | implemented | `writeHBrackHeader` | `declared but not wired to default LaTeX input (reserved for horizontal square brackets)` |
+| `TM_HBRACK` | 25 | implemented | `writeHBrackHeader` | `writeHorizontalBracket (\overbracket / \underbracket)` |
 | `TM_LDIV` | 26 | implemented | `writeLongDivisionHeader` | `writeLongDivisionNode` |
 | `TM_SUB` | 27 | implemented | `writeSubscriptHeader` | `writeSubscriptNode / writeSupSubAttachment` |
 | `TM_SUP` | 28 | implemented | `writeSuperscriptHeader` | `writeSuperscriptNode / writeSupSubAttachment` |

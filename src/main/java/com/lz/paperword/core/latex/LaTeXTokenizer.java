@@ -134,7 +134,7 @@ public class LaTeXTokenizer {
         "sum", "int", "iint", "iiint", "oint", "prod", "coprod",
         "bigcup", "bigcap", "bigvee", "bigwedge",
         "overline", "underline", "hat", "tilde", "vec", "bar", "dot",
-        "overbrace", "underbrace",
+        "overbrace", "underbrace", "overbracket", "underbracket",
         "text", "mathrm", "mathbf", "mathit", "mathcal", "mathbb",
         "quad", "qquad",
         "not"

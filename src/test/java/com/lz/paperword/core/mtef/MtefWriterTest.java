@@ -188,6 +188,32 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteOverbracketUsesTmHBRACKWithTopVariation() {
+        LaTeXNode ast = parser.parseLaTeX("\\overbracket{x+1}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_HBRACK, 0x01, 0x00}),
+            "overbracket should use tmHBRACK with TV_HB_TOP variation bit set");
+        // Should contain 0x23B4 (⎴ top square bracket) in FN_EXPAND (encoded)
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xB4, 0x23}),
+            "overbracket should write U+23B4 top square bracket with FN_EXPAND font");
+    }
+
+    @Test
+    void testWriteUnderbracketUsesTmHBRACKWithNoTopVariation() {
+        LaTeXNode ast = parser.parseLaTeX("\\underbracket{x+1}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_HBRACK, 0x00, 0x00}),
+            "underbracket should use tmHBRACK with TV_HB_TOP variation bit clear");
+        // Should contain 0x23B5 (⎵ bottom square bracket) in FN_EXPAND (encoded)
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xB5, 0x23}),
+            "underbracket should write U+23B5 bottom square bracket with FN_EXPAND font");
+    }
+
+    @Test
     void testCharMapLookup() {
         MtefCharMap.CharEntry alpha = MtefCharMap.lookup("\\alpha");
         assertNotNull(alpha);
@@ -412,6 +438,17 @@ class MtefWriterTest {
             "IR path should lower boxed to tmBOX");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_STRIKE, 0x06, 0x00}),
             "IR path should lower xcancel to tmSTRIKE with both diagonal bits");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForHorizontalBracketTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\overbracket{x+1}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_HBRACK, 0x01, 0x00}),
+            "IR path should lower overbracket to tmHBRACK");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xB4, 0x23}),
+            "IR path should keep the top square bracket expandable character");
     }
 
     @Test

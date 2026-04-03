@@ -452,4 +452,30 @@ class LaTeXParserTest {
         assertEquals(1, underbrace.getChildren().size());
         assertEquals("a+b+c", flatten(underbrace.getChildren().get(0)));
     }
+
+    @Test
+    void testParseOverbracketAsUnaryCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\overbracket{a+b+c}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode overbracket = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, overbracket.getType());
+        assertEquals("\\overbracket", overbracket.getValue());
+        assertEquals(1, overbracket.getChildren().size());
+        assertEquals("a+b+c", flatten(overbracket.getChildren().get(0)));
+    }
+
+    @Test
+    void testParseUnderbracketAsUnaryCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\underbracket{a+b+c}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode underbracket = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, underbracket.getType());
+        assertEquals("\\underbracket", underbracket.getValue());
+        assertEquals(1, underbracket.getChildren().size());
+        assertEquals("a+b+c", flatten(underbracket.getChildren().get(0)));
+    }
 }

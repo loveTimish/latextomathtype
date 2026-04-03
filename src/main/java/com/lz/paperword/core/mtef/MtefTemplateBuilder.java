@@ -445,7 +445,8 @@ public class MtefTemplateBuilder {
     }
 
     /**
-     * 写入水平方括号模板（TM_HBRACK）的头部（预留占位，暂不用于默认 LaTeX 输入）。
+     * 写入水平方括号模板（TM_HBRACK）的头部。
+     * <p>生成内容上方（overbracket，⎴）或内容下方（underbracket，⎵）的水平可拉伸方括号。</p>
      * @param out 输出字节流
      * @param onTop 是否将方括号放在内容上方
      * @throws IOException 写入异常

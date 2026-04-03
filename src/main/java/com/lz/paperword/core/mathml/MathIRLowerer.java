@@ -29,7 +29,7 @@ public class MathIRLowerer {
             case OVER -> lowerOver(node);
             case UNDEROVER -> lowerUnderOver(node);
             case FENCE -> lowerFence(node);
-            case HBRACE -> lowerHorizontalBrace(node);
+            case HBRACE, HBRACK -> lowerHorizontalFence(node);
             case ENCLOSURE -> lowerEnclosure(node);
             case TABLE -> lowerContainer(node, LaTeXNode.Type.ARRAY);
             case TABLE_ROW -> lowerContainer(node, LaTeXNode.Type.ROW);
@@ -211,18 +211,18 @@ public class MathIRLowerer {
         return enclosure;
     }
 
-    private LaTeXNode lowerHorizontalBrace(MathIRNode node) {
+    private LaTeXNode lowerHorizontalFence(MathIRNode node) {
         String command = node.getMetadata("latexCommand");
-        LaTeXNode hbrace = new LaTeXNode(LaTeXNode.Type.COMMAND, command);
-        copyMetadata(node, hbrace);
-        hbrace.addChild(lowerArgument(node.child(0)));
-        // Child 1 is the annotation (subscript or superscript), if present
+        LaTeXNode fence = new LaTeXNode(LaTeXNode.Type.COMMAND, command);
+        copyMetadata(node, fence);
+        fence.addChild(lowerArgument(node.child(0)));
+        // Child 1 is the annotation (subscript or superscript), if present.
         MathIRNode annotation = node.child(1);
-        if (annotation != null && !annotation.getChildren().isEmpty()) {
-            hbrace.addChild(lowerArgument(annotation));
+        if (hasMeaningfulContent(annotation)) {
+            fence.addChild(lowerArgument(annotation));
         }
-        hbrace.setMetadata("placement", node.getMetadata("placement"));
-        return hbrace;
+        fence.setMetadata("placement", node.getMetadata("placement"));
+        return fence;
     }
 
     private LaTeXNode lowerLongDivision(MathIRNode node) {
@@ -248,6 +248,16 @@ public class MathIRLowerer {
             return group;
         }
         return lowered;
+    }
+
+    private boolean hasMeaningfulContent(MathIRNode node) {
+        if (node == null) {
+            return false;
+        }
+        if (node.getValue() != null && !node.getValue().isBlank()) {
+            return true;
+        }
+        return !node.getChildren().isEmpty();
     }
 
     private boolean isUnderOverOperator(MathIRNode node) {

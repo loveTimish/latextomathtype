@@ -173,4 +173,29 @@ class MathIRConverterTest {
         assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
         assertNotNull(ir.child(0).child(1));
     }
+
+    @Test
+    void testParseMathIrNormalizesOverbracketWithNoAnnotation() {
+        MathIRNode ir = parser.parseMathIR("\\overbracket{x+y}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.HBRACK, ir.child(0).getType());
+        assertEquals("\\overbracket", ir.child(0).getMetadata("latexCommand"));
+        assertEquals("top", ir.child(0).getMetadata("placement"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+        assertNotNull(ir.child(0).child(1));
+        assertEquals(0, ir.child(0).child(1).getChildren().size());
+    }
+
+    @Test
+    void testParseMathIrNormalizesUnderbracketWithAnnotationSubscript() {
+        MathIRNode ir = parser.parseMathIR("\\underbracket{x+y}_{i=1}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.HBRACK, ir.child(0).getType());
+        assertEquals("\\underbracket", ir.child(0).getMetadata("latexCommand"));
+        assertEquals("bottom", ir.child(0).getMetadata("placement"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+        assertNotNull(ir.child(0).child(1));
+    }
 }
