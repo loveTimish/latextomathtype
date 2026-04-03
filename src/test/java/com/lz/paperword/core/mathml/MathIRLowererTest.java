@@ -5,6 +5,7 @@ import com.lz.paperword.core.latex.LaTeXParser;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class MathIRLowererTest {
 
@@ -107,5 +108,19 @@ class MathIRLowererTest {
         assertEquals("⟦", lowered.getChildren().get(0).getMetadata("leftDelimiter"));
         assertEquals("⟧", lowered.getChildren().get(0).getMetadata("rightDelimiter"));
         assertEquals(1, lowered.getChildren().get(0).getChildren().size());
+    }
+
+    @Test
+    void testLowerCoproductBigOperatorBackToCoproductCommandShape() {
+        MathIRNode ir = parser.parseMathIR("\\coprod_{i=1}^{n} A_i");
+
+        LaTeXNode lowered = lowerer.lower(ir);
+
+        assertNotNull(lowered);
+        assertEquals(LaTeXNode.Type.ROOT, lowered.getType());
+        assertEquals(2, lowered.getChildren().size());
+        assertEquals(LaTeXNode.Type.SUPERSCRIPT, lowered.getChildren().get(0).getType());
+        assertEquals(LaTeXNode.Type.SUBSCRIPT, lowered.getChildren().get(0).getChildren().get(0).getType());
+        assertEquals("\\coprod", lowered.getChildren().get(0).getChildren().get(0).getChildren().get(0).getValue());
     }
 }

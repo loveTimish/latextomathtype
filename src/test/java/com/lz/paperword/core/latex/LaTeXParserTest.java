@@ -130,6 +130,19 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseCoproductWithLimits() {
+        LaTeXNode ast = parser.parseLaTeX("\\coprod_{i=1}^{n} A_i");
+
+        assertNotNull(ast);
+        assertEquals(2, ast.getChildren().size());
+        assertEquals(LaTeXNode.Type.SUPERSCRIPT, ast.getChildren().get(0).getType());
+
+        LaTeXNode superscript = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.SUBSCRIPT, superscript.getChildren().get(0).getType());
+        assertEquals("\\coprod", superscript.getChildren().get(0).getChildren().get(0).getValue());
+    }
+
+    @Test
     void testParseArrayForVerticalAddition() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{array}{rrrr} & 1 & 2 & 3 \\\\ + & 4 & 5 & 6 \\\\ \\hline & 5 & 7 & 9\\end{array}");
         assertNotNull(ast);

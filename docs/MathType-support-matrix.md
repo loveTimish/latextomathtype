@@ -33,7 +33,7 @@ This file is generated from the current codebase and then manually curated as im
 | `TM_INTEG` | 15 | implemented | `writeIntegralHeader` | `writeBigOpHeader (integrals)` |
 | `TM_SUM` | 16 | implemented | `writeSumHeader` | `writeBigOpHeader (sum-like fallback)` |
 | `TM_PROD` | 17 | implemented | `writeProductHeader` | `writeBigOpHeader (prod)` |
-| `TM_COPROD` | 18 | declared-only | `—` | `—` |
+| `TM_COPROD` | 18 | implemented | `writeCoproductHeader` | `writeBigOpHeader (coprod)` |
 | `TM_UNION` | 19 | declared-only | `—` | `—` |
 | `TM_INTER` | 20 | declared-only | `—` | `—` |
 | `TM_INTOP` | 21 | declared-only | `—` | `—` |

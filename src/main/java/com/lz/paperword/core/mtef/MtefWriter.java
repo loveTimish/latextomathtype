@@ -138,10 +138,15 @@ public class MtefWriter {
 
     /**
      * 求和类大算子 — 使用 TM_SUM 模板，上下限以极限（limit）形式显示在算子正上方/正下方。
-     * 包括：求和 ∑、求积 ∏、余积 ∐、大并集 ⋃、大交集 ⋂、大析取 ⋁、大合取 ⋀
+     * 包括：求和 ∑、大并集 ⋃、大交集 ⋂、大析取 ⋁、大合取 ⋀。
      */
     private static final Set<String> BIG_OP_SUM_LIKE = Set.of(
-        "\\sum", "\\prod", "\\coprod", "\\bigcup", "\\bigcap", "\\bigvee", "\\bigwedge"
+        "\\sum", "\\bigcup", "\\bigcap", "\\bigvee", "\\bigwedge"
+    );
+
+    /** 余积类大算子 — 使用 TM_COPROD 模板，而非 sum-like / prod fallback。 */
+    private static final Set<String> BIG_OP_COPROD_LIKE = Set.of(
+        "\\coprod"
     );
 
     /** 极限类算子 — 使用 TM_LIM 模板，按 summation-style 显示上下限。 */
@@ -1154,7 +1159,7 @@ public class MtefWriter {
      *
      * <p>大算子模板的 MTEF 结构：</p>
      * <pre>
-     *   TMPL header（TM_SUM / TM_INTEGRAL / TM_PRODUCT）
+     *   TMPL header（TM_SUM / TM_INTEGRAL / TM_PRODUCT / TM_COPROD）
      *     LINE                          ← slot 1: 积分/求和内容（被积函数/求和表达式）
      *       [内容节点...]               ← 大算子之后的所有剩余兄弟节点
      *     END
@@ -1179,7 +1184,7 @@ public class MtefWriter {
             return;
         }
 
-        // 写入大算子模板头部（根据命令类型选择 TM_SUM / TM_INTEGRAL / TM_PRODUCT）
+        // 写入大算子模板头部（根据命令类型选择 TM_SUM / TM_INTEGRAL / TM_PRODUCT / TM_COPROD）
         writeBigOpHeader(out, bigOp.cmd(), bigOp.lower() != null, bigOp.upper() != null);
 
         // Slot 1: 内容 LINE（被积函数 / 求和表达式）
@@ -2468,17 +2473,20 @@ public class MtefWriter {
      *   END                           ← 由 writeBigOpFooter 写入
      * </pre>
      *
-     * <p>Write a big operator (sum/int/prod) with optional lower and upper limits.</p>
+     * <p>Write a big operator (sum/int/prod/coprod) with optional lower and upper limits.</p>
      */
     private void writeBigOpHeader(ByteArrayOutputStream out, String cmd, boolean hasLower, boolean hasUpper) throws IOException {
         if (BIG_OP_INT_LIKE.contains(cmd)) {
             // 积分类：∫ ∬ ∭ ∮ → TM_INTEGRAL 模板
             MtefTemplateBuilder.writeIntegralHeader(out, cmd, hasLower, hasUpper);
+        } else if (BIG_OP_COPROD_LIKE.contains(cmd)) {
+            // 余积：∐ → TM_COPROD 模板
+            MtefTemplateBuilder.writeCoproductHeader(out, hasLower, hasUpper);
         } else if ("\\prod".equals(cmd)) {
             // 求积：∏ → TM_PRODUCT 模板
             MtefTemplateBuilder.writeProductHeader(out, hasLower, hasUpper);
         } else {
-            // 求和及其他：∑ ∐ ⋃ ⋂ ⋁ ⋀ → TM_SUM 模板
+            // 求和及其他：∑ ⋃ ⋂ ⋁ ⋀ → TM_SUM 模板
             MtefTemplateBuilder.writeSumHeader(out, hasLower, hasUpper);
         }
     }
@@ -2516,7 +2524,10 @@ public class MtefWriter {
     private boolean isBigOperator(LaTeXNode node) {
         if (node.getType() != LaTeXNode.Type.COMMAND) return false;
         String cmd = node.getValue();
-        return BIG_OP_SUM_LIKE.contains(cmd) || BIG_OP_INT_LIKE.contains(cmd) || BIG_OP_LIMIT_LIKE.contains(cmd);
+        return BIG_OP_SUM_LIKE.contains(cmd)
+            || BIG_OP_COPROD_LIKE.contains(cmd)
+            || BIG_OP_INT_LIKE.contains(cmd)
+            || BIG_OP_LIMIT_LIKE.contains(cmd);
     }
 
     /**

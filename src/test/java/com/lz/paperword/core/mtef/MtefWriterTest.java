@@ -128,6 +128,20 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteCoproductUsesDedicatedTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\coprod_{i=1}^{n} A_i");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_COPROD, 0x30, 0x00}),
+            "coproduct should use tmCOPROD with both upper/lower limit bits");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+            "coproduct should not fall back to tmSUM");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PROD, 0x30, 0x00}),
+            "coproduct should not fall back to tmPROD");
+    }
+
+    @Test
     void testWriteBoxedUsesTmBoxTemplate() {
         LaTeXNode ast = parser.parseLaTeX("\\boxed{x+1}");
         byte[] mtef = writer.write(ast);
@@ -745,6 +759,17 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x50, 0x00}),
             "IR path should lower \\lim to tmLIM");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForCoproductTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\coprod_{i=1}^{n} A_i"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_COPROD, 0x30, 0x00}),
+            "IR path should lower \\coprod to tmCOPROD");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+            "IR path should not route \\coprod through tmSUM fallback");
     }
 
     @Test

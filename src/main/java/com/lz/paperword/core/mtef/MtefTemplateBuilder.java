@@ -247,6 +247,24 @@ public class MtefTemplateBuilder {
         writeTemplateHeader(out, MtefRecord.TM_PROD, variation, 0x00);
     }
 
+    /**
+     * 写入余积模板（TM_COPROD）的头部。
+     * <p>生成 ∐ 余积符号结构，可选地带有上限和/或下限。
+     * 其 slot/variation 规则与 TM_PROD 保持一致，但模板族必须显式切到 TM_COPROD，
+     * 不能再经由 TM_SUM / TM_PROD fallback 冒充。</p>
+     *
+     * @param out      输出字节流
+     * @param hasLower 是否存在下限
+     * @param hasUpper 是否存在上限
+     * @throws IOException 写入异常
+     */
+    public static void writeCoproductHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
+        int variation = 0;
+        if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
+        if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;
+        writeTemplateHeader(out, MtefRecord.TM_COPROD, variation, 0x00);
+    }
+
     public static void writeLimitHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
         int variation = MtefRecord.TV_BO_SUM;
         if (hasLower) variation |= MtefRecord.TV_BO_LOWER;

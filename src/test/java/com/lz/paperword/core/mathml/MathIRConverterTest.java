@@ -39,6 +39,19 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrNormalizesCoproductLimitsToDedicatedBigOperator() {
+        MathIRNode ir = parser.parseMathIR("\\coprod_{i=1}^{n} A_i");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.UNDEROVER, ir.child(0).getType());
+        assertEquals(MathIRNode.Type.OPERATOR, ir.child(0).child(0).getType());
+        assertEquals("\\coprod", ir.child(0).child(0).getMetadata("latexCommand"));
+        assertEquals("big-operator", ir.child(0).child(0).getMetadata("role"));
+        assertEquals("underover", ir.child(0).child(0).getMetadata("limitPlacement"));
+        assertEquals(MathIRNode.Type.SUB, ir.child(1).getType());
+    }
+
+    @Test
     void testParseMathIrNormalizesFencedMatrixEnvironment() {
         MathIRNode ir = parser.parseMathIR("\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}");
 
