@@ -41,6 +41,10 @@ public class MathIRConverter {
         "\\underline"
     );
 
+    private static final Set<String> ARC_ACCENTS = Set.of(
+        "\\arc", "\\overarc"
+    );
+
     private static final Set<String> HORIZONTAL_BRACES = Set.of(
         "\\overbrace", "\\underbrace"
     );
@@ -147,6 +151,14 @@ public class MathIRConverter {
         }
         if (isEnclosureCommand(command)) {
             return convertEnclosureNode(node, command);
+        }
+        if (ARC_ACCENTS.contains(command)) {
+            MathIRNode arc = new MathIRNode(MathIRNode.Type.ARC);
+            copyMetadata(node, arc);
+            arc.setMetadata("latexCommand", command);
+            arc.setMetadata("placement", "top");
+            arc.addChild(convertArgument(childAt(node, 0)));
+            return arc;
         }
         if (OVER_ACCENTS.contains(command)) {
             MathIRNode over = new MathIRNode(MathIRNode.Type.OVER);

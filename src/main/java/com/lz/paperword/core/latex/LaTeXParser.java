@@ -337,7 +337,7 @@ public class LaTeXParser {
             case "\\longdiv" -> parseLongDiv(stream);
             case "\\left" -> parseLeftRight(stream);
             case "\\overline", "\\underline", "\\hat", "\\tilde",
-                 "\\vec", "\\bar", "\\dot",
+                 "\\vec", "\\bar", "\\dot", "\\arc", "\\overarc",
                  "\\overbrace", "\\underbrace", "\\overbracket", "\\underbracket",
                  "\\boxed", "\\cancel", "\\bcancel", "\\xcancel" -> parseUnaryCommand(stream, cmd);
             case "\\text", "\\mathrm", "\\mathbf", "\\mathit",

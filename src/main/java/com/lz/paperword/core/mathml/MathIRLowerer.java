@@ -30,6 +30,7 @@ public class MathIRLowerer {
             case UNDEROVER -> lowerUnderOver(node);
             case FENCE -> lowerFence(node);
             case HBRACE, HBRACK -> lowerHorizontalFence(node);
+            case ARC -> lowerArc(node);
             case ENCLOSURE -> lowerEnclosure(node);
             case TABLE -> lowerContainer(node, LaTeXNode.Type.ARRAY);
             case TABLE_ROW -> lowerContainer(node, LaTeXNode.Type.ROW);
@@ -192,6 +193,17 @@ public class MathIRLowerer {
         fence.setMetadata("rightDelimiter", close);
         fence.addChild(lowerArgument(node.child(0)));
         return fence;
+    }
+
+    private LaTeXNode lowerArc(MathIRNode node) {
+        String command = node.getMetadata("latexCommand");
+        if (command == null || command.isBlank()) {
+            command = "\\overarc";
+        }
+        LaTeXNode arc = new LaTeXNode(LaTeXNode.Type.COMMAND, command);
+        copyMetadata(node, arc);
+        arc.addChild(lowerArgument(node.child(0)));
+        return arc;
     }
 
     private LaTeXNode lowerEnclosure(MathIRNode node) {

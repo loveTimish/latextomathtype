@@ -1314,6 +1314,7 @@ public class MtefWriter {
                 writeSlot(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
                 out.write(MtefRecord.END);
             }
+            case "\\arc", "\\overarc" -> writeArcNode(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
             case "\\tilde" -> {
                 // 波浪号装饰（~）：生成 TM_TILDE 模板
                 MtefTemplateBuilder.writeTildeHeader(out);
@@ -1350,6 +1351,12 @@ public class MtefWriter {
 
     private void writeBoxNode(ByteArrayOutputStream out, LaTeXNode content) throws IOException {
         MtefTemplateBuilder.writeBoxHeader(out);
+        writeSlot(out, content);
+        out.write(MtefRecord.END);
+    }
+
+    private void writeArcNode(ByteArrayOutputStream out, LaTeXNode content) throws IOException {
+        MtefTemplateBuilder.writeArcHeader(out);
         writeSlot(out, content);
         out.write(MtefRecord.END);
     }

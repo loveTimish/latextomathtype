@@ -158,6 +158,26 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteOverarcUsesTmArcTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\overarc{AB}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARC, 0x00, 0x00}),
+            "overarc should use tmARC instead of falling back to a generic accent path");
+    }
+
+    @Test
+    void testWriteArcAliasUsesTmArcTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\arc{AB}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARC, 0x00, 0x00}),
+            "arc alias should also route to tmARC");
+    }
+
+    @Test
     void testWriteOverbraceUsesTmHBRACEWithTopVariation() {
         LaTeXNode ast = parser.parseLaTeX("\\overbrace{x+1}");
         byte[] mtef = writer.write(ast);
@@ -438,6 +458,15 @@ class MtefWriterTest {
             "IR path should lower boxed to tmBOX");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_STRIKE, 0x06, 0x00}),
             "IR path should lower xcancel to tmSTRIKE with both diagonal bits");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForArcTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\overarc{AB}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARC, 0x00, 0x00}),
+            "IR path should lower overarc to tmARC");
     }
 
     @Test

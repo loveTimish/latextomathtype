@@ -415,6 +415,18 @@ public class MtefTemplateBuilder {
     }
 
     /**
+     * 写入弧线模板（TM_ARC）的头部。
+     * <p>生成内容上方的弧线（如 \overarc{AB}）。
+     * HatBoxClass 模板只包含一个主 slot，由 MathType 自身负责绘制可伸缩弧线。</p>
+     *
+     * @param out 输出字节流
+     * @throws IOException 写入异常
+     */
+    public static void writeArcHeader(ByteArrayOutputStream out) throws IOException {
+        writeTemplateHeader(out, MtefRecord.TM_ARC, 0x00, 0x00);
+    }
+
+    /**
      * 写入波浪号模板（TM_TILDE）的头部。
      * <p>生成字符上方的波浪号（~），如 x̃。
      * 调用方写入头部后需写入 1 个槽位：被修饰内容 LINE。</p>
