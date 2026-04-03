@@ -246,9 +246,15 @@ public class MathIRConverter {
         arrow.setMetadata("latexCommand", command);
         arrow.setMetadata("direction", "\\xleftarrow".equals(command) ? "left" : "right");
         arrow.setMetadata("variant", firstNonBlank(node.getMetadata("arrowVariant"), "single"));
-        arrow.setMetadata("topPresent", "true");
-        arrow.setMetadata("bottomPresent", "false");
-        arrow.addChild(convertArgument(childAt(node, 0)));
+
+        MathIRNode topAnnotation = convertArgument(childAt(node, 0));
+        MathIRNode bottomAnnotation = convertArgument(childAt(node, 1));
+        arrow.setMetadata("topPresent", Boolean.toString(hasMeaningfulContent(topAnnotation)));
+        arrow.setMetadata("bottomPresent", Boolean.toString(hasMeaningfulContent(bottomAnnotation)));
+        arrow.addChild(topAnnotation);
+        if (hasMeaningfulContent(bottomAnnotation)) {
+            arrow.addChild(bottomAnnotation);
+        }
         return arrow;
     }
 
@@ -496,6 +502,16 @@ public class MathIRConverter {
 
     private boolean isBottomHorizontalFence(String command) {
         return "\\underbrace".equals(command) || "\\underbracket".equals(command);
+    }
+
+    private boolean hasMeaningfulContent(MathIRNode node) {
+        if (node == null) {
+            return false;
+        }
+        if (node.getValue() != null && !node.getValue().isBlank()) {
+            return true;
+        }
+        return !node.getChildren().isEmpty();
     }
 
     private String enclosureNotation(String command) {

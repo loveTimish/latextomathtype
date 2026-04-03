@@ -696,32 +696,40 @@ public class LaTeXParser {
     private LaTeXNode parseLongDiv(TokenStream stream) {
         LaTeXNode node = new LaTeXNode(LaTeXNode.Type.LONG_DIVISION, "\\longdiv");
         // 不再强制使用简单模板 - 使用 computed array 路径以支持结构化步骤显示
-        if (stream.hasNext() && stream.peek().type() == TokenType.LBRACKET) {
-            stream.next();
-            LaTeXNode quotient = new LaTeXNode(LaTeXNode.Type.GROUP);
-            while (stream.hasNext()) {
-                stream.skipWhitespace();
-                if (!stream.hasNext() || stream.peek().type() == TokenType.RBRACKET) {
-                    break;
-                }
-                LaTeXNode child = parseAtom(stream);
-                if (child != null) {
-                    child = parseScripts(stream, child);
-                    quotient.addChild(child);
-                }
-            }
-            if (stream.hasNext()) {
-                stream.next();
-            }
+        LaTeXNode quotient = parseOptionalBracketGroup(stream);
+        if (quotient != null) {
             node.addChild(parseRequiredGroup(stream)); // divisor
-            node.addChild(quotient);                  // quotient
+            node.addChild(quotient);                   // quotient
             node.addChild(parseRequiredGroup(stream)); // dividend
             return node;
         }
-        node.addChild(parseRequiredGroup(stream));     // divisor
+        node.addChild(parseRequiredGroup(stream));          // divisor
         node.addChild(new LaTeXNode(LaTeXNode.Type.GROUP)); // no quotient slot
-        node.addChild(parseRequiredGroup(stream));     // dividend
+        node.addChild(parseRequiredGroup(stream));          // dividend
         return node;
+    }
+
+    private LaTeXNode parseOptionalBracketGroup(TokenStream stream) {
+        if (!stream.hasNext() || stream.peek().type() != TokenType.LBRACKET) {
+            return null;
+        }
+        stream.next();
+        LaTeXNode group = new LaTeXNode(LaTeXNode.Type.GROUP);
+        while (stream.hasNext()) {
+            stream.skipWhitespace();
+            if (!stream.hasNext() || stream.peek().type() == TokenType.RBRACKET) {
+                break;
+            }
+            LaTeXNode child = parseAtom(stream);
+            if (child != null) {
+                child = parseScripts(stream, child);
+                group.addChild(child);
+            }
+        }
+        if (stream.hasNext() && stream.peek().type() == TokenType.RBRACKET) {
+            stream.next();
+        }
+        return group;
     }
 
     /**
@@ -868,18 +876,30 @@ public class LaTeXParser {
     }
 
     /**
-     * 解析最小切片的可伸缩箭头命令（\xrightarrow / \xleftarrow）。
+     * 解析 amsmath 风格的可伸缩箭头命令（\xrightarrow / \xleftarrow）。
      *
-     * <p>当前只支持最清晰的一刀：单个必需参数作为箭头上方标注，
-     * 暂不扩展到底部可选标注和双向/双线/鱼叉等其它 arrow family。</p>
+     * <p>依据官方 {@code amsmath.sty} 定义，二者签名均为
+     * {@code \xrightarrow[below]{above}} / {@code \xleftarrow[below]{above}}：
+     * 方括号内可选参数对应箭头下方标注，花括号内必需参数对应箭头上方标注。</p>
+     *
+     * <p>当前仍保守限定在单线 left/right 两个公开变体；不在本方法中扩展双线、鱼叉等其它 arrow family。</p>
      */
     private LaTeXNode parseExtensibleArrowCommand(TokenStream stream, String cmd) {
         LaTeXNode node = new LaTeXNode(LaTeXNode.Type.COMMAND, cmd);
         node.setMetadata("templateFamily", "TM_ARROW");
         node.setMetadata("arrowDirection", "\\xleftarrow".equals(cmd) ? "left" : "right");
         node.setMetadata("arrowVariant", "single");
-        node.setMetadata("annotationPlacement", "top");
-        node.addChild(parseRequiredGroup(stream));
+
+        LaTeXNode bottomAnnotation = parseOptionalBracketGroup(stream);
+        LaTeXNode topAnnotation = parseRequiredGroup(stream);
+
+        node.addChild(topAnnotation);
+        if (bottomAnnotation != null && !bottomAnnotation.getChildren().isEmpty()) {
+            node.setMetadata("annotationPlacement", "top-bottom");
+            node.addChild(bottomAnnotation);
+        } else {
+            node.setMetadata("annotationPlacement", "top");
+        }
         return node;
     }
 

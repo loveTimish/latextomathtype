@@ -344,6 +344,25 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteXrightarrowWithBottomAnnotationUsesTmArrowTopAndBottomVariation() {
+        LaTeXNode ast = parser.parseLaTeX("\\xrightarrow[b]{a}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x2C, 0x00}),
+            "xrightarrow[below]{above} should set both top and bottom variation bits");
+        byte[] topChar = new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x61, 0x00};
+        byte[] bottomChar = new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x62, 0x00};
+        byte[] arrowChar = new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0x92, 0x21};
+        assertTrue(containsBytes(mtef, topChar), "top annotation should still be serialized");
+        assertTrue(containsBytes(mtef, bottomChar), "bottom annotation should be serialized");
+        assertTrue(indexOfBytes(mtef, topChar) < indexOfBytes(mtef, arrowChar),
+            "top annotation should appear before the expandable arrow glyph");
+        assertTrue(indexOfBytes(mtef, bottomChar) < indexOfBytes(mtef, arrowChar),
+            "bottom annotation should appear before the expandable arrow glyph");
+    }
+
+    @Test
     void testWriteOverbraceUsesTmHBRACEWithTopVariation() {
         LaTeXNode ast = parser.parseLaTeX("\\overbrace{x+1}");
         byte[] mtef = writer.write(ast);
@@ -799,6 +818,19 @@ class MtefWriterTest {
             "IR path should lower xleftarrow to tmARROW");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0x90, 0x21}),
             "IR path should keep the expandable left arrow glyph");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForXleftarrowWithBottomAnnotation() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\xleftarrow[b]{a}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x1C, 0x00}),
+            "IR path should preserve both top and bottom bits for xleftarrow");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x61, 0x00}),
+            "IR path should preserve the top annotation payload");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x62, 0x00}),
+            "IR path should preserve the bottom annotation payload");
     }
 
     @Test

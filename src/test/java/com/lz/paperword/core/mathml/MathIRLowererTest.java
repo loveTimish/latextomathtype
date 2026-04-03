@@ -82,6 +82,20 @@ class MathIRLowererTest {
     }
 
     @Test
+    void testLowerXrightarrowWithBottomAnnotationBackToDedicatedCommand() {
+        MathIRNode ir = parser.parseMathIR("\\xrightarrow[T]{f}");
+
+        LaTeXNode lowered = lowerer.lower(ir);
+
+        assertEquals(LaTeXNode.Type.ROOT, lowered.getType());
+        assertEquals(1, lowered.getChildren().size());
+        assertEquals(LaTeXNode.Type.COMMAND, lowered.getChildren().get(0).getType());
+        assertEquals("\\xrightarrow", lowered.getChildren().get(0).getValue());
+        assertEquals("top-bottom", lowered.getChildren().get(0).getMetadata("annotationPlacement"));
+        assertEquals(2, lowered.getChildren().get(0).getChildren().size());
+    }
+
+    @Test
     void testLowerAngleFenceNodeBackToDedicatedFenceCommand() {
         MathIRNode ir = parser.parseMathIR("\\left\\langle x+y \\right\\rangle");
 

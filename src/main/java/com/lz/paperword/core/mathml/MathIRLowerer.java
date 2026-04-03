@@ -216,8 +216,16 @@ public class MathIRLowerer {
         arrow.setMetadata("templateFamily", "TM_ARROW");
         arrow.setMetadata("arrowDirection", "left".equals(node.getMetadata("direction")) ? "left" : "right");
         arrow.setMetadata("arrowVariant", node.getMetadata("variant"));
-        arrow.setMetadata("annotationPlacement", "top");
-        arrow.addChild(lowerArgument(node.child(0)));
+
+        LaTeXNode topAnnotation = lowerArgument(node.child(0));
+        MathIRNode bottomAnnotation = node.child(1);
+        arrow.addChild(topAnnotation);
+        if (hasMeaningfulContent(bottomAnnotation)) {
+            arrow.setMetadata("annotationPlacement", "top-bottom");
+            arrow.addChild(lowerArgument(bottomAnnotation));
+        } else {
+            arrow.setMetadata("annotationPlacement", "top");
+        }
         return arrow;
     }
 

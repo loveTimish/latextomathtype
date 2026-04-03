@@ -406,4 +406,18 @@ class MathIRConverterTest {
         assertEquals("left", ir.child(0).getMetadata("direction"));
         assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
     }
+
+    @Test
+    void testParseMathIrNormalizesXrightarrowWithBottomAnnotation() {
+        MathIRNode ir = parser.parseMathIR("\\xrightarrow[T]{n\\to\\infty}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.ARROW, ir.child(0).getType());
+        assertEquals("\\xrightarrow", ir.child(0).getMetadata("latexCommand"));
+        assertEquals("right", ir.child(0).getMetadata("direction"));
+        assertEquals("true", ir.child(0).getMetadata("topPresent"));
+        assertEquals("true", ir.child(0).getMetadata("bottomPresent"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(1).getType());
+    }
 }

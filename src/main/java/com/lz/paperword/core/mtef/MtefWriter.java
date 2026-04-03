@@ -1480,11 +1480,19 @@ public class MtefWriter {
     private void writeArrowNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
         boolean pointsLeft = "\\xleftarrow".equals(node.getValue());
         LaTeXNode topAnnotation = childAt(node, 0);
+        LaTeXNode bottomAnnotation = childAt(node, 1);
+        boolean hasBottom = bottomAnnotation != null && !isEmptyContent(bottomAnnotation);
 
-        MtefTemplateBuilder.writeArrowHeader(out, pointsLeft, true, false);
+        MtefTemplateBuilder.writeArrowHeader(out, pointsLeft, true, hasBottom);
         writeSlot(out, topAnnotation);
         if (needsFullAfterSlot(topAnnotation)) {
             out.write(MtefRecord.FULL);
+        }
+        if (hasBottom) {
+            writeSlot(out, bottomAnnotation);
+            if (needsFullAfterSlot(bottomAnnotation)) {
+                out.write(MtefRecord.FULL);
+            }
         }
         writeCharRecord(out, MtefRecord.FN_EXPAND, pointsLeft ? 0x2190 : 0x2192);
         out.write(MtefRecord.END);

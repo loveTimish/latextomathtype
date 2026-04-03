@@ -641,4 +641,21 @@ class LaTeXParserTest {
         assertEquals(1, arrow.getChildren().size());
         assertEquals("f", flatten(arrow.getChildren().get(0)));
     }
+
+    @Test
+    void testParseXrightarrowWithBottomAnnotation() {
+        LaTeXNode ast = parser.parseLaTeX("\\xrightarrow[T]{n\\to\\infty}");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode arrow = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, arrow.getType());
+        assertEquals("\\xrightarrow", arrow.getValue());
+        assertEquals("TM_ARROW", arrow.getMetadata("templateFamily"));
+        assertEquals("right", arrow.getMetadata("arrowDirection"));
+        assertEquals("top-bottom", arrow.getMetadata("annotationPlacement"));
+        assertEquals(2, arrow.getChildren().size());
+        assertEquals("n\\to\\infty", flatten(arrow.getChildren().get(0)));
+        assertEquals("T", flatten(arrow.getChildren().get(1)));
+    }
 }
