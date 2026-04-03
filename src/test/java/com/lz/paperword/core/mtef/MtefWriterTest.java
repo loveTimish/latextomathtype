@@ -472,6 +472,20 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteAngleFenceUsesAngleTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\left\\langle x+1 \\right\\rangle");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ANGLE, 0x03, 0x00}),
+            "angle fence should use tmANGLE with both fences present");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE8, 0x27}),
+            "angle fence should keep the left angle bracket as FN_EXPAND char");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE9, 0x27}),
+            "angle fence should keep the right angle bracket as FN_EXPAND char");
+    }
+
+    @Test
     void testWriteSingleSidedBarFenceKeepsOnlyPresentSide() {
         LaTeXNode ast = parser.parseLaTeX("\\left. x \\right|");
         byte[] mtef = writer.write(ast);
@@ -567,6 +581,19 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_DBAR, 0x01, 0x00}),
             "IR path should preserve single-sided double-bar fences");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForAngleFenceSubset() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\left\\langle x+1 \\right\\rangle"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ANGLE, 0x03, 0x00}),
+            "IR path should lower angle fences to tmANGLE");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE8, 0x27}),
+            "IR path should keep the left angle bracket character");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xE9, 0x27}),
+            "IR path should keep the right angle bracket character");
     }
 
     @Test

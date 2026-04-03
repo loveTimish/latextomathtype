@@ -318,6 +318,19 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseLeftRightNormalizesAngleFenceDelimiters() {
+        LaTeXNode ast = parser.parseLaTeX("\\left\\langle x+y \\right\\rangle");
+        assertNotNull(ast);
+        assertEquals(1, ast.getChildren().size());
+
+        LaTeXNode fence = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.COMMAND, fence.getType());
+        assertEquals("⟨", fence.getMetadata("leftDelimiter"));
+        assertEquals("⟩", fence.getMetadata("rightDelimiter"));
+        assertEquals("x+y", flatten(fence.getChildren().get(0)));
+    }
+
+    @Test
     void testParseVmatrixEnvironmentWrapsArrayWithDoubleBarFence() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{Vmatrix}1&2\\\\3&4\\end{Vmatrix}");
         assertNotNull(ast);

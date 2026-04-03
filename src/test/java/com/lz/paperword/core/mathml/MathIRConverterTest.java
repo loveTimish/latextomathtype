@@ -61,6 +61,17 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrPreservesAngleFenceMetadata() {
+        MathIRNode ir = parser.parseMathIR("\\left\\langle x+y \\right\\rangle");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.FENCE, ir.child(0).getType());
+        assertEquals("⟨", ir.child(0).getMetadata("openDelimiter"));
+        assertEquals("⟩", ir.child(0).getMetadata("closeDelimiter"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+    }
+
+    @Test
     void testParseMathIrNormalizesBoxedEnclosure() {
         MathIRNode ir = parser.parseMathIR("\\boxed{x+1}");
 

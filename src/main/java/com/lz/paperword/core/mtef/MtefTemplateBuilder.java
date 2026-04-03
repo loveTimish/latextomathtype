@@ -343,6 +343,10 @@ public class MtefTemplateBuilder {
         writeFenceHeader(out, MtefRecord.TM_BAR, true, true);
     }
 
+    public static void writeAngleHeader(ByteArrayOutputStream out, boolean hasLeft, boolean hasRight) throws IOException {
+        writeFenceHeader(out, MtefRecord.TM_ANGLE, hasLeft, hasRight);
+    }
+
     public static void writeFenceHeader(ByteArrayOutputStream out, int selector,
                                         boolean hasLeft, boolean hasRight) throws IOException {
         int variation = 0;

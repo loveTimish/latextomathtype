@@ -185,6 +185,8 @@ public class MathIRLowerer {
             case "]" -> "\\left]";
             case "{", "\\{" -> "\\left{";
             case "}" -> "\\left}";
+            case "⟨" -> "\\left\\langle";
+            case "⟩" -> "\\left\\rangle";
             case "|" -> "\\left|";
             case "||" -> "\\left\\lVert";
             case "⌊" -> "\\left\\lfloor";

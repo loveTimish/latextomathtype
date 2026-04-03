@@ -782,6 +782,8 @@ public class LaTeXParser {
         return switch (raw) {
             case "\\{", "\\lbrace" -> "{";
             case "\\}", "\\rbrace" -> "}";
+            case "\\langle" -> "⟨";
+            case "\\rangle" -> "⟩";
             case "\\lvert", "\\rvert" -> "|";
             case "\\lVert", "\\rVert", "\\Vert" -> "||";
             case "\\lfloor" -> "⌊";

@@ -78,4 +78,19 @@ class MathIRLowererTest {
         assertEquals("left", lowered.getChildren().get(0).getMetadata("arrowDirection"));
         assertEquals(1, lowered.getChildren().get(0).getChildren().size());
     }
+
+    @Test
+    void testLowerAngleFenceNodeBackToDedicatedFenceCommand() {
+        MathIRNode ir = parser.parseMathIR("\\left\\langle x+y \\right\\rangle");
+
+        LaTeXNode lowered = lowerer.lower(ir);
+
+        assertEquals(LaTeXNode.Type.ROOT, lowered.getType());
+        assertEquals(1, lowered.getChildren().size());
+        assertEquals(LaTeXNode.Type.COMMAND, lowered.getChildren().get(0).getType());
+        assertEquals("\\left\\langle", lowered.getChildren().get(0).getValue());
+        assertEquals("⟨", lowered.getChildren().get(0).getMetadata("leftDelimiter"));
+        assertEquals("⟩", lowered.getChildren().get(0).getMetadata("rightDelimiter"));
+        assertEquals(1, lowered.getChildren().get(0).getChildren().size());
+    }
 }
