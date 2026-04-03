@@ -166,6 +166,30 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteBigoplusUsesGenericSummationStyleTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\bigoplus_{i=1}^{n} A_i");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x30, 0x00}),
+            "bigoplus should use tmSUMOP with both upper/lower limit bits");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+            "bigoplus should not fall back to tmSUM");
+    }
+
+    @Test
+    void testWriteIntopUsesGenericIntegralStyleTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\intop_{a}^{b} f(x)");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTOP, 0x30, 0x00}),
+            "intop should use tmINTOP with both upper/lower limit bits");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTEG, 0x31, 0x00}),
+            "intop should not route through tmINTEG");
+    }
+
+    @Test
     void testWriteBoxedUsesTmBoxTemplate() {
         LaTeXNode ast = parser.parseLaTeX("\\boxed{x+1}");
         byte[] mtef = writer.write(ast);
@@ -816,6 +840,24 @@ class MtefWriterTest {
             "IR path should lower \\bigcap to tmINTER");
         assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
             "IR path should not route \\bigcap through tmSUM fallback");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForSummationStyleGenericBigOperatorTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\bigotimes_{i=1}^{n} A_i"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x30, 0x00}),
+            "IR path should lower \\bigotimes to tmSUMOP");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForIntegralStyleGenericBigOperatorTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\intop_{a}^{b} f(x)"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTOP, 0x30, 0x00}),
+            "IR path should lower \\intop to tmINTOP");
     }
 
     @Test

@@ -76,6 +76,30 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrNormalizesBigoplusLimitsToSummationStyleGenericBigOperator() {
+        MathIRNode ir = parser.parseMathIR("\\bigoplus_{i=1}^{n} A_i");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.UNDEROVER, ir.child(0).getType());
+        assertEquals(MathIRNode.Type.OPERATOR, ir.child(0).child(0).getType());
+        assertEquals("\\bigoplus", ir.child(0).child(0).getMetadata("latexCommand"));
+        assertEquals("big-operator", ir.child(0).child(0).getMetadata("role"));
+        assertEquals("underover", ir.child(0).child(0).getMetadata("limitPlacement"));
+    }
+
+    @Test
+    void testParseMathIrNormalizesIntopLimitsToIntegralStyleGenericBigOperator() {
+        MathIRNode ir = parser.parseMathIR("\\intop_{a}^{b} f(x)");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.SUBSUP, ir.child(0).getType());
+        assertEquals(MathIRNode.Type.OPERATOR, ir.child(0).child(0).getType());
+        assertEquals("\\intop", ir.child(0).child(0).getMetadata("latexCommand"));
+        assertEquals("big-operator", ir.child(0).child(0).getMetadata("role"));
+        assertEquals("script", ir.child(0).child(0).getMetadata("limitPlacement"));
+    }
+
+    @Test
     void testParseMathIrNormalizesFencedMatrixEnvironment() {
         MathIRNode ir = parser.parseMathIR("\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}");
 

@@ -26,11 +26,12 @@ public class MathIRConverter {
     );
 
     private static final Set<String> UNDER_OVER_BIGOPS = Set.of(
-        "\\sum", "\\prod", "\\coprod", "\\bigcup", "\\bigcap", "\\bigvee", "\\bigwedge", "\\lim"
+        "\\sum", "\\sumop", "\\prod", "\\coprod", "\\bigcup", "\\bigcap",
+        "\\bigvee", "\\bigwedge", "\\biguplus", "\\bigoplus", "\\bigotimes", "\\lim"
     );
 
     private static final Set<String> SCRIPT_BIGOPS = Set.of(
-        "\\int", "\\iint", "\\iiint", "\\oint"
+        "\\int", "\\intop", "\\iint", "\\iiint", "\\oint"
     );
 
     private static final Set<String> OVER_ACCENTS = Set.of(

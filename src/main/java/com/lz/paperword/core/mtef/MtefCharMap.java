@@ -219,13 +219,18 @@ public final class MtefCharMap {
         putSymbol("\\iint",      0x222C);  // ∬ 二重积分
         putSymbol("\\iiint",     0x222D);  // ∭ 三重积分
         putSymbol("\\oint",      0x222E);  // ∮ 环路积分
+        putSymbol("\\intop",     0x222B);  // ∫ generic integral-style big operator
         putSymbol("\\sum",       0x2211);  // ∑ 求和号
+        putSymbol("\\sumop",     0x2211);  // ∑ generic summation-style big operator
         putSymbol("\\prod",      0x220F);  // ∏ 连乘号
         putSymbol("\\coprod",    0x2210);  // ∐ 余积号
         putSymbol("\\bigcup",    0x22C3);  // ⋃ 大并集
         putSymbol("\\bigcap",    0x22C2);  // ⋂ 大交集
         putSymbol("\\bigvee",    0x22C1);  // ⋁ 大逻辑或
         putSymbol("\\bigwedge",  0x22C0);  // ⋀ 大逻辑与
+        putSymbol("\\biguplus",  0x2A04);  // ⨄ n-ary union with plus
+        putSymbol("\\bigoplus",  0x2A01);  // ⨁ n-ary circled plus
+        putSymbol("\\bigotimes", 0x2A02);  // ⨂ n-ary circled times
 
         // ==================== ASCII 可打印字符默认映射 ====================
         // 将 ASCII 可打印字符范围 '!' (0x21) 到 '~' (0x7E) 默认映射为变量样式 FN_VARIABLE

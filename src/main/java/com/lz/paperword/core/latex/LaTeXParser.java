@@ -345,8 +345,9 @@ public class LaTeXParser {
             case "\\braket" -> parseBraketCommand(stream, cmd);
             case "\\text", "\\mathrm", "\\mathbf", "\\mathit",
                  "\\mathcal", "\\mathbb" -> parseTextCommand(stream, cmd);
-            case "\\sum", "\\int", "\\iint", "\\iiint", "\\oint",
-                 "\\prod", "\\coprod", "\\bigcup", "\\bigcap" -> parseBigOp(stream, cmd);
+            case "\\sum", "\\sumop", "\\int", "\\intop", "\\iint", "\\iiint", "\\oint",
+                 "\\prod", "\\coprod", "\\bigcup", "\\bigcap", "\\bigvee", "\\bigwedge",
+                 "\\biguplus", "\\bigoplus", "\\bigotimes" -> parseBigOp(stream, cmd);
             case "\\lim" -> parseLimCommand(stream, cmd);
             default -> {
                 if (FUNCTION_COMMANDS.contains(cmd)) {

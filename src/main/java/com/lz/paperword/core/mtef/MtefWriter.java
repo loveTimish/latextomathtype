@@ -141,7 +141,7 @@ public class MtefWriter {
      * 包括：求和 ∑、大并集 ⋃、大交集 ⋂、大析取 ⋁、大合取 ⋀。
      */
     private static final Set<String> BIG_OP_SUM_LIKE = Set.of(
-        "\\sum", "\\bigvee", "\\bigwedge"
+        "\\sum"
     );
 
     /** 并集类大算子 — 使用 TM_UNION 模板。 */
@@ -152,6 +152,11 @@ public class MtefWriter {
     /** 交集类大算子 — 使用 TM_INTER 模板。 */
     private static final Set<String> BIG_OP_INTER_LIKE = Set.of(
         "\\bigcap"
+    );
+
+    /** 泛化的求和式大算子 — 使用 TM_SUMOP 模板。 */
+    private static final Set<String> BIG_OP_SUMOP_LIKE = Set.of(
+        "\\sumop", "\\bigvee", "\\bigwedge", "\\biguplus", "\\bigoplus", "\\bigotimes"
     );
 
     /** 余积类大算子 — 使用 TM_COPROD 模板，而非 sum-like / prod fallback。 */
@@ -170,6 +175,11 @@ public class MtefWriter {
      */
     private static final Set<String> BIG_OP_INT_LIKE = Set.of(
         "\\int", "\\iint", "\\iiint", "\\oint"
+    );
+
+    /** 泛化的积分式大算子 — 使用 TM_INTOP 模板。 */
+    private static final Set<String> BIG_OP_INTOP_LIKE = Set.of(
+        "\\intop"
     );
 
     /**
@@ -2489,6 +2499,9 @@ public class MtefWriter {
         if (BIG_OP_INT_LIKE.contains(cmd)) {
             // 积分类：∫ ∬ ∭ ∮ → TM_INTEGRAL 模板
             MtefTemplateBuilder.writeIntegralHeader(out, cmd, hasLower, hasUpper);
+        } else if (BIG_OP_INTOP_LIKE.contains(cmd)) {
+            // 泛化积分式大算子：\intop 等 → TM_INTOP 模板
+            MtefTemplateBuilder.writeIntegralStyleBigOpHeader(out, hasLower, hasUpper);
         } else if (BIG_OP_COPROD_LIKE.contains(cmd)) {
             // 余积：∐ → TM_COPROD 模板
             MtefTemplateBuilder.writeCoproductHeader(out, hasLower, hasUpper);
@@ -2498,11 +2511,14 @@ public class MtefWriter {
         } else if (BIG_OP_INTER_LIKE.contains(cmd)) {
             // 大交集：⋂ → TM_INTER 模板
             MtefTemplateBuilder.writeIntersectionHeader(out, hasLower, hasUpper);
+        } else if (BIG_OP_SUMOP_LIKE.contains(cmd)) {
+            // 泛化求和式大算子：⋁ ⋀ ⨄ ⨁ ⨂ / \sumop → TM_SUMOP 模板
+            MtefTemplateBuilder.writeSummationStyleBigOpHeader(out, hasLower, hasUpper);
         } else if ("\\prod".equals(cmd)) {
             // 求积：∏ → TM_PRODUCT 模板
             MtefTemplateBuilder.writeProductHeader(out, hasLower, hasUpper);
         } else {
-            // 求和及剩余 sum-like：∑ ⋁ ⋀ → TM_SUM 模板
+            // 标准求和：∑ → TM_SUM 模板
             MtefTemplateBuilder.writeSumHeader(out, hasLower, hasUpper);
         }
     }
@@ -2543,8 +2559,10 @@ public class MtefWriter {
         return BIG_OP_SUM_LIKE.contains(cmd)
             || BIG_OP_UNION_LIKE.contains(cmd)
             || BIG_OP_INTER_LIKE.contains(cmd)
+            || BIG_OP_SUMOP_LIKE.contains(cmd)
             || BIG_OP_COPROD_LIKE.contains(cmd)
             || BIG_OP_INT_LIKE.contains(cmd)
+            || BIG_OP_INTOP_LIKE.contains(cmd)
             || BIG_OP_LIMIT_LIKE.contains(cmd);
     }
 

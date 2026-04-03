@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MathIRLowererTest {
 
@@ -148,5 +149,31 @@ class MathIRLowererTest {
         assertEquals(2, lowered.getChildren().size());
         assertEquals(LaTeXNode.Type.SUPERSCRIPT, lowered.getChildren().get(0).getType());
         assertEquals("\\bigcap", lowered.getChildren().get(0).getChildren().get(0).getChildren().get(0).getValue());
+    }
+
+    @Test
+    void testLowerSummationStyleGenericBigOperatorBackToBigoplusCommandShape() {
+        MathIRNode ir = parser.parseMathIR("\\bigoplus_{i=1}^{n} A_i");
+
+        LaTeXNode lowered = lowerer.lower(ir);
+
+        assertNotNull(lowered);
+        assertEquals(LaTeXNode.Type.ROOT, lowered.getType());
+        assertEquals(2, lowered.getChildren().size());
+        assertEquals(LaTeXNode.Type.SUPERSCRIPT, lowered.getChildren().get(0).getType());
+        assertEquals("\\bigoplus", lowered.getChildren().get(0).getChildren().get(0).getChildren().get(0).getValue());
+    }
+
+    @Test
+    void testLowerIntegralStyleGenericBigOperatorBackToIntopCommandShape() {
+        MathIRNode ir = parser.parseMathIR("\\intop_{a}^{b} f(x)");
+
+        LaTeXNode lowered = lowerer.lower(ir);
+
+        assertNotNull(lowered);
+        assertEquals(LaTeXNode.Type.ROOT, lowered.getType());
+        assertTrue(!lowered.getChildren().isEmpty());
+        assertEquals(LaTeXNode.Type.SUPERSCRIPT, lowered.getChildren().get(0).getType());
+        assertEquals("\\intop", lowered.getChildren().get(0).getChildren().get(0).getChildren().get(0).getValue());
     }
 }

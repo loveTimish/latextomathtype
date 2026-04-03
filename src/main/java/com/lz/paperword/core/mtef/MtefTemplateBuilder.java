@@ -279,6 +279,20 @@ public class MtefTemplateBuilder {
         writeTemplateHeader(out, MtefRecord.TM_INTER, variation, 0x00);
     }
 
+    public static void writeIntegralStyleBigOpHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
+        int variation = 0;
+        if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
+        if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;
+        writeTemplateHeader(out, MtefRecord.TM_INTOP, variation, 0x00);
+    }
+
+    public static void writeSummationStyleBigOpHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
+        int variation = 0;
+        if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
+        if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;
+        writeTemplateHeader(out, MtefRecord.TM_SUMOP, variation, 0x00);
+    }
+
     public static void writeLimitHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
         int variation = MtefRecord.TV_BO_SUM;
         if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
