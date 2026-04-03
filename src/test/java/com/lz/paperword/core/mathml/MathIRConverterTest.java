@@ -100,6 +100,16 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrNormalizesJointStatusToOverAccent() {
+        MathIRNode ir = parser.parseMathIR("\\jointstatus{AB}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.OVER, ir.child(0).getType());
+        assertEquals("\\jointstatus", ir.child(0).getMetadata("accentCommand"));
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+    }
+
+    @Test
     void testParseMathIrNormalizesFencedMatrixEnvironment() {
         MathIRNode ir = parser.parseMathIR("\\begin{pmatrix}1&2\\\\3&4\\end{pmatrix}");
 

@@ -133,7 +133,7 @@ public class LaTeXTokenizer {
         "det", "dim", "gcd",
         "sum", "sumop", "int", "intop", "iint", "iiint", "oint", "prod", "coprod",
         "bigcup", "bigcap", "bigvee", "bigwedge", "biguplus", "bigoplus", "bigotimes",
-        "overline", "underline", "hat", "tilde", "vec", "bar", "dot",
+        "overline", "underline", "hat", "tilde", "vec", "bar", "dot", "jstatus", "jointstatus",
         "arc", "overarc", "overparen", "wideparen",
         "bra", "ket", "braket",
         "overbrace", "underbrace", "overbracket", "underbracket",

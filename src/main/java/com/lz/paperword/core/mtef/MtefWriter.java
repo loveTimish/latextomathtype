@@ -1340,6 +1340,12 @@ public class MtefWriter {
                 writeSlot(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
                 out.write(MtefRecord.END);
             }
+            case "\\jstatus", "\\jointstatus" -> {
+                // Joint-status 顶部标记：官方模板族 TM_JSTATUS（HatBoxClass）
+                MtefTemplateBuilder.writeJointStatusHeader(out);
+                writeSlot(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
+                out.write(MtefRecord.END);
+            }
             case "\\arc", "\\overarc", "\\overparen", "\\wideparen" -> writeArcNode(out, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
             case "\\tilde" -> {
                 // 波浪号装饰（~）：生成 TM_TILDE 模板

@@ -525,6 +525,18 @@ public class MtefTemplateBuilder {
     }
 
     /**
+     * 写入 joint status 模板（TM_JSTATUS）的头部。
+     * <p>根据官方 MTEF v5 文档，tmJSTATUS 与 tmHAT/tmARC 同属 HatBoxClass，
+     * 仅包含 1 个主 slot，顶部标记由模板 selector 自身决定。</p>
+     *
+     * @param out 输出字节流
+     * @throws IOException 写入异常
+     */
+    public static void writeJointStatusHeader(ByteArrayOutputStream out) throws IOException {
+        writeTemplateHeader(out, MtefRecord.TM_JSTATUS, 0x00, 0x00);
+    }
+
+    /**
      * 写入波浪号模板（TM_TILDE）的头部。
      * <p>生成字符上方的波浪号（~），如 x̃。
      * 调用方写入头部后需写入 1 个槽位：被修饰内容 LINE。</p>

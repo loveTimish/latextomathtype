@@ -176,4 +176,17 @@ class MathIRLowererTest {
         assertEquals(LaTeXNode.Type.SUPERSCRIPT, lowered.getChildren().get(0).getType());
         assertEquals("\\intop", lowered.getChildren().get(0).getChildren().get(0).getChildren().get(0).getValue());
     }
+
+    @Test
+    void testLowerJointStatusBackToOriginalAccentCommand() {
+        MathIRNode ir = parser.parseMathIR("\\jointstatus{AB}");
+
+        LaTeXNode lowered = lowerer.lower(ir);
+
+        assertNotNull(lowered);
+        assertEquals(LaTeXNode.Type.ROOT, lowered.getType());
+        assertEquals(1, lowered.getChildren().size());
+        assertEquals(LaTeXNode.Type.COMMAND, lowered.getChildren().get(0).getType());
+        assertEquals("\\jointstatus", lowered.getChildren().get(0).getValue());
+    }
 }

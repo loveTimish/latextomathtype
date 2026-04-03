@@ -35,7 +35,7 @@ public class MathIRConverter {
     );
 
     private static final Set<String> OVER_ACCENTS = Set.of(
-        "\\overline", "\\bar", "\\hat", "\\tilde", "\\vec", "\\dot"
+        "\\overline", "\\bar", "\\hat", "\\tilde", "\\vec", "\\dot", "\\jstatus", "\\jointstatus"
     );
 
     private static final Set<String> UNDER_ACCENTS = Set.of(

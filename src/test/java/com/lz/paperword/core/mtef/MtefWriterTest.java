@@ -190,6 +190,18 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteJointStatusUsesDedicatedTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\jstatus{AB}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_JSTATUS, 0x00, 0x00}),
+            "jstatus should use tmJSTATUS");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_HAT, 0x00, 0x00}),
+            "jstatus should not fall back to tmHAT");
+    }
+
+    @Test
     void testWriteBoxedUsesTmBoxTemplate() {
         LaTeXNode ast = parser.parseLaTeX("\\boxed{x+1}");
         byte[] mtef = writer.write(ast);
@@ -858,6 +870,15 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTOP, 0x30, 0x00}),
             "IR path should lower \\intop to tmINTOP");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForJointStatusTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\jointstatus{AB}"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_JSTATUS, 0x00, 0x00}),
+            "IR path should lower \\jointstatus to tmJSTATUS");
     }
 
     @Test
