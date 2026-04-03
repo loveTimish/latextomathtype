@@ -213,7 +213,17 @@ public class MtefTemplateBuilder {
      * @throws IOException 写入异常
      */
     public static void writeIntegralHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
-        int variation = MtefRecord.TV_INT_1;                 // 基础值：单重积分
+        writeIntegralHeader(out, "\\int", hasLower, hasUpper);
+    }
+
+    public static void writeIntegralHeader(ByteArrayOutputStream out, String integralCommand,
+                                           boolean hasLower, boolean hasUpper) throws IOException {
+        int variation = switch (integralCommand) {
+            case "\\iint" -> MtefRecord.TV_INT_2;
+            case "\\iiint" -> MtefRecord.TV_INT_3;
+            case "\\oint" -> MtefRecord.TV_INT_LOOP;
+            default -> MtefRecord.TV_INT_1;
+        };
         if (hasLower) variation |= MtefRecord.TV_BO_LOWER;   // bit4：下限存在
         if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;   // bit5：上限存在
         writeTemplateHeader(out, MtefRecord.TM_INTEG, variation, 0x00);
@@ -235,6 +245,13 @@ public class MtefTemplateBuilder {
         if (hasLower) variation |= MtefRecord.TV_BO_LOWER;  // bit4：下限存在
         if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;  // bit5：上限存在
         writeTemplateHeader(out, MtefRecord.TM_PROD, variation, 0x00);
+    }
+
+    public static void writeLimitHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
+        int variation = MtefRecord.TV_BO_SUM;
+        if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
+        if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;
+        writeTemplateHeader(out, MtefRecord.TM_LIM, variation, 0x00);
     }
 
     // ===== 长除法模板（Long Division）=====

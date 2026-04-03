@@ -96,6 +96,38 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteLimitUsesTmLimTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\lim_{x\\to0}\\frac{\\sin x}{x}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x50, 0x00}),
+            "limit should use tmLIM with lower-slot and summation-style placement");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.SYM}),
+            "tmLIM path should not emit a separate SYM operator record");
+    }
+
+    @Test
+    void testWriteDoubleIntegralUsesIntegralVariation() {
+        LaTeXNode ast = parser.parseLaTeX("\\iint_{D} x \\, dy \\, dx");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTEG, 0x12, 0x00}),
+            "double integral should use tmINTEG with TV_INT_2 and lower limit bits");
+    }
+
+    @Test
+    void testWriteContourIntegralUsesLoopVariation() {
+        LaTeXNode ast = parser.parseLaTeX("\\oint_C f(z) \\, dz");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTEG, 0x14, 0x00}),
+            "contour integral should use tmINTEG with loop variation and lower limit bits");
+    }
+
+    @Test
     void testCharMapLookup() {
         MtefCharMap.CharEntry alpha = MtefCharMap.lookup("\\alpha");
         assertNotNull(alpha);
@@ -203,6 +235,15 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_DBAR, 0x01, 0x00}),
             "IR path should preserve single-sided double-bar fences");
+    }
+
+    @Test
+    void testWriteMathIrDirectlyForLimitTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\lim_{n\\to\\infty} a_n"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x50, 0x00}),
+            "IR path should lower \\lim to tmLIM");
     }
 
     @Test

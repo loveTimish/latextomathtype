@@ -311,6 +311,8 @@ public final class MtefRecord {
     public static final int TV_BO_LOWER = 0x0010;
     /** 存在上限 */
     public static final int TV_BO_UPPER = 0x0020;
+    /** 求和式上下限位置（位于算子正下/正上）；否则按积分式显示在右侧 */
+    public static final int TV_BO_SUM   = 0x0040;
 
     // --- 上下标变体（Sub/sup variations）---
     /** 脚本前置：上下标出现在基底字符之前（如左侧上下标） */

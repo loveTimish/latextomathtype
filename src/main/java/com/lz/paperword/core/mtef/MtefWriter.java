@@ -144,6 +144,11 @@ public class MtefWriter {
         "\\sum", "\\prod", "\\coprod", "\\bigcup", "\\bigcap", "\\bigvee", "\\bigwedge"
     );
 
+    /** 极限类算子 — 使用 TM_LIM 模板，按 summation-style 显示上下限。 */
+    private static final Set<String> BIG_OP_LIMIT_LIKE = Set.of(
+        "\\lim"
+    );
+
     /**
      * 积分类大算子 — 使用 TM_INTEGRAL 模板，上下限以上标/下标形式显示在算子右侧。
      * 包括：单重积分 ∫、二重积分 ∬、三重积分 ∭、曲线积分 ∮
@@ -1166,6 +1171,11 @@ public class MtefWriter {
      */
     private void writeBigOpComplete(ByteArrayOutputStream out, BigOpInfo bigOp,
                                      java.util.List<LaTeXNode> contentNodes) throws IOException {
+        if (BIG_OP_LIMIT_LIKE.contains(bigOp.cmd())) {
+            writeLimitComplete(out, bigOp, contentNodes);
+            return;
+        }
+
         // 写入大算子模板头部（根据命令类型选择 TM_SUM / TM_INTEGRAL / TM_PRODUCT）
         writeBigOpHeader(out, bigOp.cmd(), bigOp.lower() != null, bigOp.upper() != null);
 
@@ -1178,6 +1188,24 @@ public class MtefWriter {
 
         // 写入尾部：SUB(上下限 slots) + SYM(算子字符) + END
         writeBigOpFooter(out, bigOp.cmd(), bigOp.lower(), bigOp.upper());
+    }
+
+    private void writeLimitComplete(ByteArrayOutputStream out, BigOpInfo bigOp,
+                                    java.util.List<LaTeXNode> contentNodes) throws IOException {
+        MtefTemplateBuilder.writeLimitHeader(out, bigOp.lower() != null, bigOp.upper() != null);
+
+        out.write(MtefRecord.LINE);
+        out.write(0x00);
+        writeContentNodes(out, contentNodes);
+        out.write(MtefRecord.END);
+
+        if (bigOp.lower() != null) {
+            writeSlot(out, bigOp.lower());
+        }
+        if (bigOp.upper() != null) {
+            writeSlot(out, bigOp.upper());
+        }
+        out.write(MtefRecord.END);
     }
 
     /**
@@ -2181,7 +2209,7 @@ public class MtefWriter {
     private void writeBigOpHeader(ByteArrayOutputStream out, String cmd, boolean hasLower, boolean hasUpper) throws IOException {
         if (BIG_OP_INT_LIKE.contains(cmd)) {
             // 积分类：∫ ∬ ∭ ∮ → TM_INTEGRAL 模板
-            MtefTemplateBuilder.writeIntegralHeader(out, hasLower, hasUpper);
+            MtefTemplateBuilder.writeIntegralHeader(out, cmd, hasLower, hasUpper);
         } else if ("\\prod".equals(cmd)) {
             // 求积：∏ → TM_PRODUCT 模板
             MtefTemplateBuilder.writeProductHeader(out, hasLower, hasUpper);
@@ -2224,7 +2252,7 @@ public class MtefWriter {
     private boolean isBigOperator(LaTeXNode node) {
         if (node.getType() != LaTeXNode.Type.COMMAND) return false;
         String cmd = node.getValue();
-        return BIG_OP_SUM_LIKE.contains(cmd) || BIG_OP_INT_LIKE.contains(cmd);
+        return BIG_OP_SUM_LIKE.contains(cmd) || BIG_OP_INT_LIKE.contains(cmd) || BIG_OP_LIMIT_LIKE.contains(cmd);
     }
 
     /**
