@@ -150,6 +150,4 @@ PaperExportService service = new PaperExportService();
 byte[] docxBytes = service.export(request);
 ```
 
-## License
 
-MIT
