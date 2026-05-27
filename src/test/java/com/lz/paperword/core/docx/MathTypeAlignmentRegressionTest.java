@@ -37,6 +37,17 @@ class MathTypeAlignmentRegressionTest {
     }
 
     @Test
+    void shouldNotUseScaledBitmapSizeAsWordDisplaySize() throws IOException {
+        ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithFormula("a^2+b^2=25"));
+
+        assertEquals("png", generated.previewExtension);
+        assertTrue(generated.styleHeightPt <= 18.0d,
+            "inline formula display height should use logical points, not high-DPI bitmap pixels");
+        assertTrue(generated.styleWidthPt <= 95.0d,
+            "inline formula display width should use logical points, not high-DPI bitmap pixels");
+    }
+
+    @Test
     void shouldStayCloseToReferenceFractionMetrics() throws IOException {
         assumeTrue(Files.exists(REFERENCE_DOCX), "reference docx should exist");
 

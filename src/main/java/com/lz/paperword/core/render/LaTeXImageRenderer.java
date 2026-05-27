@@ -22,6 +22,8 @@ import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -43,13 +45,13 @@ public class LaTeXImageRenderer {
     private static final float DEFAULT_SIZE = 13f;
 
     /** JLaTeXMath 兜底通道的渲染缩放因子，用于提高位图清晰度。 */
-    private static final float RENDER_SCALE = 2.0f;
+    private static final float RENDER_SCALE = 4.0f;
 
     /** 原生 TeX 预览图转 PNG 时的放大倍率，只提高底图分辨率，不改变文档显示尺寸。 */
-    private static final float PNG_OUTPUT_SCALE = 2.0f;
+    private static final float PNG_OUTPUT_SCALE = 4.0f;
 
     /** 原生 TeX 生成 OLE 预览图时的字号微调，尽量贴近行内 MathType 占位。 */
-    private static final float OLE_PREVIEW_SIZE = 12f;
+    private static final float OLE_PREVIEW_SIZE = 13f;
 
     /** 系统属性：latex 命令路径。 */
     private static final String LATEX_CMD_PROP = "paperword.latex.command";
@@ -67,6 +69,12 @@ public class LaTeXImageRenderer {
 
     /** 标记外部工具是否不可用，避免每个公式都重复探测失败。 */
     private volatile boolean externalToolUnavailable = false;
+
+    /** 公式预览图缓存。高清 TeX 渲染成本高，同一批试卷内重复公式很多，缓存能明显稳住速度。 */
+    private static final Map<String, PreviewImage> PREVIEW_CACHE = new ConcurrentHashMap<>();
+
+    /** PNG 字节缓存，供直接图片导出入口复用。 */
+    private static final Map<String, byte[]> PNG_CACHE = new ConcurrentHashMap<>();
 
     /**
      * 预览图数据记录。
@@ -107,12 +115,19 @@ public class LaTeXImageRenderer {
      * @return 预览图数据；失败返回 null
      */
     public PreviewImage renderForOlePreview(String latex) {
+        String cacheKey = cacheKey("ole", latex, OLE_PREVIEW_SIZE);
+        PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
         PreviewImage preview = renderPreviewViaTeX(latex, OLE_PREVIEW_SIZE);
         if (preview != null) {
+            PREVIEW_CACHE.put(cacheKey, preview);
             return preview;
         }
         preview = renderPreviewViaJLatexMath(latex, OLE_PREVIEW_SIZE);
         if (preview != null) {
+            PREVIEW_CACHE.put(cacheKey, preview);
             return preview;
         }
         byte[] placeholder = createPlaceholderImage(latex);
@@ -129,11 +144,21 @@ public class LaTeXImageRenderer {
      * @return 预览图数据；失败返回 null
      */
     public PreviewImage renderForWordImage(String latex) {
+        String cacheKey = cacheKey("word", latex, DEFAULT_SIZE);
+        PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
         PreviewImage preview = renderPreviewViaTeX(latex, DEFAULT_SIZE);
         if (preview != null) {
+            PREVIEW_CACHE.put(cacheKey, preview);
             return preview;
         }
-        return renderPreviewViaJLatexMath(latex, DEFAULT_SIZE);
+        preview = renderPreviewViaJLatexMath(latex, DEFAULT_SIZE);
+        if (preview != null) {
+            PREVIEW_CACHE.put(cacheKey, preview);
+        }
+        return preview;
     }
 
     /**
@@ -146,12 +171,26 @@ public class LaTeXImageRenderer {
      * @return PNG 字节数组
      */
     public byte[] renderToPng(String latex, float size) {
+        String cacheKey = cacheKey("png", latex, size);
+        byte[] cached = PNG_CACHE.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
         String localRenderLatex = normalizeLatexForLocalRender(latex);
         byte[] external = renderViaDvisvgm(localRenderLatex, size);
         if (external != null && external.length > 0) {
+            PNG_CACHE.put(cacheKey, external);
             return external;
         }
-        return renderByJLatexMath(localRenderLatex, size);
+        byte[] fallback = renderByJLatexMath(localRenderLatex, size);
+        if (fallback != null && fallback.length > 0) {
+            PNG_CACHE.put(cacheKey, fallback);
+        }
+        return fallback;
+    }
+
+    private String cacheKey(String mode, String latex, float size) {
+        return mode + "|" + size + "|" + normalizeLatexForLocalRender(latex == null ? "" : latex);
     }
 
     /**
@@ -208,8 +247,8 @@ public class LaTeXImageRenderer {
             }
             return new PreviewImage(
                 pngData,
-                Math.max(image.getWidth(), 10),
-                Math.max(image.getHeight(), 10),
+                Math.max(Math.round(image.getWidth() / RENDER_SCALE), 10),
+                Math.max(Math.round(image.getHeight() / RENDER_SCALE), 10),
                 "png",
                 "image/png",
                 isPlaceholderImage(image)
