@@ -1,0 +1,19 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: paper-to-word
+
+logging:
+  level:
+    com.lz.paperword: DEBUG
+
+mathtype:
+  windows:
+    # true: Linux side outputs draft with $...$, then calls Windows service for real MathType conversion
+    # false: keep current pure-Java OLE embedding path
+    enabled: false
+    endpoint: http://127.0.0.1:8090/api/mathtype/convert
+    timeout-seconds: 120
+    api-key: ""
