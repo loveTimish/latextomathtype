@@ -1,153 +1,252 @@
-# LaTeX to MathType
+# latextomathtype
 
-将 LaTeX 数学公式转换为 MathType OLE 对象，嵌入 Word 文档（.docx），支持双击打开 MathType 编辑器编辑。
+`latextomathtype` 用来把试卷数据和 LaTeX 公式导出为 Word `.docx`，并把公式嵌入为可编辑的 MathType OLE 对象。当前项目的核心验收链路是：
 
-## 功能特性
+```text
+参考 DOCX -> docx2tex -> PaperExportRequest -> 重新生成 DOCX -> MathType/OLE/docx2tex/版式检查
+```
 
-- **LaTeX → MathType OLE**：将 LaTeX 公式解析为 AST，转换为 MTEF v5 二进制格式，封装为 MathType OLE 对象
-- **Word 文档生成**：接收试卷 JSON 数据（题目、选项、LaTeX 公式），输出格式规范的 .docx 文件
-- **双击可编辑**：生成的公式支持在 Word 中双击打开 MathType 编辑器，与 MathType 原生创建的公式完全兼容
-- **高保真预览**：初始使用高分辨率 PNG 预览，打开文档后 MathType 自动替换为 WMF 矢量预览
-- **K12 公式全覆盖**：分数、根号、上下标、求和、积分、矩阵、希腊字母、三角函数等
+这不是一个只生成公式图片的工具。它的主要目标是：生成的公式在 Word 中仍然是 MathType OLE，Windows 上可以用 MathType 打开编辑，同时生成文档还能被 `docx2tex` 切回正确 LaTeX。
 
-## 技术原理
+## 能力
 
-详见 [TECHNICAL.md](TECHNICAL.md)，包含：
-- MTEF v5 二进制格式详解
-- OLE2 复合文档结构
-- 预览图生成与 VML 嵌入
-- 双击编辑的 COM 激活原理
+- 通过 `POST /api/export/word` 把 `PaperExportRequest` 导出为 Word。
+- 将公式写入 MathType 兼容的 OLE2 对象，并在 `Equation Native` 流中保存 MTEF 数据。
+- 将“公式可编辑本体”和“Word 页面上的显示框”分开处理，避免为了调版式而在 OLE/MTEF 里硬指定公式字号。
+- 优先使用 TeX/dvisvgm 渲染公式预览图，缺少 TeX 环境时回退到 JLaTeXMath。
+- 可重复重建 `rebuild-assets/external/fraction-split-reference.docx` 参考文档。
+- 用 OLE 直接检查、Word/MathType 抽查、`docx2tex` 回切和公式框尺寸对比做验收。
 
-## 技术栈
+## 环境要求
 
-- Java 21 + Spring Boot 3.3.4
-- Apache POI（XWPF + POIFS）
-- JLaTeXMath（公式预览图渲染）
-- FreeHEP（EMF 矢量图生成）
-- Jsoup（HTML 解析）
+| 工具 | 用途 |
+| --- | --- |
+| JDK 21 | 运行、构建和测试 |
+| Maven 3.9.x | 构建和测试，仓库内置 `.mvn/apache-maven-3.9.12` |
+| TeX Live 或 MiKTeX，包含 `latex` 和 `dvisvgm` | 推荐的公式预览渲染器 |
+| Python 3 | 参考文档重建、版式对比和回归脚本 |
+| docx2tex | DOCX 到 LaTeX 的回切验证 |
+| Microsoft Word + MathType | Windows 上的公式 OLE 可编辑性抽查 |
+| Docker | Linux/容器环境验收 |
 
-## 构建与运行
+Windows 验证脚本默认使用 `J:\docx2tex\d2t.bat`。如果本机路径不同，改脚本里的路径即可。
+
+## 构建
+
+优先使用仓库内置 Maven，避免依赖系统 Maven 配置：
+
+```powershell
+.\.mvn\apache-maven-3.9.12\bin\mvn.cmd clean package
+```
+
+Linux 下对应命令：
 
 ```bash
-# 构建
-mvn clean package
-
-# 运行
-java -jar target/paper-to-word-1.0.0.jar
+./.mvn/apache-maven-3.9.12/bin/mvn clean package
 ```
 
-API 接口：`POST /api/export/word`
+运行 Java 回归测试：
 
-### 试卷 JSON 模板
-
-参见 [exam-template.json](exam-template.json)，请求体结构：
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `paper` | object | 试卷信息 |
-| `paper.name` | string | 试卷名称 |
-| `paper.score` | number | 总分 |
-| `paper.suggestTime` | number | 建议时长（分钟） |
-| `sections` | array | 大题列表 |
-| `sections[].headline` | string | 大题标题（如"一、选择题"） |
-| `sections[].questions` | array | 小题列表 |
-| `questions[].serialNumber` | number | 题号 |
-| `questions[].questionType` | number | 1=单选 2=多选 3=判断 4=填空 5=解答 6=计算 |
-| `questions[].content` | string | 题干（HTML，公式用 $...$ 包裹） |
-| `questions[].options` | array | 选项（选择题） |
-| `questions[].correct` | string | 参考答案 |
-| `questions[].score` | number | 分值 |
-| `questions[].analyze` | string | 解析说明 |
-
-## 核心管线
-
+```powershell
+.\.mvn\apache-maven-3.9.12\bin\mvn.cmd test
 ```
-LaTeX 字符串  →  词法分析  →  语法分析  →  AST
-     ↓              ↓           ↓         ↓
- "$\frac{x}{y}$"  Tokens    Parser    LaTeXNode
-                                         ↓
-                                    MtefWriter
-                                         ↓
-                                   MTEF v5 二进制
-                                         ↓
-                                    OlePackager
-                                         ↓
-                                  OLE2 复合文档 (.bin)
-                                         ↓
-                                  MathTypeEmbedder
-                                         ↓
-                                  Word 文档 (.docx)
+
+## 运行服务
+
+启动 Spring Boot：
+
+```powershell
+.\.mvn\apache-maven-3.9.12\bin\mvn.cmd spring-boot:run
 ```
+
+检查服务状态：
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:8081/api/export/health
+```
+
+导出一个试卷：
+
+```powershell
+Invoke-WebRequest `
+  -Method Post `
+  -Uri http://127.0.0.1:8081/api/export/word `
+  -ContentType 'application/json; charset=utf-8' `
+  -InFile exam-template.json `
+  -OutFile target\paper.docx
+```
+
+主要接口：
+
+| 接口 | 方法 | 说明 |
+| --- | --- | --- |
+| `/api/export/health` | `GET` | 健康检查 |
+| `/api/export/word` | `POST` | 将 `PaperExportRequest` 导出为带 MathType OLE 公式的 Word |
+| `/api/export/layout-word` | `POST` | 面向 OCR/PDF 重建链路的块级版式 Word 导出 |
+
+## Linux 和 Docker
+
+Linux 使用纯 Java 的 MTEF/OLE 写入路径：
+
+```bash
+java \
+  -Dmathtype.windows.enabled=false \
+  -Dpaperword.render.cache.enabled=true \
+  -Dpaperword.render.cache.dir=/var/cache/latextomathtype/formula-render \
+  -jar target/paper-to-word-1.0.0.jar
+```
+
+打包后构建并运行容器：
+
+```bash
+docker build -t latextomathtype:local .
+docker run --rm -p 8081:8081 \
+  -v latextomathtype-cache:/var/cache/latextomathtype/formula-render \
+  latextomathtype:local
+```
+
+Linux 主机快速冒烟：
+
+```bash
+sh scripts/linux-smoke.sh
+```
+
+带 TeX 工具链的参考文档验收镜像：
+
+```powershell
+docker build -f Dockerfile.render-test -t latextomathtype:render-test .
+```
+
+更多 Linux 运行说明见 [docs/linux-runtime.md](docs/linux-runtime.md)。
+
+## 参考文档重建
+
+当前参考版式基准：
+
+```text
+rebuild-assets/external/fraction-split-reference.docx
+```
+
+Windows 上运行完整验收链路：
+
+```powershell
+.\scripts\verify-reference-roundtrip.ps1
+```
+
+脚本会执行：
+
+1. 用 `docx2tex` 将参考 DOCX 转为 LaTeX。
+2. 生成 `target/reference-roundtrip/fraction-split-reference.request.json`。
+3. 调用 `ReferenceRoundTripDocxTest` 生成 `target/reference-roundtrip/fraction-split-reference-regenerated.docx`。
+4. 提取参考文档和生成文档的公式显示框。
+5. 按参考对象顺序校准 `v:shape`、`w:dxaOrig/w:dyaOrig` 和 `w:position`。
+6. 在可用时通过 Word COM 检查 MathType OLE 数量和 `Equation.DSMT4` 识别。
+7. 对生成 DOCX 再跑 `docx2tex`，检查公式 LaTeX 覆盖率。
+8. 在 `target/reference-roundtrip` 下输出结构和版式对比报告。
+
+最近一次认可的参考文档验收指标：
+
+| 检查项 | 结果 |
+| --- | --- |
+| OLE 对象数 | 参考 `425`，生成 `425` |
+| 内联公式数 | 生成 `429` |
+| docx2tex 公式覆盖 | `403/403` 个公式匹配，无缺失风险公式 |
+| 生成文档 docx2tex token | `\times=1110`，`\cdots=164`，`\frac=1605` |
+| 成对公式显示框差异 | 校准后宽、高、基线差异为 `0` |
+| OLE 本体内显式点数字号记录 | `0` |
+
+认可输出路径：
+
+```text
+target/reference-roundtrip/fraction-split-reference-regenerated.docx
+```
+
+## 验证命令
+
+检查生成 Word 中的 MathType/OLE 对象：
+
+```powershell
+.\scripts\verify-mathtype-word.ps1 `
+  -DocxPath target\reference-roundtrip\fraction-split-reference-regenerated.docx `
+  -MinimumOleCount 400
+```
+
+验证生成 DOCX 仍能被 `docx2tex` 切回 LaTeX：
+
+```powershell
+.\scripts\verify-docx2tex-roundtrip.ps1 `
+  -DocxPath target\reference-roundtrip\fraction-split-reference-regenerated.docx `
+  -RequestJsonPath target\reference-roundtrip\fraction-split-reference.request.json `
+  -OutDir target\reference-roundtrip\regenerated-docx2tex `
+  -MinimumTimesCount 1000 `
+  -MinimumCdotsCount 150 `
+  -MinimumFractionCount 1500
+```
+
+检查请求公式和回切 LaTeX 的 fragment 覆盖：
+
+```powershell
+python rebuild\verify_docx2tex_formula_fragments.py `
+  --request-json target\reference-roundtrip\fraction-split-reference.request.json `
+  --tex target\reference-roundtrip\regenerated-docx2tex\fraction-split-reference-regenerated.tex `
+  --out-json target\reference-roundtrip\docx2tex-fragment-check.json
+```
+
+只运行参考文档生成测试：
+
+```powershell
+.\.mvn\apache-maven-3.9.12\bin\mvn.cmd `
+  -q `
+  -Dtest=com.lz.paperword.tools.ReferenceRoundTripDocxTest `
+  test
+```
+
+## 配置项
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `mathtype.windows.enabled` | `false` | 是否转发给外部 Windows MathType 服务 |
+| `paperword.latex.command` | `latex` | 原生 TeX 渲染命令 |
+| `paperword.dvisvgm.command` | `dvisvgm` | DVI 转 SVG 命令 |
+| `paperword.latex.timeout.seconds` | `15` | 原生 TeX 渲染超时 |
+| `paperword.render.cache.enabled` | `true` | 是否启用持久化公式渲染缓存 |
+| `paperword.render.cache.dir` | 系统临时目录 | 持久化公式渲染缓存目录 |
 
 ## 项目结构
 
-```
-src/main/java/com/lz/paperword/
-├── core/
-│   ├── latex/                    # LaTeX 解析
-│   │   ├── LaTeXTokenizer.java   #   词法分析器
-│   │   ├── LaTeXParser.java      #   递归下降语法分析器
-│   │   └── LaTeXNode.java        #   AST 节点定义
-│   ├── mtef/                     # MTEF 二进制生成
-│   │   ├── MtefWriter.java       #   AST → MTEF v5 转换（核心）
-│   │   ├── MtefCharMap.java      #   字符映射表
-│   │   ├── MtefTemplateBuilder.java  # 模板记录构建器
-│   │   └── MtefRecord.java       #   记录类型常量
-│   ├── ole/
-│   │   └── OlePackager.java      # MTEF → OLE2 复合文档打包
-│   ├── render/
-│   │   └── LaTeXImageRenderer.java  # 公式预览图渲染
-│   └── docx/
-│       ├── DocxBuilder.java      # Word 文档构建器
-│       └── MathTypeEmbedder.java # MathType OLE 嵌入协调器
-├── controller/
-│   └── ExportController.java     # REST API
-├── service/
-│   └── PaperExportService.java   # 导出业务服务
-└── model/                        # 数据模型
+```text
+src/main/java/com/lz/paperword
+  controller/        REST 接口
+  service/           导出服务和可选 Windows MathType 桥接
+  core/docx/         Word 文档构建和 MathType 嵌入
+  core/latex/        LaTeX 分词、解析和内容切分
+  core/mathml/       中间数学表示和降级转换
+  core/mtef/         MTEF v5 写入器、字符映射和模板记录
+  core/ole/          OLE2 对象打包
+  core/render/       TeX/dvisvgm 和回退渲染
+  model/             请求 DTO
+
+rebuild/             参考文档重建和对比脚本
+rebuild-assets/      参考 DOCX 和抽取出的视觉素材
+scripts/             验证脚本和 Linux 冒烟脚本
+docs/                技术说明和验收计划
 ```
 
-## 预览图渲染配置
+## 文档
 
-默认使用 JLaTeXMath 渲染高分辨率 PNG。也支持外部渲染引擎：
+- [TECHNICAL.md](TECHNICAL.md)：架构、MTEF/OLE、渲染边界和参考重建流程。
+- [docs/linux-runtime.md](docs/linux-runtime.md)：Linux 与 Docker 运行说明。
+- [docs/MathType-validation-plan.md](docs/MathType-validation-plan.md)：解析、MTEF、预览、可编辑性和 Word 显示框的验收门槛。
+- [exam-template.json](exam-template.json)：最小请求示例。
 
-### MathJax HTTP（可选）
+实现参考：
 
-```bash
-java -Dpaperword.mathjax.endpoint="http://127.0.0.1:3000/svg?tex={latex}" \
-     -jar target/paper-to-word-1.0.0.jar
-```
+- [WIRIS MathType SDK: How MTEF is stored in files and objects](https://docs.wiris.com/en_US/mathtype-sdk-technical-documentation/how-mtef-is-stored-in-files-and-objects)
+- [WIRIS MathType SDK: MTEF v5](https://docs.wiris.com/en_US/mathtype-sdk-technical-documentation/mathtype-mtef-v5-mathtype-40-and-later)
+- [transpect/docx2tex README](https://github.com/transpect/docx2tex)
 
-| 属性 | 默认值 | 说明 |
-|------|--------|------|
-| `paperword.mathjax.enabled` | `true` | 启用 MathJax HTTP |
-| `paperword.mathjax.endpoint` | `https://math.vercel.app/` | MathJax 服务地址 |
-| `paperword.mathjax.timeout.seconds` | `12` | 请求超时 |
+## 边界
 
-### LaTeX + dvisvgm（可选）
+生成文档追求视觉和语义等价，不追求字节级相同。参考文档与生成文档的段落数量、媒体内部结构可以不同；验收重点是 OLE 对象数、公式显示框成对尺寸、MathType 可编辑性和 `docx2tex` 语义覆盖。
 
-需安装 TeX Live / MiKTeX：
-
-```bash
-java -Dpaperword.latex.command="C:\texlive\2025\bin\windows\latex.exe" \
-     -Dpaperword.dvisvgm.command="C:\texlive\2025\bin\windows\dvisvgm.exe" \
-     -jar target/paper-to-word-1.0.0.jar
-```
-
-## 作为 Maven 依赖
-
-```xml
-<dependency>
-    <groupId>com.lz</groupId>
-    <artifactId>paper-to-word</artifactId>
-    <version>1.0.0</version>
-</dependency>
-```
-
-```java
-// 代码调用
-PaperExportService service = new PaperExportService();
-byte[] docxBytes = service.export(request);
-```
-
-
+Linux 上没有桌面 MathType。Linux 验证依赖纯 Java OLE/MTEF 生成、POIFS 直接检查、预览渲染和 `docx2tex` 回切。Windows + Word + MathType 仍然是最终 GUI 双击编辑抽查路径。

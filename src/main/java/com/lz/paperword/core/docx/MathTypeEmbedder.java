@@ -27,12 +27,15 @@ public class MathTypeEmbedder {
     private static final Logger log = LoggerFactory.getLogger(MathTypeEmbedder.class);
 
     private static final double PT_PER_PX = 0.75d;
-    private static final double MAX_GENERIC_ARRAY_WIDTH_PT = 180.0d;
+    private static final double MAX_GENERIC_ARRAY_WIDTH_PT = 315.0d;
+    private static final double MAX_DERIVATION_ARRAY_WIDTH_PT = 420.0d;
+    private static final double MAX_GENERIC_FORMULA_WIDTH_PT = 315.0d;
     private static final double MAX_CROSS_ARRAY_WIDTH_PT = 140.0d;
     private static final double MAX_LONG_DIVISION_WIDTH_PT = 150.0d;
     private static final double MAX_DISPLAY_HEIGHT_PT = 96.0d;
-    /** 公式层默认字号已从 30pt 收敛到 20pt，基线偏移也按同样比例缩小。 */
-    private static final double BASELINE_SHIFT_SCALE = 20.0d / 30.0d;
+    private static final double FRACTION_DISPLAY_SCALE = 1.95d;
+    /** Word 中的 w:position 使用半磅；参考文档多数分式对象约为 -22 到 -26。 */
+    private static final double BASELINE_SHIFT_SCALE = 1.0d;
     private final MtefWriter mtefWriter = new MtefWriter();
     private final OlePackager olePackager = new OlePackager();
     private final LaTeXImageRenderer imageRenderer = new LaTeXImageRenderer();
@@ -42,6 +45,16 @@ public class MathTypeEmbedder {
      * 将 MathType 公式嵌入 Word 段落的指定 run 中。
      */
     public void embedEquation(XWPFParagraph paragraph, XWPFRun run, LaTeXNode latexAst, String rawLatex) {
+        embedEquation(paragraph, run, latexAst, rawLatex, 1.0d);
+    }
+
+    public void embedEquation(XWPFParagraph paragraph, XWPFRun run, LaTeXNode latexAst, String rawLatex,
+                              double displayScale) {
+        embedEquation(paragraph, run, latexAst, rawLatex, displayScale, Double.MAX_VALUE);
+    }
+
+    public void embedEquation(XWPFParagraph paragraph, XWPFRun run, LaTeXNode latexAst, String rawLatex,
+                              double displayScale, double maxWidthPt) {
         try {
             byte[] mtefData = mtefWriter.write(latexAst);
             byte[] oleData = olePackager.packageOle(mtefData);
@@ -50,7 +63,8 @@ public class MathTypeEmbedder {
             if (preview == null || preview.data() == null || preview.data().length == 0) {
                 throw new IllegalStateException("OLE preview rendering returned no image data");
             }
-            PreviewBox previewBox = constrainPreviewBox(rawLatex, preview.widthPx(), preview.heightPx());
+            PreviewBox previewBox = constrainPreviewBox(rawLatex, preview.widthPx(), preview.heightPx(),
+                displayScale, maxWidthPt);
 
             OPCPackage pkg = paragraph.getDocument().getPackage();
             int idx = oleCounter.getAndIncrement();
@@ -176,7 +190,7 @@ public class MathTypeEmbedder {
             return scaleHalfPoints(-112);
         }
         if (latex.contains("\\frac") || latex.contains("\\dfrac") || latex.contains("\\cfrac")) {
-            return scaleHalfPoints(-24);
+            return targetHeightPt >= 24d ? -24 : scaleHalfPoints(-24);
         }
         if (latex.contains("\\sqrt")) {
             return scaleHalfPoints(-8);
@@ -198,19 +212,101 @@ public class MathTypeEmbedder {
      * 宽矩阵和十字交叉的预览图如果按原始尺寸写入，Word 中的 OLE 占位会被拉得过宽。
      * 这里仅收敛预览框尺寸，不修改内部 MTEF，可编辑性仍由原始公式决定。
      */
-    private PreviewBox constrainPreviewBox(String rawLatex, int widthPx, int heightPx) {
+    private PreviewBox constrainPreviewBox(String rawLatex, int widthPx, int heightPx, double externalDisplayScale,
+                                           double externalMaxWidthPt) {
         widthPx = Math.max(widthPx, 10);
         heightPx = Math.max(heightPx, 10);
-        double maxWidthPt = resolveMaxPreviewWidthPt(rawLatex);
+        double displayScale = resolvePreviewDisplayScale(rawLatex) * Math.max(externalDisplayScale, 0.25d);
+        widthPx = Math.max((int) Math.round(widthPx * displayScale), 10);
+        heightPx = Math.max((int) Math.round(heightPx * displayScale), 10);
+        PreviewBox normalizedBox = normalizeArrayPreviewBox(rawLatex, widthPx, heightPx);
+        widthPx = normalizedBox.widthPx();
+        heightPx = normalizedBox.heightPx();
+        double maxWidthPt = externalMaxWidthPt < Double.MAX_VALUE / 2.0d
+            ? externalMaxWidthPt
+            : resolveMaxPreviewWidthPt(rawLatex);
         double scale = Math.min(1.0d, maxWidthPt / Math.max(widthPx * PT_PER_PX, 1.0d));
         scale = Math.min(scale, MAX_DISPLAY_HEIGHT_PT / Math.max(heightPx * PT_PER_PX, 1.0d));
         if (scale >= 0.999d) {
-            return new PreviewBox(widthPx, heightPx);
+            return normalizeCompactPreviewHeight(rawLatex, new PreviewBox(widthPx, heightPx), externalMaxWidthPt);
         }
-        return new PreviewBox(
+        PreviewBox constrainedBox = new PreviewBox(
             Math.max((int) Math.round(widthPx * scale), 10),
             Math.max((int) Math.round(heightPx * scale), 10)
         );
+        return normalizeCompactPreviewHeight(rawLatex, constrainedBox, externalMaxWidthPt);
+    }
+
+    private PreviewBox normalizeArrayPreviewBox(String rawLatex, int widthPx, int heightPx) {
+        String latex = rawLatex == null ? "" : rawLatex;
+        if (!latex.contains("\\begin{array}")) {
+            return new PreviewBox(widthPx, heightPx);
+        }
+
+        double widthScale = 0.94d;
+        double minHeightPt = 20.3d;
+        if (countOccurrences(latex, "\\begin{array}") >= 2) {
+            widthScale = 0.90d;
+            minHeightPt = 52.5d;
+        } else if (latex.contains("\\\\") || latex.contains("\\cr")) {
+            widthScale = 0.98d;
+            minHeightPt = 36.8d;
+        } else if (latex.length() >= 150 || latex.contains("\\cdots")) {
+            widthScale = 0.94d;
+            minHeightPt = 25.5d;
+        }
+
+        int normalizedWidthPx = Math.max((int) Math.round(widthPx * widthScale), 10);
+        int minHeightPx = Math.max((int) Math.round(minHeightPt / PT_PER_PX), 10);
+        return new PreviewBox(normalizedWidthPx, Math.max(heightPx, minHeightPx));
+    }
+
+    private PreviewBox normalizeCompactPreviewHeight(String rawLatex, PreviewBox box, double externalMaxWidthPt) {
+        if (externalMaxWidthPt >= Double.MAX_VALUE / 2.0d) {
+            return box;
+        }
+        String latex = rawLatex == null ? "" : rawLatex.trim();
+        if (latex.isEmpty()
+            || latex.contains("\\begin{array}")
+            || latex.contains("\\begin{aligned}")
+            || latex.contains("\\begin{matrix}")
+            || latex.contains("\\longdiv")
+            || latex.contains("\\enclose{longdiv}")) {
+            return box;
+        }
+
+        double minHeightPt = resolveCompactMinimumHeightPt(latex);
+        if (minHeightPt <= 0d) {
+            return box;
+        }
+        int minHeightPx = Math.max((int) Math.round(minHeightPt / PT_PER_PX), 10);
+        if (box.heightPx() >= minHeightPx) {
+            return box;
+        }
+        return new PreviewBox(box.widthPx(), minHeightPx);
+    }
+
+    private double resolveCompactMinimumHeightPt(String latex) {
+        if (latex.contains("\\frac") || latex.contains("\\dfrac") || latex.contains("\\cfrac")) {
+            return 27.75d;
+        }
+        if (latex.matches(".*[=+\\-*/×÷].*") || latex.matches(".*\\d.*")) {
+            return latex.length() <= 16 ? 24.0d : 21.0d;
+        }
+        if (latex.contains("<") || latex.contains(">")) {
+            return 16.0d;
+        }
+        return 0d;
+    }
+
+    private int countOccurrences(String value, String token) {
+        int count = 0;
+        int offset = 0;
+        while (value != null && (offset = value.indexOf(token, offset)) >= 0) {
+            count++;
+            offset += token.length();
+        }
+        return count;
     }
 
     private double resolveMaxPreviewWidthPt(String rawLatex) {
@@ -222,9 +318,25 @@ public class MathTypeEmbedder {
             return MAX_LONG_DIVISION_WIDTH_PT;
         }
         if (latex.contains("\\begin{array}") || latex.contains("\\begin{aligned}") || latex.contains("\\begin{matrix}")) {
-            return MAX_GENERIC_ARRAY_WIDTH_PT;
+            return isArithmeticArray(latex) ? MAX_GENERIC_ARRAY_WIDTH_PT : MAX_DERIVATION_ARRAY_WIDTH_PT;
         }
-        return Double.MAX_VALUE;
+        return MAX_GENERIC_FORMULA_WIDTH_PT;
+    }
+
+    private double resolvePreviewDisplayScale(String rawLatex) {
+        String latex = rawLatex == null ? "" : rawLatex;
+        if (latex.contains("\\begin{array}")
+            || latex.contains("\\begin{aligned}")
+            || latex.contains("\\begin{matrix}")) {
+            return 1.18d;
+        }
+        if (latex.contains("\\longdiv") || latex.contains("\\enclose{longdiv}")) {
+            return 1.0d;
+        }
+        if (latex.contains("\\frac") || latex.contains("\\dfrac") || latex.contains("\\cfrac")) {
+            return FRACTION_DISPLAY_SCALE;
+        }
+        return 1.0d;
     }
 
     /**
@@ -234,6 +346,17 @@ public class MathTypeEmbedder {
         return latex.contains("\\begin{array}{ccccc}")
             && latex.contains("\\nearrow")
             && latex.contains("\\searrow");
+    }
+
+    private boolean isArithmeticArray(String latex) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+            .compile("\\\\begin\\{array\\}\\{([^{}]+)\\}")
+            .matcher(latex == null ? "" : latex);
+        if (!matcher.find()) {
+            return false;
+        }
+        String columnSpec = matcher.group(1).replace("|", "");
+        return !columnSpec.isBlank() && columnSpec.chars().allMatch(ch -> ch == 'r');
     }
 
     private record PreviewBox(int widthPx, int heightPx) {

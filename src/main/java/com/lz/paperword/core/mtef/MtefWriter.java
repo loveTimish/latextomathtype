@@ -40,7 +40,7 @@ import java.util.Set;
  *   ├─────────────────────────────────────────────────────────────┤
  *   │ FONT_STYLE_DEF 记录 × N（定义字体样式：Text, Variable 等）   │
  *   ├─────────────────────────────────────────────────────────────┤
- *   │ SIZE 记录（定义默认字号，通常 12pt）                          │
+ *   │ FULL typesize 记录（使用 MathType 默认全尺寸字号）              │
  *   ├─────────────────────────────────────────────────────────────┤
  *   │ 顶层 LINE 记录（表达式行，包含所有公式内容）                   │
  *   │   ├─ CHAR / TMPL / EMBELL ... 记录（扁平化的记录流）         │
@@ -101,11 +101,11 @@ public class MtefWriter {
 
     /** 目标字体名称 — MathType 中 Text/Variable/Number/Function/Vector 样式默认使用 Times New Roman */
     private static final String TARGET_FONT = "Times New Roman";
-    /** 仅恢复模板里的默认字号，不修改公式内部字体。 */
-    private static final String TEMPLATE_FULL_SIZE_POINTS =
-        System.getProperty("paperword.mtef.full-size-points", "20");
+    private static final int TIMES_MTCODE = 0x00D7;
+    private static final int TIMES_SYMBOL_BITS8 = 0xB4;
+    private static final String TIMES_ENCODING_PROPERTY = "latextomathtype.mtef.times.encoding";
     /**
-     * 从模板 OLE 中提取的 MTEF 前缀（header + 字体定义 + SIZE 记录 + 表达式 LINE 的起始部分）。
+     * 从模板 OLE 中提取的 MTEF 前缀（header + 字体定义 + MathType 默认字号上下文 + 表达式 LINE 的起始部分）。
     * 类加载时从资源文件一次性加载；如果加载失败则为 null，回退到手工构建 header 的模式。
      */
     private static final byte[] TEMPLATE_MTEF_PREFIX = loadTemplateMtefPrefix();
@@ -188,8 +188,8 @@ public class MtefWriter {
      * <p>转换策略：</p>
      * <ul>
      *   <li><b>首选模式</b>：使用从 MathType 模板中提取的前缀（TEMPLATE_MTEF_PREFIX），
-     *       这样可以复用 MathType 原生生成的 header、字体定义和 SIZE 记录，确保兼容性最佳。</li>
-     *   <li><b>回退模式</b>：如果模板前缀不可用，手工构建 header + 字体定义 + SIZE 记录 +
+     *       这样可以复用 MathType 原生生成的 header、字体定义和字号上下文，确保兼容性最佳。</li>
+     *   <li><b>回退模式</b>：如果模板前缀不可用，手工构建 header + 字体定义 + FULL typesize 记录 +
      *       顶层 LINE 记录。</li>
      * </ul>
      *
@@ -231,7 +231,7 @@ public class MtefWriter {
         ByteArrayOutputStream out = new ByteArrayOutputStream(256);
         writeHeader(out);          // 写入 MTEF v5 文件头（12 字节）
         writeFontStyleDefs(out);   // 写入字体样式定义记录
-        writeSizeRecord(out);      // 写入默认字号 SIZE 记录
+        writeDefaultTypesizeRecord(out); // 使用 MathType 默认全尺寸字号，不在 OLE 本体写死点字号
 
         // 写入顶层表达式 LINE 记录（所有公式内容都包含在这个 LINE 中）
         out.write(MtefRecord.LINE);
@@ -473,7 +473,7 @@ public class MtefWriter {
      *   <li>跳过 Equation Native 的 28 字节 OLE 头部，得到纯 MTEF 数据</li>
      *   <li>定位模板公式的表达式部分（CHAR VAR 'A' + END + END），
      *       截取其之前的所有字节作为前缀</li>
-     *   <li>前缀包含：MTEF header + 所有 FONT_STYLE_DEF + SIZE + 顶层 LINE 的起始</li>
+     *   <li>前缀包含：MTEF header + 所有 FONT_STYLE_DEF + 默认字号上下文 + 顶层 LINE 的起始</li>
      * </ol>
      *
      * @return MTEF 前缀字节数组；加载失败时返回 null（触发回退模式）
@@ -528,7 +528,7 @@ public class MtefWriter {
                 }
                 int prefixLen = idx; // 表达式之前的所有内容即为前缀
                 byte[] prefix = java.util.Arrays.copyOfRange(mtef, 0, prefixLen);
-                return patchEqnPrefsFullSize(patchFontsToTimesNewRoman(prefix));
+                return normalizeTemplateForLegacyMathType(patchFontsToTimesNewRoman(prefix));
             }
         } catch (Exception e) {
             log.warn("Failed to load template MTEF prefix; fallback to legacy writer", e);
@@ -569,91 +569,21 @@ public class MtefWriter {
     }
 
     /**
-     * 只恢复模板中的默认 full size，避免 Word/MathType 打开后重新排版时缩成最早的错误版本。
-     * 这个补丁不改字体定义，也不改整体 nudge。
+     * 参考文档使用 MathType 6 头部。经典 MathType 编辑器在 Windows UTF-8
+     * beta locale 下对 DSMT7 模板头更容易丢失 Symbol 字体映射，表现为乘号空框。
+     * 字符记录本身仍按官方 MTEF v5 写入 fnSYMBOL + ENC_CHAR_8。
      */
-    private static byte[] patchEqnPrefsFullSize(byte[] prefix) {
-        if (prefix == null || prefix.length < 4) {
+    private static byte[] normalizeTemplateForLegacyMathType(byte[] prefix) {
+        if (prefix == null || prefix.length < 12) {
             return prefix;
         }
-        int recordIndex = indexOf(prefix, new byte[] {
-            (byte) MtefRecord.EQN_PREFS, 0x00, 0x08
-        });
-        if (recordIndex < 0) {
-            return prefix;
-        }
-
-        int nibbleStreamStart = recordIndex + 3;
-        ParseResult parseResult = parseDimensionArray(prefix, nibbleStreamStart, 8);
-        if (parseResult == null || parseResult.dimensions.isEmpty()) {
-            return prefix;
-        }
-
-        parseResult.dimensions.set(0, buildPointsDimension(TEMPLATE_FULL_SIZE_POINTS));
-        byte[] packed = packDimensions(parseResult.dimensions);
-
-        ByteArrayOutputStream out = new ByteArrayOutputStream(prefix.length + 8);
-        out.write(prefix, 0, nibbleStreamStart);
-        out.writeBytes(packed);
-        out.write(prefix, parseResult.endByteOffset, prefix.length - parseResult.endByteOffset);
-        return out.toByteArray();
+        byte[] normalized = java.util.Arrays.copyOf(prefix, prefix.length);
+        normalized[3] = 0x06;
+        normalized[4] = 0x05;
+        byte[] appKey = "DSMT6\0".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        System.arraycopy(appKey, 0, normalized, 5, appKey.length);
+        return normalized;
     }
-
-    private static ParseResult parseDimensionArray(byte[] data, int startByteOffset, int count) {
-        List<int[]> dimensions = new ArrayList<>();
-        List<Integer> current = new ArrayList<>();
-        int nibbleIndex = 0;
-        int byteOffset = startByteOffset;
-        while (byteOffset < data.length && dimensions.size() < count) {
-            int value = data[byteOffset] & 0xFF;
-            int[] nibbles = new int[] {(value >>> 4) & 0x0F, value & 0x0F};
-            for (int nibble : nibbles) {
-                current.add(nibble);
-                nibbleIndex++;
-                if (nibble == 0x0F) {
-                    dimensions.add(current.stream().mapToInt(Integer::intValue).toArray());
-                    current = new ArrayList<>();
-                    if (dimensions.size() == count) {
-                        int consumedBytes = (nibbleIndex + (nibbleIndex % 2)) / 2;
-                        return new ParseResult(dimensions, startByteOffset + consumedBytes);
-                    }
-                }
-            }
-            byteOffset++;
-        }
-        return null;
-    }
-
-    private static byte[] packDimensions(List<int[]> dimensions) {
-        List<Integer> nibbles = new ArrayList<>();
-        for (int[] dimension : dimensions) {
-            for (int nibble : dimension) {
-                nibbles.add(nibble & 0x0F);
-            }
-        }
-        if ((nibbles.size() & 1) == 1) {
-            nibbles.add(0);
-        }
-        byte[] packed = new byte[nibbles.size() / 2];
-        for (int i = 0; i < nibbles.size(); i += 2) {
-            packed[i / 2] = (byte) ((nibbles.get(i) << 4) | nibbles.get(i + 1));
-        }
-        return packed;
-    }
-
-    private static int[] buildPointsDimension(String points) {
-        String normalized = points == null || points.isBlank() ? "18" : points.trim();
-        int[] nibbles = new int[normalized.length() + 2];
-        nibbles[0] = 0x02;
-        for (int i = 0; i < normalized.length(); i++) {
-            char ch = normalized.charAt(i);
-            nibbles[i + 1] = ch == '.' ? 0x0A : Character.digit(ch, 10);
-        }
-        nibbles[nibbles.length - 1] = 0x0F;
-        return nibbles;
-    }
-
-    private record ParseResult(List<int[]> dimensions, int endByteOffset) {}
 
     /**
      * 在字节数组中查找并替换所有匹配的子序列（通用字节替换工具方法）。
@@ -776,15 +706,13 @@ public class MtefWriter {
     }
 
     /**
-     * 写入 SIZE 记录：设置默认全尺寸字号（12pt）。
+     * 写入默认 typesize 记录：使用当前 MathType 样式中的全尺寸字号。
      *
-     * <p>SIZE 记录格式：record_type(1) + lsize(1) + point_size(1)</p>
-     * <p>lsize = FULL 表示使用全尺寸（而非缩小的上标/下标尺寸）。</p>
+     * <p>不要在 OLE/MTEF 本体里写死显式点字号。版面上的缩放只应通过 Word 外层
+     * OLE 预览框处理，避免 MathType 打开公式时继承不必要的字号覆盖。</p>
      */
-    private void writeSizeRecord(ByteArrayOutputStream out) {
-        out.write(MtefRecord.SIZE);
-        out.write(MtefRecord.FULL); // lsize = FULL（使用全尺寸）
-        out.write(0x0C); // 12pt — MathType 默认字号
+    private void writeDefaultTypesizeRecord(ByteArrayOutputStream out) {
+        out.write(MtefRecord.FULL);
     }
 
     /**
@@ -949,10 +877,13 @@ public class MtefWriter {
     private boolean generatesTemplate(LaTeXNode node) {
         return switch (node.getType()) {
             case SUPERSCRIPT, SUBSCRIPT, SQRT, FRACTION, LONG_DIVISION -> true;
-            default -> switch (node.getValue()) {
-                case "\\overbrace", "\\underbrace", "\\overbracket", "\\underbracket" -> true;
-                default -> false;
-            };
+            default -> {
+                String value = node.getValue();
+                yield switch (value == null ? "" : value) {
+                    case "\\overbrace", "\\underbrace", "\\overbracket", "\\underbracket" -> true;
+                    default -> false;
+                };
+            }
         };
     }
 
@@ -2020,6 +1951,10 @@ public class MtefWriter {
             writeMatrixNode(out, verticalLayoutNodeFactory.buildCrossMultiplicationArray(crossLayout));
             return;
         }
+        if (!shouldCompileVerticalArray(node)) {
+            writeMatrixNode(out, node);
+            return;
+        }
         VerticalLayoutSpec layoutSpec = verticalLayoutCompiler.compileArray(node);
         if (layoutSpec != null && layoutSpec.kind() == VerticalLayoutSpec.Kind.DECIMAL) {
             // 小数加减法单独走单列 PILE，每行写完整小数，避免拆成多列。
@@ -2085,6 +2020,65 @@ public class MtefWriter {
             }
         }
         return true;
+    }
+
+    private boolean shouldCompileVerticalArray(LaTeXNode node) {
+        if (node == null || node.getType() != LaTeXNode.Type.ARRAY) {
+            return false;
+        }
+        if (isDecimalArray(node)) {
+            return true;
+        }
+        String environment = node.getMetadata("environment");
+        if (environment != null && !"array".equals(environment) && !"longdivision".equals(environment)) {
+            return false;
+        }
+        String columnSpec = node.getMetadata("columnSpec");
+        if (columnSpec == null || columnSpec.isBlank()) {
+            return false;
+        }
+        String normalizedSpec = columnSpec.replace("|", "").trim();
+        if (normalizedSpec.isEmpty()) {
+            return false;
+        }
+        return normalizedSpec.chars().allMatch(ch -> ch == 'r')
+            && !containsStructuredMath(node);
+    }
+
+    private boolean containsStructuredMath(LaTeXNode node) {
+        if (node == null) {
+            return false;
+        }
+        return switch (node.getType()) {
+            case FRACTION, SQRT, SUPERSCRIPT, SUBSCRIPT, LONG_DIVISION -> true;
+            case COMMAND -> {
+                String value = node.getValue();
+                if (value != null && (value.startsWith("\\left")
+                    || "\\overline".equals(value)
+                    || "\\underline".equals(value)
+                    || "\\boxed".equals(value))) {
+                    yield true;
+                }
+                boolean structured = false;
+                for (LaTeXNode child : node.getChildren()) {
+                    if (containsStructuredMath(child)) {
+                        structured = true;
+                        break;
+                    }
+                }
+                yield structured;
+            }
+            case ROOT, GROUP, CHAR, TEXT, ARRAY, ROW, CELL -> {
+                boolean structured = false;
+                for (LaTeXNode child : node.getChildren()) {
+                    if (containsStructuredMath(child)) {
+                        structured = true;
+                        break;
+                    }
+                }
+                yield structured;
+            }
+        };
     }
 
     private boolean usesAlignedRelationEnvironment(String environment) {
@@ -2496,6 +2490,10 @@ public class MtefWriter {
      * Symbol font-specific encoding (bits8), matching MathType's native format.</p>
      */
     private void writeCharRecord(ByteArrayOutputStream out, int typeface, int mtcode) throws IOException {
+        if (typeface == MtefRecord.FN_SYMBOL && mtcode == TIMES_MTCODE && writeTimesSymbolCandidate(out)) {
+            return;
+        }
+
         out.write(MtefRecord.CHAR);
 
         // 判断是否需要 bits8 字段（仅 Symbol 和 Greek 字体需要）
@@ -2517,15 +2515,79 @@ public class MtefWriter {
         }
     }
 
+    private boolean writeTimesSymbolCandidate(ByteArrayOutputStream out) throws IOException {
+        String mode = System.getProperty(TIMES_ENCODING_PROPERTY, "reference")
+            .trim()
+            .toLowerCase(java.util.Locale.ROOT);
+        switch (mode) {
+            case "", "reference", "symbol", "mtcode-bits8" -> {
+                return false;
+            }
+            case "no-bits8", "mtcode-only" -> {
+                writeCharRecordRaw(out, 0x00, MtefRecord.FN_SYMBOL, TIMES_MTCODE, -1, -1);
+                return true;
+            }
+            case "no-mtcode", "bits8-only" -> {
+                writeCharRecordRaw(out, MtefRecord.OPT_CHAR_ENC_NO_MTCODE | MtefRecord.OPT_CHAR_ENC_CHAR_8,
+                    MtefRecord.FN_SYMBOL, -1, TIMES_SYMBOL_BITS8, -1);
+                return true;
+            }
+            case "mtcode-b4" -> {
+                writeCharRecordRaw(out, MtefRecord.OPT_CHAR_ENC_CHAR_8, MtefRecord.FN_SYMBOL,
+                    TIMES_SYMBOL_BITS8, TIMES_SYMBOL_BITS8, -1);
+                return true;
+            }
+            case "char16-b4" -> {
+                writeCharRecordRaw(out, MtefRecord.OPT_CHAR_ENC_CHAR_16, MtefRecord.FN_SYMBOL,
+                    TIMES_MTCODE, -1, TIMES_SYMBOL_BITS8);
+                return true;
+            }
+            case "char16-d7" -> {
+                writeCharRecordRaw(out, MtefRecord.OPT_CHAR_ENC_CHAR_16, MtefRecord.FN_SYMBOL,
+                    TIMES_MTCODE, -1, TIMES_MTCODE);
+                return true;
+            }
+            default -> throw new IllegalArgumentException("Unsupported " + TIMES_ENCODING_PROPERTY + ": " + mode);
+        }
+    }
+
+    private void writeCharRecordRaw(
+        ByteArrayOutputStream out,
+        int options,
+        int typeface,
+        int mtcode,
+        int bits8,
+        int bits16
+    ) throws IOException {
+        out.write(MtefRecord.CHAR);
+        out.write(options & 0xFF);
+        out.write(encodeTypeface(typeface));
+        if ((options & MtefRecord.OPT_CHAR_ENC_NO_MTCODE) == 0) {
+            out.write(mtcode & 0xFF);
+            out.write((mtcode >> 8) & 0xFF);
+        }
+        if ((options & MtefRecord.OPT_CHAR_ENC_CHAR_8) != 0) {
+            out.write(bits8 & 0xFF);
+        }
+        if ((options & MtefRecord.OPT_CHAR_ENC_CHAR_16) != 0) {
+            out.write(bits16 & 0xFF);
+            out.write((bits16 >> 8) & 0xFF);
+        }
+    }
+
     /**
      * 写入带修饰（embellishment）的字符节点。
      *
      * <p>MTEF 中的修饰（如点 ·、帽 ^、波浪 ~ 等）通过 EMBELL 记录附加在 CHAR 记录之后。
      * CHAR 记录的 options 必须设置 OPT_CHAR_EMBELL 标志位，表示后面跟有 EMBELL 记录。</p>
      *
-     * <p>生成的结构：CHAR(options=EMBELL) + typeface + mtcode + EMBELL + embellType</p>
+     * <p>生成的结构：CHAR(options=EMBELL) + typeface + mtcode + EMBELL + embellType + END</p>
      */
     private void writeNodeWithEmbellishment(ByteArrayOutputStream out, LaTeXNode node, int embellType) throws IOException {
+        if (node.getType() == LaTeXNode.Type.GROUP && node.getChildren().size() == 1) {
+            writeNodeWithEmbellishment(out, node.getChildren().get(0), embellType);
+            return;
+        }
         if (node.getType() == LaTeXNode.Type.CHAR) {
             String ch = node.getValue();
             MtefCharMap.CharEntry entry = MtefCharMap.lookupChar(ch.charAt(0));
@@ -2543,6 +2605,7 @@ public class MtefWriter {
             out.write(MtefRecord.EMBELL);
             out.write(0x00);          // options: 无额外选项
             out.write(embellType);     // 修饰类型（如 EMB_1DOT = 单点）
+            out.write(MtefRecord.END); // 结束 embellishment list，供 MTEF 读取器正确截断
         } else {
             // 非字符节点无法添加修饰，回退为普通写入
             writeNode(out, node);

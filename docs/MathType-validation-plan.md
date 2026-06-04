@@ -50,6 +50,28 @@ Pass criteria:
 - `Equation Native` length/header is consistent
 - proxy round-trip checks via extraction / conversion heuristics stay sane
 
+### 5. Word display-box correctness
+
+Artifacts:
+- `formula-boxes-reference.json`
+- `formula-boxes-generated-uncalibrated.json`
+- `formula-box-dataset.json`
+- `formula-box-fit-model.json`
+- `formula-boxes-generated-calibrated.json`
+- `format-comparison.json/.txt`
+
+Pass criteria:
+- generated OLE count matches the reference object count
+- uncalibrated drift is measured before any correction
+- external sample distribution is available when fitting is requested
+- exact reference calibration produces zero paired width/height delta
+- paired baseline values match when a one-to-one reference is available
+
+Reasoning:
+- MathType editability is controlled by the OLE/MTEF body.
+- Word layout is controlled by the external object display box and run baseline.
+- Font changes are only a secondary rendering input and must not be used as the primary layout-size control.
+
 ## Linux fallback strategy
 
 When local Word + MathType are unavailable, validation must still proceed by proxy:

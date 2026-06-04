@@ -249,7 +249,7 @@ public class LaTeXParser {
      *
      * <p>核心循环逻辑：</p>
      * <ol>
-     *   <li>检查下一个 Token 是否为右花括号或右方括号（标志分组结束），若是则退出</li>
+     *   <li>检查下一个 Token 是否为右花括号（标志花括号分组结束），若是则退出</li>
      *   <li>调用 {@link #parseAtom(TokenStream)} 解析一个原子元素</li>
      *   <li>调用 {@link #parseScripts(TokenStream, LaTeXNode)} 检查并处理后续的上标/下标</li>
      *   <li>将最终节点添加为 parent 的子节点</li>
@@ -267,8 +267,8 @@ public class LaTeXParser {
             }
             Token token = stream.peek();
 
-            // 遇到右花括号 } 或右方括号 ]，表示当前分组/可选参数结束
-            if (token.type() == TokenType.RBRACE || token.type() == TokenType.RBRACKET) {
+            // 遇到右花括号 }，表示当前花括号分组结束。普通方括号应保留为公式字符。
+            if (token.type() == TokenType.RBRACE) {
                 break;
             }
 
@@ -290,6 +290,7 @@ public class LaTeXParser {
      *   <li>CHAR → 创建 CHAR 类型节点（单个字符）</li>
      *   <li>COMMAND → 调用 {@link #parseCommand(TokenStream, String)} 处理命令</li>
      *   <li>LBRACE → 调用 {@link #parseGroup(TokenStream)} 解析花括号分组</li>
+     *   <li>LBRACKET/RBRACKET → 普通方括号字符；可选参数由专用解析函数处理</li>
      *   <li>其他类型（RBRACE、CARET 等）→ 返回 null（由调用者处理）</li>
      * </ul>
      *
@@ -305,6 +306,8 @@ public class LaTeXParser {
             case CHAR -> new LaTeXNode(LaTeXNode.Type.CHAR, token.value());
             case COMMAND -> parseCommand(stream, token.value());
             case LBRACE -> parseGroup(stream);
+            case LBRACKET -> new LaTeXNode(LaTeXNode.Type.CHAR, "[");
+            case RBRACKET -> new LaTeXNode(LaTeXNode.Type.CHAR, "]");
             default -> null;
         };
     }

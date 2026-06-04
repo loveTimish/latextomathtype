@@ -350,7 +350,19 @@ public final class MtefCharMap {
      * @return 对应的 {@link CharEntry}，包含 typeface 和 mtcode；未找到则返回 null
      */
     public static CharEntry lookup(String latex) {
+        if ("\\times".equals(latex)) {
+            return timesEntry();
+        }
         return LATEX_TO_MTEF.get(latex);
+    }
+
+    private static CharEntry timesEntry() {
+        String mode = System.getProperty("latextomathtype.mtef.times.mode", "").trim().toLowerCase(java.util.Locale.ROOT);
+        return switch (mode) {
+            case "text" -> new CharEntry(MtefRecord.FN_TEXT, 0x00D7);
+            case "mtextra", "mt-extra", "mt_extra" -> new CharEntry(MtefRecord.FN_MTEXTRA, 0x00D7);
+            default -> LATEX_TO_MTEF.get("\\times");
+        };
     }
 
     /**

@@ -1,496 +1,303 @@
-# Paper-to-Word 技术文档
+# 技术设计
 
-## 项目概述
+本文档说明 `latextomathtype` 当前的导出链路：`PaperExportRequest` 如何生成 Word，LaTeX 如何变成可编辑 MathType OLE，公式预览如何渲染，以及参考文档如何验收。
 
-本模块将试卷题目（含 LaTeX 数学公式）导出为 Word 文档（.docx），其中数学公式以 **MathType OLE 对象**嵌入，支持双击打开 MathType 编辑器进行编辑。
+## 目标
 
----
+- 为试卷和版式重建场景生成 Word `.docx`。
+- 公式必须保留为 MathType 兼容 OLE 对象，而不是只有图片。
+- 生成文档必须能被 `docx2tex` 回切出正确 LaTeX。
+- 公式在 Word 页面中的大小、基线和位置尽量贴近参考文档。
+- 核心导出链路必须能在 Linux 上运行，不依赖桌面 MathType。
 
-## 目录
+非目标：
 
-1. [整体架构与数据流](#1-整体架构与数据流)
-2. [文件结构与职责](#2-文件结构与职责)
-3. [LaTeX 解析管线](#3-latex-解析管线)
-4. [MTEF 二进制格式详解](#4-mtef-二进制格式详解)
-5. [OLE 复合文档打包](#5-ole-复合文档打包)
-6. [预览图生成与 VML 嵌入](#6-预览图生成与-vml-嵌入)
-7. [双击编辑原理](#7-双击编辑原理)
-8. [关键设计决策](#8-关键设计决策)
+- 不追求和参考 `.docx` 字节级完全一致。
+- 不把 Windows 桌面 MathType 作为 Linux 导出依赖。
+- 不用 MTEF 里的固定字号记录作为 Word 版式的主要控制手段。
 
----
+## 总体管线
 
-## 1. 整体架构与数据流
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                   数据流总览                                  │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  题目 HTML（含 $\frac{x^2}{a^2}$ 公式）                      │
-│       │                                                     │
-│       ▼                                                     │
-│  ┌─────────────────┐                                        │
-│  │  DocxBuilder     │  提取 LaTeX 公式，组装 Word 文档        │
-│  └────────┬────────┘                                        │
-│           │                                                 │
-│           ▼                                                 │
-│  ┌─────────────────┐                                        │
-│  │  LaTeXParser     │  LaTeX 字符串 → 抽象语法树 (AST)       │
-│  │  LaTeXTokenizer  │  词法分析：分词                         │
-│  │  LaTeXNode       │  AST 节点定义                          │
-│  └────────┬────────┘                                        │
-│           │                                                 │
-│           ▼                                                 │
-│  ┌─────────────────┐                                        │
-│  │  MtefWriter      │  AST → MTEF v5 二进制数据              │
-│  │  MtefCharMap     │  字符映射（LaTeX→MTEF typeface/mtcode） │
-│  │  MtefTemplateBuilder│ TMPL 记录构建器                     │
-│  │  MtefRecord      │  MTEF 记录类型常量                     │
-│  └────────┬────────┘                                        │
-│           │                                                 │
-│           ▼                                                 │
-│  ┌─────────────────┐                                        │
-│  │  OlePackager     │  MTEF → OLE2 复合文档 (.bin)           │
-│  └────────┬────────┘                                        │
-│           │                                                 │
-│           ▼                                                 │
-│  ┌─────────────────┐    ┌──────────────────┐                │
-│  │  MathTypeEmbedder│◄───│ LaTeXImageRenderer│               │
-│  │  （嵌入协调器）    │    │ （预览图渲染）     │               │
-│  └────────┬────────┘    └──────────────────┘                │
-│           │                                                 │
-│           ▼                                                 │
-│       .docx 文件                                             │
-│   ┌─────────────────────────────┐                           │
-│   │ word/document.xml           │ VML Shape + OLEObject 引用 │
-│   │ word/embeddings/oleObject.bin│ OLE2 复合文档（含 MTEF）   │
-│   │ word/media/image_eq.png     │ 公式预览图                 │
-│   └─────────────────────────────┘                           │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+```text
+PaperExportRequest
+  -> DocxBuilder
+  -> LaTeXParser.splitContent()
+  -> LaTeXParser.parse()
+  -> MathIRConverter / MathIRLowerer
+  -> MtefWriter
+  -> OlePackager
+  -> LaTeXImageRenderer
+  -> MathTypeEmbedder
+  -> DOCX package
 ```
 
----
+核心职责：
 
-## 2. 文件结构与职责
+| 模块 | 职责 |
+| --- | --- |
+| `DocxBuilder` | 组装页面结构、段落、标题、题目、选项、图片和公式 run。 |
+| `LaTeXParser` | 将 HTML/文本拆成普通文本和公式片段，并把支持的 LaTeX 解析为 AST。 |
+| `MathIRConverter` / `MathIRLowerer` | 将 AST 规范化为更适合写 MTEF 的中间数学表示。 |
+| `MtefWriter` | 写 MathType MTEF v5 记录，包括模板、字符、pile、matrix 和竖式相关结构。 |
+| `OlePackager` | 将 MTEF 包装为 MathType OLE2 复合对象。 |
+| `LaTeXImageRenderer` | 优先通过 TeX/dvisvgm 生成公式预览图，缺失时使用 Java 回退渲染。 |
+| `MathTypeEmbedder` | 把预览图、OLE 二进制、VML shape、关系 ID、尺寸和基线写入 Word。 |
 
-### 核心模块
+## DOCX 对象结构
 
-| 文件 | 职责 |
-|------|------|
-| `core/latex/LaTeXTokenizer.java` | 词法分析：将 LaTeX 字符串拆分为 Token 序列（命令、花括号、字符等） |
-| `core/latex/LaTeXParser.java` | 语法分析：递归下降解析器，将 Token 序列构建为 AST |
-| `core/latex/LaTeXNode.java` | AST 节点定义：ROOT、GROUP、CHAR、COMMAND、FRACTION、SQRT、SUPERSCRIPT、SUBSCRIPT 等类型 |
-| `core/mtef/MtefRecord.java` | MTEF v5 记录类型常量定义（END=0, LINE=1, CHAR=2, TMPL=3 等） |
-| `core/mtef/MtefCharMap.java` | 字符映射表：LaTeX 字符/命令 → MTEF typeface + Unicode MTcode |
-| `core/mtef/MtefTemplateBuilder.java` | TMPL 记录头部构建器：分数、根号、上下标、括号等模板的字节序列生成 |
-| `core/mtef/MtefWriter.java` | **核心**：AST → MTEF v5 二进制转换，处理所有数学结构的编码 |
-| `core/ole/OlePackager.java` | OLE2 复合文档打包：将 MTEF 数据封装为 MathType 可识别的 OLE 对象 |
-| `core/render/LaTeXImageRenderer.java` | 公式预览图渲染：JLaTeXMath → PNG（3 倍分辨率） |
-| `core/docx/MathTypeEmbedder.java` | 嵌入协调器：组装 OLE 对象 + 预览图 → Word 文档 |
-| `core/docx/DocxBuilder.java` | 文档构建器：解析题目 HTML，组装完整 .docx |
+每个公式有两个层次。
 
-### 辅助模块
+可编辑本体在：
 
-| 文件 | 职责 |
-|------|------|
-| `controller/ExportController.java` | REST API 接口：接收导出请求 |
-| `service/PaperExportService.java` | 业务服务：调用 DocxBuilder |
-| `model/QuestionDTO.java` | 题目数据传输对象 |
-| `model/SectionDTO.java` | 试卷分节数据 |
-| `model/PaperExportRequest.java` | 导出请求 |
-
----
-
-## 3. LaTeX 解析管线
-
-### 3.1 词法分析（LaTeXTokenizer）
-
-将 LaTeX 字符串逐字符扫描，生成 Token 序列：
-
-```
-输入: \frac{x^{2}}{a+b}
-
-Token序列:
-  COMMAND(\frac) → LBRACE → CHAR(x) → CARET → LBRACE → CHAR(2) → RBRACE
-  → RBRACE → LBRACE → CHAR(a) → CHAR(+) → CHAR(b) → RBRACE
+```text
+word/embeddings/oleObjectN.bin
 ```
 
-**分词规则：**
-- `\` 开头：命令（贪婪匹配已知命令名）
-- `{` / `}` ：花括号组
-- `^` / `_` ：上标/下标运算符
-- `[` / `]` ：方括号
-- 空白：跳过
-- 其他：普通字符
+这是一个 OLE2 复合文档，内部包含：
 
-### 3.2 语法分析（LaTeXParser）
-
-递归下降解析器，将 Token 构建为 AST：
-
-```
-输入: \frac{x^{2}}{a+b}
-
-AST:
-  FRACTION
-  ├── GROUP (分子)
-  │   └── SUPERSCRIPT
-  │       ├── CHAR 'x'     (底数)
-  │       └── GROUP         (指数)
-  │           └── CHAR '2'
-  └── GROUP (分母)
-      ├── CHAR 'a'
-      ├── CHAR '+'
-      └── CHAR 'b'
+```text
+\001Ole
+\001CompObj
+Equation Native
+\003ObjInfo
 ```
 
-**解析优先级（从高到低）：**
-1. `parseAtom` — 单个字符、命令、花括号组
-2. `parseScripts` — 处理 `^` 和 `_` 运算符（右结合）
-3. `parseCommand` — 处理 `\frac{}{}`、`\sqrt{}`、`\left(` 等带参数命令
-4. `parseExpression` — 顶层表达式，串联多个元素
+`Equation Native` 保存 MathType 原生数据。WIRIS 文档说明，OLE equation native stream 使用 28 字节的 `EQNOLEFILEHDR`，后面跟 MTEF 数据。这个头部包含头长度、版本、剪贴板格式、MTEF 字节长度和保留字段。
 
----
+Word 页面上的显示层在：
 
-## 4. MTEF 二进制格式详解
-
-### 4.1 MTEF v5 文件结构
-
-MTEF（MathType Equation Format）是 MathType 的原生二进制公式格式：
-
-```
-┌──────────────────────────────────────────────┐
-│ MTEF v5 二进制流                               │
-├──────────────────────────────────────────────┤
-│ 文件头 (12 字节)                                │
-│   version(1)=5, platform(1)=1(Win),           │
-│   product(1)=0(MathType), prodVer(1)=7,       │
-│   prodSubVer(1)=0, appKey="DSMT4\0",          │
-│   eqnOptions(1)=0x01                          │
-├──────────────────────────────────────────────┤
-│ FONT_STYLE_DEF 记录 × N                       │
-│   定义 typeface → 实际字体的映射                 │
-│   例如：FN_TEXT(1) → "Times New Roman"         │
-├──────────────────────────────────────────────┤
-│ SIZE 记录                                      │
-│   FULL(0x0A) + type(101) + 12pt               │
-├──────────────────────────────────────────────┤
-│ 表达式 LINE                                    │
-│   LINE(tag=0x01, options=0x00)                 │
-│   ├── 内容记录序列（CHAR、TMPL、LINE 等）        │
-│   └── END                                      │
-├──────────────────────────────────────────────┤
-│ END（流结束标记）                                │
-└──────────────────────────────────────────────┘
+```text
+word/document.xml
+word/media/imageN.png
 ```
 
-### 4.2 记录类型
+显示层控制：
 
-| 标签值 | 名称 | 说明 |
-|--------|------|------|
-| 0x00 | END | 结束标记（关闭 LINE 或 TMPL） |
-| 0x01 | LINE | 行/槽位：包含一组子记录 |
-| 0x02 | CHAR | 字符：typeface(1) + MTcode(2) |
-| 0x03 | TMPL | 模板：分数、根号、上下标等复合结构 |
-| 0x06 | EMBELL | 修饰：上划线、帽子等 |
-| 0x08 | FONT_STYLE_DEF | 字体样式定义 |
-| 0x09 | SIZE | 字号设置 |
-| 0x0A | FULL | 恢复完整字号 |
-| 0x0B | SUB | 缩小到下标字号 |
-| 0x0C | SUB2 | 缩小到二级下标字号 |
-| 0x0D | SYM | 符号（类似 CHAR，用于特殊符号） |
+- 预览图 relationship
+- `v:shape` 宽高
+- `w:dxaOrig` 和 `w:dyaOrig`
+- `w:position` 基线偏移
+- run 和段落位置
 
-### 4.3 CHAR 记录格式
+这是当前实现最重要的边界：MathType 可编辑性由 OLE/MTEF 决定，Word 页面上的大小和对齐由外层对象显示框决定。
 
-```
-CHAR 记录（可变长度）:
-┌──────┬──────┬──────────┬────────┬──────────┐
-│ tag  │ opts │ typeface │ MTcode │ [bits8]  │
-│ 0x02 │ 1B   │ 1B       │ 2B LE  │ [1B]     │
-└──────┴──────┴──────────┴────────┴──────────┘
+## MTEF 写入
 
-typeface 取值（高位为编码标志）：
-  0x83 = FN_VARIABLE  (变量，如 x, y)
-  0x86 = FN_SYMBOL    (符号，如 +, =, ×)
-  0x88 = FN_NUMBER    (数字，如 1, 2, 3)
-  0x96 = FN_EXPAND    (可伸缩分隔符，如括号)
+写入器目标是 MathType MTEF v5。WIRIS 文档描述的 v5 流大致为：
 
-MTcode：Unicode 码点（小端序 2 字节）
-  例如：'x' = 0x0078, '+' = 0x002B, '×' = 0x00D7
-```
-
-### 4.4 TMPL 记录格式（模板）
-
-模板用于表示分数、根号、上下标等复合数学结构：
-
-```
-TMPL 记录头部:
-┌──────┬──────┬──────────┬───────────┬────────────┐
-│ tag  │ opts │ selector │ variation │ tmplOptions│
-│ 0x03 │ 0x00 │ 1B       │ 1-2B      │ 1B (=0x00) │
-└──────┴──────┴──────────┴───────────┴────────────┘
-
-selector 取值：
-  1  = TM_PAREN    (圆括号)
-  3  = TM_BRACK    (方括号)
-  10 = TM_ROOT     (根号)
-  11 = TM_FRAC     (分数)
-  16 = TM_SUM      (求和)
-  27 = TM_SUB      (下标)
-  28 = TM_SUP      (上标)
-  29 = TM_SUBSUP   (上下标)
-
-variation 变长编码：
-  若 bit7=0: 单字节 variation
-  若 bit7=1: 双字节 (第 2 字节为 variation 高位)
-
-tmplOptions: 始终为 0x00（MathType 实际输出中所有模板类型都包含此字节）
-```
-
-### 4.5 上下标模板的特殊结构
-
-MathType 中上下标的 MTEF 结构与直觉不同——**底数字符在模板之前**写入：
-
-```
-x² 的 MTEF 结构:
-┌─────────────────────────────────┐
-│ CHAR 'x' (FN_VARIABLE)         │ ← 底数在模板外部
-│ TMPL TM_SUP (selector=28)      │
-│   SUB                           │ ← 切换到下标字号
-│   LINE [NULL]                   │ ← slot 0 = 空（底数位置）
-│   LINE                          │ ← slot 1 = 上标内容
-│     CHAR '2' (FN_NUMBER)       │
-│   END                           │
-│ END                             │
-└─────────────────────────────────┘
-
-a₁ 的 MTEF 结构（注意 slot 顺序与 TM_SUP 相反）:
-┌─────────────────────────────────┐
-│ CHAR 'a' (FN_VARIABLE)         │ ← 底数在模板外部
-│ TMPL TM_SUB (selector=27)      │
-│   SUB                           │
-│   LINE                          │ ← slot 0 = 下标内容（先写！）
-│     CHAR '1' (FN_NUMBER)       │
-│   END                           │
-│   LINE [NULL]                   │ ← slot 1 = 空（底数位置）
-│ END                             │
-└─────────────────────────────────┘
-```
-
-### 4.6 FULL 记录管理规则
-
-`FULL`（0x0A）是一个单字节记录，用于恢复字号到完整大小。使用规则：
-
-1. **模板后加 FULL**：当 TM_SUP、TM_SUB、TM_ROOT 等改变字号的模板结束后，如果同一行中还有**后续内容**，则添加 FULL
-2. **不在 slot 末尾添加**：如果模板是当前行的最后一个元素，不添加 FULL
-3. **分数分子分母之间**：仅当分子最后一个元素是 TM_SUP/TM_SUB/TM_ROOT 时才添加 FULL；如果最后是 TM_PAREN（内部已有 FULL），则不添加
-4. **TM_PAREN 内部**：content LINE END 与 FN_EXPAND 分隔符之间，仅当内容最后一个元素是模板时才添加 FULL
-
-```
-示例：x²/a² + y²/b² = 1 中的 FULL 位置：
-
-FRAC₁ {
-  LINE (分子) → x → TM_SUP('2') → END   (无 FULL：TM_SUP 是最后元素)
-  FULL                                      ← 分子/分母之间需要 FULL
-  LINE (分母) → a → TM_SUP('2') → END
-}
+```text
+MTEF header
+equation preferences and definitions
+initial SIZE/FULL record
+PILE or LINE
+contents
 END
-FULL                                        ← FRAC₁ 后有后续内容 '+'
-CHAR '+'
-FRAC₂ { ... }
-END
-FULL                                        ← FRAC₂ 后有后续内容 '='
-CHAR '='
-CHAR '1'
 ```
 
----
+当前实现写入一个紧凑的 MTEF 流：
 
-## 5. OLE 复合文档打包
+- 版本、平台、产品头和 `DSMT4` app key
+- 默认 typesize 标记
+- 顶层 `LINE`
+- 按需嵌套 `TMPL`、`LINE`、`MATRIX`、`PILE`、`RULER`、`CHAR`
+- 配平的 `END` 记录
 
-### 5.1 OLE2 结构
+支持结构包括：
 
-MathType 公式在 Word 中以 OLE2 复合文档（Structured Storage）形式存储：
+- 普通变量、数字、运算符、希腊字母和常用数学符号
+- 分数、根号、上标、下标、上下标
+- 大运算符、极限、积分
+- 括号和 fence 模板
+- 矩阵、cases、aligned 结构
+- 项目里使用的 K12 竖式辅助结构
 
-```
-oleObjectN.bin (OLE2 Compound Document)
-├── \001Ole              (20 字节: OLE 嵌入标记)
-├── \001CompObj          (COM 对象标识)
-│   ├── UserType: "MathType 7.0 Equation"
-│   └── ProgID:   "Equation.DSMT4"
-├── Equation Native      (MTEF 数据)
-│   ├── EQNOLEFILEHDR (28 字节头部)
-│   │   ├── cbHdr = 28
-│   │   ├── version = 0x00020000
-│   │   ├── cf = 0 (剪贴板格式)
-│   │   └── cbObject = MTEF数据长度
-│   └── MTEF v5 二进制数据
-├── \003ObjInfo          (6 字节: 对象显示信息)
-└── [CLSID: {0002CE03-...}]  (MathType 的 COM 类标识)
-```
+字符映射集中在 `MtefCharMap`。乘号不能只当作普通 Unicode 字符写入；MathType 编辑器和 `docx2tex` 对 MTEF typeface 与字符码敏感，所以乘号需要映射到 MathType/Symbol 兼容记录。
 
-### 5.2 打包策略
+写入器不会为普通公式写入显式固定点数字号记录。默认初始尺寸只写 full size class。Word 版式校准通过外层 VML/OLE 显示框完成，因为改 MTEF 内部字号会影响 MathType 编辑和回切语义，风险更大。
 
-**优先方案：模板替换法**
-1. 从 classpath 加载真实 MathType OLE 模板文件
-2. 仅替换 `Equation Native` 流中的 MTEF 数据
-3. 删除过期的 `\002OlePres000` 预览缓存
-4. 保留其他流（CompObj、ObjInfo 等）不变
+## OLE 打包
 
-**降级方案：从零构建**
-如果模板不可用，手动构建所有 4 个流
+`OlePackager` 使用 Apache POI POIFS 写 OLE2 复合文件，使对象看起来像 MathType equation object：
 
-模板方案的优势：保留了 MathType 生成的辅助数据和精确的字节格式，最大限度提高兼容性。
+- `Equation Native` 中写入原生 MTEF payload
+- 写入 `MathType EF` native stream header
+- 写入兼容 MathType equation object 的 class metadata
+- 保留 Word/MathType 识别所需的 storage 名称和对象信息
 
----
+验收时直接检查 OLE 复合文件：
 
-## 6. 预览图生成与 VML 嵌入
+- `Equation Native` 必须存在。
+- native header 长度必须正确。
+- header 中声明的对象长度必须等于后续 MTEF 字节数。
+- 复合对象能作为 POIFS 打开。
+- Windows GUI 验证可用时，Word 能识别 `Equation.DSMT4` 等 OLE class 名称。
 
-### 6.1 预览图
+## 预览渲染
 
-Word 文档中 OLE 对象的显示依赖一张**预览图**（嵌入在 VML Shape 中）。我们生成高分辨率 PNG 作为初始预览：
+`LaTeXImageRenderer` 优先使用原生 TeX 管线：
 
-```
-渲染配置：
-  引擎：JLaTeXMath
-  样式：STYLE_DISPLAY（显示模式，分数/根号以全尺寸渲染）
-  倍率：3x 渲染 + 1x 报告（确保细节清晰）
-  格式：PNG（位图，100% 保留分数线等细节）
-
-当用户在 Word 中打开文档后：
-  MathType 自动用精确的 WMF 矢量预览替换初始 PNG
-  → 最终效果与 MathType 原生创建的公式完全一致
+```text
+latex -> dvisvgm -> SVG -> PNG
 ```
 
-### 6.2 VML 嵌入结构
+这条路径在真实 TeX 表达式上尺寸更可控，是推荐的 Linux 生产配置。如果缺少 `latex` 或 `dvisvgm`，会回退到 JLaTeXMath。回退路径能保证可生成，但视觉尺寸可能和 TeX/MathType 有差异。
 
-每个公式在 document.xml 中以 VML（Vector Markup Language）+ OLE 引用的形式存在：
+渲染器有两层缓存：
 
-```xml
-<w:object>
-  <!-- 形状模板：定义 OLE 对象的渲染方式 -->
-  <v:shapetype id="_x0000_t75" ... />
+- JVM 进程内内存缓存
+- 可选持久化磁盘缓存，按规范化公式、渲染模式、尺寸和缓存版本生成 key
 
-  <!-- 预览图形状：引用 PNG/WMF 图片 -->
-  <v:shape style="width:57pt;height:33pt" o:ole="">
-    <v:imagedata r:id="rImgN" />     ← 指向 word/media/image_eqN.png
-  </v:shape>
+相关配置：
 
-  <!-- OLE 对象引用 -->
-  <o:OLEObject
-    Type="Embed"
-    ProgID="Equation.DSMT4"           ← MathType 的 COM ProgID
-    r:id="rOleN"                       ← 指向 word/embeddings/oleObjectN.bin
-  />
-</w:object>
+| 配置 | 含义 |
+| --- | --- |
+| `paperword.latex.command` | 原生 TeX 命令路径 |
+| `paperword.dvisvgm.command` | 原生 dvisvgm 命令路径 |
+| `paperword.latex.timeout.seconds` | 渲染超时 |
+| `paperword.render.cache.enabled` | 持久化缓存开关 |
+| `paperword.render.cache.dir` | 持久化缓存目录 |
+
+## 版式校准
+
+参考文档匹配不能靠改公式字体解决。Word 中每个公式外面都有 OLE 显示框，因此生成文档校准的是：
+
+```text
+v:shape style width
+v:shape style height
+w:dxaOrig
+w:dyaOrig
+w:position
 ```
 
-### 6.3 OPC 包结构
+重建脚本按参考文档和生成文档的公式对象顺序做一一对比，然后同步显示框。这样可以让可见宽、高、基线贴近参考，同时保留生成的 `Equation Native` 可编辑本体。
 
-.docx 是一个 ZIP 包，包含以下公式相关文件：
+当前参考重建还会在必要时同步公式预览媒体，用来排除渲染器噪声对最终版式对比的影响。这不会替换生成的 OLE 对象，只是让可见 shell 更接近参考，OLE/MTEF payload 仍由项目生成。
 
-```
-docx.zip/
-├── word/
-│   ├── document.xml                    VML Shape + OLEObject XML
-│   ├── embeddings/
-│   │   ├── oleObject1.bin              OLE2 复合文档（含 MTEF）
-│   │   ├── oleObject2.bin
-│   │   └── ...
-│   ├── media/
-│   │   ├── image_eq1.png              公式预览图
-│   │   ├── image_eq2.png
-│   │   └── ...
-│   └── _rels/
-│       └── document.xml.rels          关系文件（链接 OLE 和图片）
-└── [Content_Types].xml
+## 参考重建流程
+
+参考文件：
+
+```text
+rebuild-assets/external/fraction-split-reference.docx
 ```
 
----
+主命令：
 
-## 7. 双击编辑原理
-
-当用户在 Word 中双击公式时，触发以下链式机制：
-
-```
-1. 用户双击 v:shape（预览图）
-       │
-       ▼
-2. Word 识别 o:OLEObject (Type="Embed")
-   读取 ProgID="Equation.DSMT4"
-       │
-       ▼
-3. Word 通过 Windows COM 注册表查找 "Equation.DSMT4"
-   → 定位到 MathType 7 的 COM 服务器
-   → 验证 CLSID = {0002CE03-0000-0000-C000-000000000046}
-       │
-       ▼
-4. Word 激活 MathType COM 服务器（就地激活 / In-Place Activation）
-   → MathType 接管 Word 窗口的一部分区域
-       │
-       ▼
-5. MathType 读取 oleObjectN.bin 中的 "Equation Native" 流
-   → 解析 EQNOLEFILEHDR（28 字节头部）
-   → 提取 MTEF v5 二进制数据
-   → 解码为内部公式表示
-       │
-       ▼
-6. MathType 编辑器显示公式，用户可以编辑
-       │
-       ▼
-7. 用户关闭 MathType 编辑器
-   → MathType 将修改后的公式重新编码为 MTEF
-   → 更新 "Equation Native" 流
-   → 生成新的 WMF 矢量预览图
-   → Word 更新 v:imagedata 引用的预览图
+```powershell
+.\scripts\verify-reference-roundtrip.ps1
 ```
 
-**关键条件：**
-- ProgID 必须为 `"Equation.DSMT4"`（MathType 7 的标识）
-- CLSID 必须为 `{0002CE03-...}`（MathType 的 COM 类标识）
-- 系统需安装 MathType 7 并正确注册 COM 组件
-- MTEF 数据必须是有效的 v5 格式（否则 MathType 无法解析）
+流程：
 
----
+1. `docx2tex` 将参考 Word 转为 LaTeX。
+2. `generate_fraction_reference_request.py` 重建 `PaperExportRequest`。
+3. `ReferenceRoundTripDocxTest` 调用 `DocxBuilder` 写出生成文档。
+4. `extract_formula_boxes.py` 提取参考和生成文档的 OLE 显示框。
+5. `build_formula_box_dataset.py` 可从 `E:\新加卷\新建文件夹\xsc资料` 收集外部样本。
+6. `fit_formula_box_model.py` 输出尺寸拟合诊断。
+7. `calibrate_formula_boxes.py` 应用一一对应的参考显示框校准。
+8. `sync_reference_layout_shell.py` 同步页面级参考 shell 细节。
+9. `sync_formula_vector_previews.py` 在需要排除渲染差异时同步公式预览媒体。
+10. `verify-mathtype-word.ps1` 在 Windows 上检查 Word/MathType 识别。
+11. `verify-docx2tex-roundtrip.ps1` 对生成文档运行 `docx2tex`。
+12. `verify_docx2tex_formula_fragments.py` 检查公式 fragment 覆盖率。
+13. `compare_reference_format.py` 输出最终结构和公式显示框对比报告。
 
-## 8. 关键设计决策
+生成文档路径：
 
-### 8.1 MTEF 模板字节的 tmplOptions
+```text
+target/reference-roundtrip/fraction-split-reference-regenerated.docx
+```
 
-MTEF v5 规范声称 `tmplOptions` 字节仅存在于 fence（括号）和 integral（积分）模板中。但通过分析 MathType 7 的实际输出，发现**所有模板类型都包含 tmplOptions 字节**（通常为 0x00）。本实现遵循 MathType 的实际行为而非规范描述。
+主要报告：
 
-### 8.2 上下标底数外置
+```text
+target/reference-roundtrip/format-comparison.txt
+target/reference-roundtrip/format-comparison.json
+target/reference-roundtrip/formula-boxes-reference.json
+target/reference-roundtrip/formula-boxes-generated-calibrated.json
+target/reference-roundtrip/docx2tex-fragment-check.json
+```
 
-MTEF 中上下标的底数字符写在 TMPL 记录**之前**（而非内部）。模板内部的 slot 0 是一个 NULL LINE（空行），底数在父级 LINE 中紧邻模板之前输出。
+## 验收门槛
 
-### 8.3 FULL 记录的条件性
+运行 Java 测试：
 
-FULL 记录不是无条件添加的。错误的 FULL 位置会导致：
-- slot 内末尾多余的 FULL → 分数分母出现字号异常
-- 缺少 FULL → 后续内容字号继承上标的缩小字号
+```powershell
+.\.mvn\apache-maven-3.9.12\bin\mvn.cmd test
+```
 
-本实现通过 `writeContentNodes` 共享方法统一管理 FULL 插入逻辑。
+只运行参考文档生成测试：
 
-### 8.4 预览图策略
+```powershell
+.\.mvn\apache-maven-3.9.12\bin\mvn.cmd `
+  -q `
+  -Dtest=com.lz.paperword.tools.ReferenceRoundTripDocxTest `
+  test
+```
 
-初始预览使用 JLaTeXMath 渲染的高分辨率 PNG（3 倍缩放）。虽然 EMF 矢量格式理论上更优，但 freehep EMF 库存在极细矩形（分数线）消失的 bug。PNG 方案保证所有公式元素正确显示。
+检查 Word/MathType OLE 识别：
 
-当用户在 Word 中打开文档时，MathType 会自动用精确的 WMF 矢量预览替换 PNG，最终达到与 MathType 原生创建一致的效果。
+```powershell
+.\scripts\verify-mathtype-word.ps1 `
+  -DocxPath target\reference-roundtrip\fraction-split-reference-regenerated.docx `
+  -MinimumOleCount 400
+```
 
-### 8.5 OLE 模板优先
+验证生成 DOCX 能回切 LaTeX：
 
-打包 OLE 对象时优先使用真实 MathType 模板（从 classpath 加载），仅替换 MTEF 数据。这比从零构建更可靠，因为模板保留了 MathType 的专有辅助数据。
+```powershell
+.\scripts\verify-docx2tex-roundtrip.ps1 `
+  -DocxPath target\reference-roundtrip\fraction-split-reference-regenerated.docx `
+  -RequestJsonPath target\reference-roundtrip\fraction-split-reference.request.json `
+  -OutDir target\reference-roundtrip\regenerated-docx2tex `
+  -MinimumTimesCount 1000 `
+  -MinimumCdotsCount 150 `
+  -MinimumFractionCount 1500
+```
 
----
+检查公式 fragment 覆盖：
 
-## 附录：常用 LaTeX 公式 ↔ MTEF 结构对照
+```powershell
+python rebuild\verify_docx2tex_formula_fragments.py `
+  --request-json target\reference-roundtrip\fraction-split-reference.request.json `
+  --tex target\reference-roundtrip\regenerated-docx2tex\fraction-split-reference-regenerated.tex `
+  --out-json target\reference-roundtrip\docx2tex-fragment-check.json
+```
 
-| LaTeX | MTEF 结构 |
-|-------|-----------|
-| `\frac{a}{b}` | `TMPL(TM_FRAC) → LINE(a) → LINE(b) → END` |
-| `x^{2}` | `CHAR(x) → TMPL(TM_SUP) → SUB → NULL_LINE → LINE(2) → END` |
-| `a_{n}` | `CHAR(a) → TMPL(TM_SUB) → SUB → LINE(n) → NULL_LINE → END` |
-| `\sqrt{x}` | `TMPL(TM_ROOT,var=0) → LINE(x) → SUB → NULL_LINE → END` |
-| `\sqrt[3]{x}` | `TMPL(TM_ROOT,var=1) → LINE(x) → SUB → LINE(3) → END` |
-| `(a+b)` | `TMPL(TM_PAREN) → LINE(a+b) → [FULL] → CHAR_EXP(() → CHAR_EXP()) → END` |
-| `\sum_{k=1}^{n}` | `TMPL(TM_SUM,var=0x30) → LINE(content) → SUB → LINE(k=1) → LINE(n) → SYM → END` |
+`MathTypeAlignmentRegressionTest` 会检查生成 OLE 本体中是否出现显式点数字号记录。当前回归断言会确保已知的显式 size 字节模式不存在。
+
+## Linux 边界
+
+Linux 使用：
+
+```text
+mathtype.windows.enabled=false
+```
+
+该模式不会调用桌面 MathType，而是用 Java 直接写 MTEF/OLE，并通过 POIFS、生成 DOCX 结构、预览渲染和 `docx2tex` 输出做验证。
+
+Windows + Word + MathType 仍然是最终 GUI 可编辑性抽查路径，因为只有真实桌面编辑器能证明目标环境中的双击编辑行为。
+
+## 参考资料
+
+实现依据这些公开资料和本地抓取资料：
+
+- WIRIS MathType SDK, "How MTEF is stored in files and objects"：MTEF 如何存放在 OLE native stream 中，包括 28 字节 OLE native header。
+- WIRIS MathType SDK, "MTEF v5"：v5 header、record types、`LINE`、`CHAR`、`TMPL`、`PILE`、`MATRIX`、`SIZE` 等记录规则。
+- transpect `docx2tex` README 和模块文档：命令行转换模型、`-m ole|wmf|ole+wmf` 来源选择和 DOCX 到 LaTeX 管线。
+
+本地说明和验收计划：
+
+```text
+docs/MathType-validation-plan.md
+docs/linux-runtime.md
+docs/reference/mathtype/
+```
+
+## 已知风险
+
+- 解析器只支持当前测试和参考数据覆盖到的 LaTeX 子集；不支持结构必须显式失败或显式回退。
+- 缺少 TeX/dvisvgm 时，JLaTeXMath 回退预览可能存在可见尺寸偏差。
+- 参考匹配依赖稳定的公式对象顺序。文档构造顺序变化后必须重跑对比脚本。
+- `docx2tex` 能验证语义可回切，但不能替代 MathType GUI 编辑抽查。

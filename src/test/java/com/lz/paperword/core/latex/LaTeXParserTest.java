@@ -357,6 +357,20 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseSquareBracketsAsLiteralFormulaCharacters() {
+        LaTeXNode ast = parser.parseLaTeX("\\frac{1}{2}[\\frac{1}{a}-\\frac{1}{b}]");
+        assertNotNull(ast);
+
+        assertEquals(6, ast.getChildren().size());
+        assertEquals(LaTeXNode.Type.FRACTION, ast.getChildren().get(0).getType());
+        assertEquals("[", ast.getChildren().get(1).getValue());
+        assertEquals(LaTeXNode.Type.FRACTION, ast.getChildren().get(2).getType());
+        assertEquals("-", ast.getChildren().get(3).getValue());
+        assertEquals(LaTeXNode.Type.FRACTION, ast.getChildren().get(4).getType());
+        assertEquals("]", ast.getChildren().get(5).getValue());
+    }
+
+    @Test
     void testParseVmatrixEnvironmentWrapsArrayWithDoubleBarFence() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{Vmatrix}1&2\\\\3&4\\end{Vmatrix}");
         assertNotNull(ast);

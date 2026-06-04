@@ -1,0 +1,11 @@
+FROM maven:3.9.9-eclipse-temurin-21
+
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        dvisvgm \
+        texlive-fonts-recommended \
+        texlive-latex-base \
+        texlive-latex-extra \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace

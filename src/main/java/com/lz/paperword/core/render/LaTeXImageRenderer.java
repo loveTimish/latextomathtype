@@ -16,13 +16,17 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.StringReader;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -59,6 +63,12 @@ public class LaTeXImageRenderer {
     private static final String DVISVGM_CMD_PROP = "paperword.dvisvgm.command";
     /** 系统属性：外部命令超时秒数。 */
     private static final String RENDER_TIMEOUT_PROP = "paperword.latex.timeout.seconds";
+    /** 系统属性：是否启用跨进程磁盘缓存。 */
+    private static final String CACHE_ENABLED_PROP = "paperword.render.cache.enabled";
+    /** 系统属性：渲染磁盘缓存目录。 */
+    private static final String CACHE_DIR_PROP = "paperword.render.cache.dir";
+    /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
+    private static final String CACHE_VERSION = "v3";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     /** 像素到磅的换算比例。 */
@@ -120,14 +130,21 @@ public class LaTeXImageRenderer {
         if (cached != null) {
             return cached;
         }
+        cached = readPreviewFromDisk(cacheKey);
+        if (cached != null) {
+            PREVIEW_CACHE.put(cacheKey, cached);
+            return cached;
+        }
         PreviewImage preview = renderPreviewViaTeX(latex, OLE_PREVIEW_SIZE);
         if (preview != null) {
             PREVIEW_CACHE.put(cacheKey, preview);
+            writePreviewToDisk(cacheKey, preview);
             return preview;
         }
         preview = renderPreviewViaJLatexMath(latex, OLE_PREVIEW_SIZE);
         if (preview != null) {
             PREVIEW_CACHE.put(cacheKey, preview);
+            writePreviewToDisk(cacheKey, preview);
             return preview;
         }
         byte[] placeholder = createPlaceholderImage(latex);
@@ -149,14 +166,21 @@ public class LaTeXImageRenderer {
         if (cached != null) {
             return cached;
         }
+        cached = readPreviewFromDisk(cacheKey);
+        if (cached != null) {
+            PREVIEW_CACHE.put(cacheKey, cached);
+            return cached;
+        }
         PreviewImage preview = renderPreviewViaTeX(latex, DEFAULT_SIZE);
         if (preview != null) {
             PREVIEW_CACHE.put(cacheKey, preview);
+            writePreviewToDisk(cacheKey, preview);
             return preview;
         }
         preview = renderPreviewViaJLatexMath(latex, DEFAULT_SIZE);
         if (preview != null) {
             PREVIEW_CACHE.put(cacheKey, preview);
+            writePreviewToDisk(cacheKey, preview);
         }
         return preview;
     }
@@ -176,21 +200,131 @@ public class LaTeXImageRenderer {
         if (cached != null) {
             return cached;
         }
+        cached = readPngFromDisk(cacheKey);
+        if (cached != null && cached.length > 0) {
+            PNG_CACHE.put(cacheKey, cached);
+            return cached;
+        }
         String localRenderLatex = normalizeLatexForLocalRender(latex);
         byte[] external = renderViaDvisvgm(localRenderLatex, size);
         if (external != null && external.length > 0) {
             PNG_CACHE.put(cacheKey, external);
+            writePngToDisk(cacheKey, external);
             return external;
         }
         byte[] fallback = renderByJLatexMath(localRenderLatex, size);
         if (fallback != null && fallback.length > 0) {
             PNG_CACHE.put(cacheKey, fallback);
+            writePngToDisk(cacheKey, fallback);
         }
         return fallback;
     }
 
     private String cacheKey(String mode, String latex, float size) {
-        return mode + "|" + size + "|" + normalizeLatexForLocalRender(latex == null ? "" : latex);
+        return CACHE_VERSION + "|" + mode + "|" + size + "|" + normalizeLatexForLocalRender(latex == null ? "" : latex);
+    }
+
+    private PreviewImage readPreviewFromDisk(String cacheKey) {
+        if (!diskCacheEnabled()) {
+            return null;
+        }
+        Path base = cacheBasePath(cacheKey);
+        Path imagePath = base.resolveSibling(base.getFileName() + ".png");
+        Path metaPath = base.resolveSibling(base.getFileName() + ".properties");
+        if (!Files.isRegularFile(imagePath) || !Files.isRegularFile(metaPath)) {
+            return null;
+        }
+        try {
+            Properties props = new Properties();
+            try (var in = Files.newInputStream(metaPath)) {
+                props.load(in);
+            }
+            byte[] data = Files.readAllBytes(imagePath);
+            if (data.length == 0) {
+                return null;
+            }
+            return new PreviewImage(
+                data,
+                Integer.parseInt(props.getProperty("widthPx", "10")),
+                Integer.parseInt(props.getProperty("heightPx", "10")),
+                props.getProperty("extension", "png"),
+                props.getProperty("contentType", "image/png"),
+                Boolean.parseBoolean(props.getProperty("placeholder", "false"))
+            );
+        } catch (Exception e) {
+            log.debug("Formula preview disk cache read failed: {}", cacheKey, e);
+            return null;
+        }
+    }
+
+    private void writePreviewToDisk(String cacheKey, PreviewImage preview) {
+        if (!diskCacheEnabled() || preview == null || preview.data() == null || preview.data().length == 0) {
+            return;
+        }
+        Path base = cacheBasePath(cacheKey);
+        Path imagePath = base.resolveSibling(base.getFileName() + ".png");
+        Path metaPath = base.resolveSibling(base.getFileName() + ".properties");
+        try {
+            Files.createDirectories(base.getParent());
+            Files.write(imagePath, preview.data());
+            Properties props = new Properties();
+            props.setProperty("widthPx", Integer.toString(preview.widthPx()));
+            props.setProperty("heightPx", Integer.toString(preview.heightPx()));
+            props.setProperty("extension", preview.extension());
+            props.setProperty("contentType", preview.contentType());
+            props.setProperty("placeholder", Boolean.toString(preview.placeholder()));
+            try (var out = Files.newOutputStream(metaPath)) {
+                props.store(out, "paperword formula preview cache");
+            }
+        } catch (Exception e) {
+            log.debug("Formula preview disk cache write failed: {}", cacheKey, e);
+        }
+    }
+
+    private byte[] readPngFromDisk(String cacheKey) {
+        if (!diskCacheEnabled()) {
+            return null;
+        }
+        Path pngPath = cacheBasePath(cacheKey).resolveSibling(cacheBasePath(cacheKey).getFileName() + ".png");
+        try {
+            return Files.isRegularFile(pngPath) ? Files.readAllBytes(pngPath) : null;
+        } catch (IOException e) {
+            log.debug("Formula PNG disk cache read failed: {}", cacheKey, e);
+            return null;
+        }
+    }
+
+    private void writePngToDisk(String cacheKey, byte[] png) {
+        if (!diskCacheEnabled() || png == null || png.length == 0) {
+            return;
+        }
+        Path pngPath = cacheBasePath(cacheKey).resolveSibling(cacheBasePath(cacheKey).getFileName() + ".png");
+        try {
+            Files.createDirectories(pngPath.getParent());
+            Files.write(pngPath, png);
+        } catch (IOException e) {
+            log.debug("Formula PNG disk cache write failed: {}", cacheKey, e);
+        }
+    }
+
+    private boolean diskCacheEnabled() {
+        return Boolean.parseBoolean(System.getProperty(CACHE_ENABLED_PROP, "true"));
+    }
+
+    private Path cacheBasePath(String cacheKey) {
+        String configuredDir = System.getProperty(CACHE_DIR_PROP, "data/cache/formula-render");
+        String digest = sha256Base64Url(cacheKey);
+        return Path.of(configuredDir, digest.substring(0, 2), digest.substring(2));
+    }
+
+    private String sha256Base64Url(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 digest unavailable", e);
+        }
     }
 
     /**

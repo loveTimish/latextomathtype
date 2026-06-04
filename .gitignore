@@ -40,3 +40,22 @@ logs/
 *.tmp
 *.bak
 ~$*
+
+# Local dependency installs
+node_modules/
+
+# Reference rebuild scratch output
+_docx_inspect/
+rebuild/_verify/
+rebuild/__pycache__/
+rebuild/*.pyc
+rebuild/preview.txt
+rebuild/reorganized-paper.json
+rebuild/*.docx
+
+# External downloads kept outside source control
+rebuild-assets/external/*.zip
+rebuild-assets/external/*.tmp/
+
+# Ad-hoc generated Word files
+测试*.docx

@@ -1,0 +1,7 @@
+*
+!Dockerfile
+!Dockerfile.smoke
+!Dockerfile.render-test
+!target/
+target/*
+!target/paper-to-word-1.0.0.jar

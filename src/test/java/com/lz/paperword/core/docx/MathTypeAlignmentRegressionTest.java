@@ -5,9 +5,15 @@ import com.lz.paperword.model.QuestionDTO;
 import com.lz.paperword.model.SectionDTO;
 import org.junit.jupiter.api.Test;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.poi.poifs.filesystem.DocumentEntry;
+import org.apache.poi.poifs.filesystem.DocumentInputStream;
+import org.apache.poi.poifs.filesystem.Entry;
+import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,7 +30,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class MathTypeAlignmentRegressionTest {
 
-    private static final Path REFERENCE_DOCX = Path.of("d:/pdf2word/data/分数.docx");
+    private static final Path REFERENCE_DOCX = Path.of("rebuild-assets/external/fraction-split-reference.docx");
 
     private final DocxBuilder builder = new DocxBuilder();
 
@@ -32,8 +38,9 @@ class MathTypeAlignmentRegressionTest {
     void shouldUseExpectedPreviewForFractionFormula() throws IOException {
         ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithFormula("\\frac{1}{2}"));
         assertEquals("png", generated.previewExtension);
-        assertEquals(-16, generated.positionHalfPt);
-        assertTrue(generated.styleHeightPt >= 12.0d, "fraction preview height should remain positive after shrink");
+        assertWithin(generated.positionHalfPt, -24, 4.0d, "fraction baseline position");
+        assertTrue(generated.styleHeightPt >= 20.0d, "fraction preview height should stay close to MathType");
+        assertTrue(generated.styleHeightPt <= 32.0d, "fraction preview height should not be oversized");
     }
 
     @Test
@@ -106,6 +113,45 @@ class MathTypeAlignmentRegressionTest {
     }
 
     @Test
+    void shouldPackageMathTypeOleWithNativeMtefStream() throws IOException {
+        byte[] docx = buildDocxWithFormula("a^2+b^2=25");
+        Map<String, byte[]> entries = unzipBinaryEntries(docx);
+        String documentXml = new String(entries.get("word/document.xml"), StandardCharsets.UTF_8);
+        String relsXml = new String(entries.get("word/_rels/document.xml.rels"), StandardCharsets.UTF_8);
+
+        assertTrue(documentXml.contains("ProgID=\"Equation.DSMT4\""), "Word object should advertise MathType ProgID");
+
+        String oleRelId = extractFirstOleRelId(documentXml);
+        String oleTarget = extractRelationshipTarget(relsXml, oleRelId);
+        assertEquals("embeddings/oleObject1.bin", oleTarget);
+
+        byte[] oleBytes = entries.get("word/" + oleTarget);
+        assertNotNull(oleBytes, "OLE binary part should exist");
+
+        try (POIFSFileSystem fs = new POIFSFileSystem(new ByteArrayInputStream(oleBytes))) {
+            assertTrue(fs.getRoot().hasEntry("\u0001CompObj"), "OLE should contain CompObj stream");
+            assertTrue(fs.getRoot().hasEntry("Equation Native"), "OLE should contain MathType Equation Native stream");
+
+            byte[] equationNative = readOleStream(fs, "Equation Native");
+            int headerSize = Short.toUnsignedInt(ByteBuffer.wrap(equationNative, 0, 2)
+                .order(ByteOrder.LITTLE_ENDIAN).getShort());
+            int mtefLength = ByteBuffer.wrap(equationNative, 8, 4)
+                .order(ByteOrder.LITTLE_ENDIAN).getInt();
+
+            assertTrue(headerSize >= 28, "Equation Native should have an OLE header");
+            assertEquals(equationNative.length - headerSize, mtefLength, "MTEF length should match header metadata");
+            assertEquals(5, equationNative[headerSize] & 0xFF, "MTEF should be v5");
+            assertEquals(1, equationNative[headerSize + 1] & 0xFF, "MTEF platform should be Windows");
+            assertEquals(0, equationNative[headerSize + 2] & 0xFF, "MTEF product should be MathType");
+            String appKey = new String(equationNative, headerSize + 5, 5, StandardCharsets.US_ASCII);
+            assertTrue(appKey.startsWith("DSMT"), "MTEF application key should identify Design Science MathType");
+            byte[] mtef = java.util.Arrays.copyOfRange(equationNative, headerSize, equationNative.length);
+            assertFalse(containsBytes(mtef, new byte[] {0x09, 0x65}),
+                "OLE/MTEF body should not write an explicit point-size SIZE record");
+        }
+    }
+
+    @Test
     void shouldKeepMultipleVerticalTemplatesAsOleObjects() throws IOException {
         byte[] docx = buildDocxWithContent(
             "整数加法：<br/>$$\\begin{array}{rrrr} & 1 & 2 & 3 \\\\ + & 4 & 5 & 6 \\\\ \\hline & 5 & 7 & 9\\end{array}$$"
@@ -128,7 +174,24 @@ class MathTypeAlignmentRegressionTest {
         ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithContent(
             "宽矩阵：<br/>$$\\begin{array}{rrrrrrrr}{} & {} & {3} & {4} & {0} & {} & {} & {} \\\\ {\\times} & {} & {5} & {3} & {0} & {0} & {} & {} \\\\ \\hline {} & {} & {} & {} & {} & {} & {} & {} \\\\ {+} & {} & {1} & {0} & {2} & {0} & {} & {} \\\\ {+} & {1} & {7} & {0} & {0} & {} & {} & {} \\\\ \\hline {} & {1} & {8} & {0} & {2} & {0} & {0} & {}\\end{array}$$"
         ));
-        assertTrue(generated.styleWidthPt <= 180.5d, "wide array preview width should be capped");
+        assertTrue(generated.styleWidthPt <= 300.5d, "wide arithmetic array preview width should stay capped");
+    }
+
+    @Test
+    void shouldAllowDerivationArrayMoreWidthThanArithmeticLayout() throws IOException {
+        ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithContent(
+            "推导：<br/>$$\\begin{array}{rl}&=\\frac{1}{2}\\times \\left(\\frac{1}{2\\times 3}-\\frac{1}{3\\times 4}+\\frac{1}{3\\times 4}-\\frac{1}{4\\times 5}+\\frac{1}{4\\times 5}-\\frac{1}{5\\times 6}+\\cdots +\\frac{1}{9\\times 10}-\\frac{1}{10\\times 11}\\right)+2\\times \\left(\\frac{1}{3}-\\frac{1}{4}+\\frac{1}{4}-\\frac{1}{5}+\\cdots +\\frac{1}{10}-\\frac{1}{11}\\right)\\\\&=\\frac{1}{12}-\\frac{1}{220}+\\frac{2}{3}-\\frac{2}{11}\\end{array}$$"
+        ));
+        assertTrue(generated.styleWidthPt > 300.5d, "derivation array should not use the arithmetic width cap");
+        assertTrue(generated.styleWidthPt <= 420.5d, "derivation array preview width should still fit the page");
+    }
+
+    @Test
+    void shouldClampLongInlineFormulaToPageWidth() throws IOException {
+        ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithContent(
+            "长题干：$\\frac{1}{1\\times3}+\\frac{2}{3\\times5}+\\frac{2^2}{5\\times7}+\\cdots+\\frac{2^8}{17\\times19}-\\left(\\frac{2^3}{1\\times3\\times5}+\\frac{2^4}{3\\times5\\times7}+\\cdots+\\frac{2^{11}}{17\\times19\\times21}\\right)$"
+        ));
+        assertTrue(generated.styleWidthPt <= 500.5d, "long inline formula preview width should fit the page");
     }
 
     private byte[] buildDocxWithFormula(String latex) throws IOException {
@@ -195,6 +258,12 @@ class MathTypeAlignmentRegressionTest {
         return objectMatcher.group(1);
     }
 
+    private String extractFirstOleRelId(String documentXml) {
+        Matcher objectMatcher = Pattern.compile("<o:OLEObject\\b[^>]*r:id=\"([^\"]+)\"").matcher(documentXml);
+        assertTrue(objectMatcher.find(), "should contain OLE object relationship");
+        return objectMatcher.group(1);
+    }
+
     private Map<String, String> unzipTextEntries(byte[] docxBytes) throws IOException {
         Map<String, String> entries = new HashMap<>();
         try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(docxBytes), StandardCharsets.UTF_8)) {
@@ -207,6 +276,41 @@ class MathTypeAlignmentRegressionTest {
             }
         }
         return entries;
+    }
+
+    private Map<String, byte[]> unzipBinaryEntries(byte[] docxBytes) throws IOException {
+        Map<String, byte[]> entries = new HashMap<>();
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(docxBytes), StandardCharsets.UTF_8)) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                entries.put(entry.getName(), zis.readAllBytes());
+            }
+        }
+        return entries;
+    }
+
+    private byte[] readOleStream(POIFSFileSystem fs, String name) throws IOException {
+        Entry entry = fs.getRoot().getEntry(name);
+        assertTrue(entry instanceof DocumentEntry, name + " should be a document stream");
+        try (DocumentInputStream in = new DocumentInputStream((DocumentEntry) entry)) {
+            return in.readAllBytes();
+        }
+    }
+
+    private boolean containsBytes(byte[] bytes, byte[] needle) {
+        outer:
+        for (int i = 0; i <= bytes.length - needle.length; i++) {
+            for (int j = 0; j < needle.length; j++) {
+                if (bytes[i + j] != needle[j]) {
+                    continue outer;
+                }
+            }
+            return true;
+        }
+        return false;
     }
 
     private String extractRelationshipTarget(String relsXml, String relId) {

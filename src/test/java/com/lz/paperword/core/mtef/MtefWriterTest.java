@@ -38,6 +38,63 @@ class MtefWriterTest {
     }
 
     @Test
+    void testTimesDefaultsToReferenceSymbolEncoding() {
+        LaTeXNode ast = parser.parseLaTeX("\\frac{1}{1\\times2}");
+        byte[] mtef = writer.write(ast);
+
+        assertEquals(5, mtef[0] & 0xFF);
+        assertEquals(1, mtef[1] & 0xFF);
+        assertEquals(0, mtef[2] & 0xFF);
+        assertEquals(6, mtef[3] & 0xFF);
+        assertEquals(5, mtef[4] & 0xFF);
+        assertTrue(containsAscii(mtef, "DSMT6\u0000"),
+            "generated MTEF should use the same legacy MathType application key as the reference document");
+        assertFalse(containsAscii(mtef, "DSMT7\u0000"),
+            "MathType 7 template identity regressed to blank Symbol glyphs in the classic editor");
+        assertTrue(containsBytes(mtef, new byte[] {
+                (byte) MtefRecord.CHAR,
+                (byte) MtefRecord.OPT_CHAR_ENC_CHAR_8,
+                (byte) 0x86,
+                (byte) 0xD7,
+                0x00,
+                (byte) 0xB4
+            }),
+            "\\times should default to the reference MathType Symbol encoding");
+        assertFalse(containsBytes(mtef, new byte[] {
+                (byte) MtefRecord.CHAR,
+                0x00,
+                (byte) 0x81,
+                (byte) 0xD7,
+                0x00
+            }),
+            "\\times should not fall back to the visually mismatched text multiplication sign");
+    }
+
+    @Test
+    void testTimesSymbolEncodingCandidatesCanBeSelected() {
+        String oldEncoding = System.getProperty("latextomathtype.mtef.times.encoding");
+        try {
+            System.setProperty("latextomathtype.mtef.times.encoding", "no-mtcode");
+            LaTeXNode ast = parser.parseLaTeX("\\frac{1}{1\\times2}");
+            byte[] mtef = new MtefWriter().write(ast);
+
+            assertTrue(containsBytes(mtef, new byte[] {
+                    (byte) MtefRecord.CHAR,
+                    (byte) (MtefRecord.OPT_CHAR_ENC_NO_MTCODE | MtefRecord.OPT_CHAR_ENC_CHAR_8),
+                    (byte) 0x86,
+                    (byte) 0xB4
+                }),
+                "\\times should expose a Symbol bits8-only candidate for MathType UTF-8 locale testing");
+        } finally {
+            if (oldEncoding == null) {
+                System.clearProperty("latextomathtype.mtef.times.encoding");
+            } else {
+                System.setProperty("latextomathtype.mtef.times.encoding", oldEncoding);
+            }
+        }
+    }
+
+    @Test
     void testWriteFraction() {
         LaTeXNode ast = parser.parseLaTeX("\\frac{1}{2}");
         byte[] mtef = writer.write(ast);
@@ -55,6 +112,16 @@ class MtefWriterTest {
 
         assertNotNull(mtef);
         assertTrue(mtef.length > 10);
+    }
+
+    @Test
+    void testWriteSuperscriptThenTimesDoesNotRequireCommandValue() {
+        LaTeXNode ast = parser.parseLaTeX("C ^{ 4 }\\times 6=36");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(mtef.length > 10);
+        assertEquals(5, mtef[0] & 0xFF);
     }
 
     @Test
@@ -249,6 +316,20 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARC, 0x00, 0x00}),
             "arc alias should also route to tmARC");
+    }
+
+    @Test
+    void testWriteDotTerminatesEmbellishmentList() {
+        LaTeXNode ast = parser.parseLaTeX("0.1\\dot{6}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.CHAR, (byte) MtefRecord.OPT_CHAR_EMBELL,
+            (byte) (MtefRecord.FN_NUMBER - 128), 0x36, 0x00,
+            (byte) MtefRecord.EMBELL, 0x00, (byte) MtefRecord.EMB_1DOT,
+            (byte) MtefRecord.END
+        }), "dot embellishment should be terminated so docx2tex can read it as \\dot{6}");
     }
 
     @Test

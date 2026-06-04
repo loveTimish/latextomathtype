@@ -1,9 +1,13 @@
 package com.lz.paperword.core.render;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -61,5 +65,34 @@ class LaTeXImageRendererTest {
         assertTrue(normalized.contains("\\overset{570}{\\overline{\\left)3420\\right.}}"), "预览图应保留长除法头部");
         assertTrue(normalized.contains("\\begin{array}{l}"), "单块复合长除法的步骤区应继续保留");
         assertTrue(normalized.contains("\\underline{30}"), "显式步骤区应继续进入预览渲染");
+    }
+
+    @Test
+    void shouldWriteRenderedFormulaToDiskCache(@TempDir Path tempDir) throws Exception {
+        String oldEnabled = System.getProperty("paperword.render.cache.enabled");
+        String oldDir = System.getProperty("paperword.render.cache.dir");
+        try {
+            System.setProperty("paperword.render.cache.enabled", "true");
+            System.setProperty("paperword.render.cache.dir", tempDir.toString());
+
+            byte[] png = new LaTeXImageRenderer().renderToPng("x+" + UUID.randomUUID(), 13f);
+
+            assertTrue(png.length > 0);
+            try (var stream = Files.walk(tempDir)) {
+                assertTrue(stream.anyMatch(path -> path.getFileName().toString().endsWith(".png")),
+                    "rendered formulas should be written to the disk cache");
+            }
+        } finally {
+            restoreProperty("paperword.render.cache.enabled", oldEnabled);
+            restoreProperty("paperword.render.cache.dir", oldDir);
+        }
+    }
+
+    private void restoreProperty(String name, String value) {
+        if (value == null) {
+            System.clearProperty(name);
+        } else {
+            System.setProperty(name, value);
+        }
     }
 }

@@ -180,6 +180,11 @@ public class OlePackager {
                     nativeEntry.delete();
                 }
 
+                if (root.hasEntry("\u0001CompObj")) {
+                    root.getEntry("\u0001CompObj").delete();
+                }
+                root.createDocument("\u0001CompObj", new ByteArrayInputStream(createCompObjStream()));
+
                 // 创建新的 "Equation Native" 流：保留模板头部 + 替换 MTEF 数据负载
                 root.createDocument("Equation Native",
                     new ByteArrayInputStream(createEquationNativeStreamFromTemplate(templateEquationNative, mtefData)));
@@ -233,7 +238,7 @@ public class OlePackager {
      * <p>CompObj 流是 OLE 规范中定义的对象标识流，Word 通过读取此流来确定
      * 嵌入对象的类型和关联的编辑程序。该流包含三个关键信息：</p>
      * <ul>
-     *   <li><b>AnsiUserType</b> — 人类可读的类型名称 "MathType 7.0 Equation"，
+     *   <li><b>AnsiUserType</b> — 人类可读的类型名称 "MathType 6.0 Equation"，
      *       在 Word 的"对象属性"对话框中显示</li>
      *   <li><b>AnsiClipboardFormat</b> — 剪贴板格式标识（此处为 0，表示无注册格式）</li>
      *   <li><b>AnsiProgID</b> — 程序标识符 "Equation.DSMT4"，Word 通过此字符串
@@ -267,7 +272,7 @@ public class OlePackager {
         out.write(buf.array());
 
         // AnsiUserType：人类可读的对象类型名称（在 Word 对象属性中显示）
-        writeAnsiString(out, "MathType 7.0 Equation");
+        writeAnsiString(out, "MathType 6.0 Equation");
 
         // AnsiClipboardFormat：剪贴板格式（0 = 无特定注册格式）
         buf = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);

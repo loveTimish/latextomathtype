@@ -6,10 +6,16 @@ import com.lz.paperword.model.SectionDTO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -34,6 +40,53 @@ class DocxBuilderTest {
         Files.write(outputFile, docx);
         assertTrue(Files.exists(outputFile));
         assertTrue(Files.size(outputFile) > 0);
+    }
+
+    @Test
+    void shouldWriteWordStylesForDocx2TexRoundTrip() throws IOException {
+        byte[] docx = builder.build(createSampleRequest());
+        Map<String, String> entries = unzipTextEntries(docx);
+
+        String documentXml = entries.get("word/document.xml");
+        String stylesXml = entries.get("word/styles.xml");
+        String fontTableXml = entries.get("word/fontTable.xml");
+
+        assertNotNull(documentXml, "document.xml should exist");
+        assertNotNull(stylesXml, "styles.xml should exist for docx2tex style mapping");
+        assertNotNull(fontTableXml, "fontTable.xml should exist because docx2tex requires it");
+        assertTrue(stylesXml.contains("w:styleId=\"Normal\""), "Normal style should be declared");
+        assertTrue(stylesXml.contains("w:styleId=\"BodyText\""), "BodyText style should be declared");
+        assertTrue(stylesXml.contains("w:styleId=\"Heading1\""), "Heading1 style should be declared");
+        assertTrue(fontTableXml.contains("Cambria Math"), "formula font should be declared");
+        assertTrue(documentXml.contains("<w:pStyle w:val=\"BodyText\""), "body paragraphs should carry a style");
+        assertTrue(documentXml.contains("<w:pStyle w:val=\"Heading1\""), "section headings should carry a style");
+    }
+
+    @Test
+    void shouldResolveWindowsProjectImagePathOnLinuxUserDir(@TempDir Path tempDir) throws IOException {
+        String oldUserDir = System.getProperty("user.dir");
+        Path imageDir = tempDir.resolve("target/reference-roundtrip/generated-media");
+        Files.createDirectories(imageDir);
+        Path image = imageDir.resolve("section-1.png");
+        Files.write(image, java.util.Base64.getDecoder().decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+        ));
+
+        try {
+            System.setProperty("user.dir", tempDir.toString());
+            PaperExportRequest request = createSampleRequest();
+            request.getSections().get(0).setImages(List.of(
+                "J:\\latextomathtype\\target\\reference-roundtrip\\generated-media\\section-1.png"
+            ));
+
+            byte[] docx = new DocxBuilder().build(request);
+            Map<String, byte[]> entries = unzipBinaryEntries(docx);
+
+            assertTrue(entries.keySet().stream().anyMatch(name -> name.startsWith("word/media/") && name.endsWith(".png")),
+                "Windows repo absolute image path should resolve relative to the Linux project root");
+        } finally {
+            System.setProperty("user.dir", oldUserDir);
+        }
     }
 
     @Test
@@ -340,5 +393,33 @@ class DocxBuilderTest {
 
         request.setSections(List.of(section1, section2));
         return request;
+    }
+
+    private Map<String, String> unzipTextEntries(byte[] docxBytes) throws IOException {
+        Map<String, String> entries = new HashMap<>();
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(docxBytes), StandardCharsets.UTF_8)) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                entries.put(entry.getName(), new String(zis.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
+        return entries;
+    }
+
+    private Map<String, byte[]> unzipBinaryEntries(byte[] docxBytes) throws IOException {
+        Map<String, byte[]> entries = new HashMap<>();
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(docxBytes), StandardCharsets.UTF_8)) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.isDirectory()) {
+                    continue;
+                }
+                entries.put(entry.getName(), zis.readAllBytes());
+            }
+        }
+        return entries;
     }
 }

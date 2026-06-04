@@ -16,5 +16,7 @@ public class PaperExportRequest {
         private Integer stage;
         private Integer score;
         private Integer suggestTime;
+        /** Optional compact handout layout for reference-style regenerated documents. */
+        private Boolean compactLayout;
     }
 }
