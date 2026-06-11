@@ -1251,6 +1251,50 @@ class MtefWriterTest {
             "single-letter variable division in the xsc corpus matches the flat MathType body better");
     }
 
+    @Test
+    void testMultiplicationEquationUsesMathTypeBoxSegments() {
+        LaTeXNode ast = parser.parseLaTeX("3\\times 4=12");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(3, countOccurrences(mtef, box),
+            "MathType boxes the post-times operand and each result digit in simple multiplication equations");
+    }
+
+    @Test
+    void testMultiplicationEquationLeavesAddendFlat() {
+        LaTeXNode ast = parser.parseLaTeX("3\\times 4+9=21");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(3, countOccurrences(mtef, box),
+            "MathType keeps the +9 addend flat while boxing the multiplier and result digits");
+    }
+
+    @Test
+    void testVariableMultiplicationEquationStaysFlat() {
+        LaTeXNode ast = parser.parseLaTeX("H\\times M=36");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(0, countOccurrences(mtef, box),
+            "variable multiplication equations did not match the boxed numeric pattern in the corpus");
+    }
+
+    @Test
+    void testRepeatedMultiplicationEquationStaysFlat() {
+        LaTeXNode ast = parser.parseLaTeX("1\\times 2\\times 3\\times 6=36");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(0, countOccurrences(mtef, box),
+            "multi-factor multiplication equations need a separate MathType pattern");
+    }
+
     private boolean containsRecord(byte[] bytes, int recordType) {
         for (int i = 12; i < bytes.length; i++) {
             if ((bytes[i] & 0xFF) == recordType) {

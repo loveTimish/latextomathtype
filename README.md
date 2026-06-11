@@ -230,7 +230,7 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 | MTEF 剩余 low-tail failures | `51` |
 | MTEF 剩余结构缺口 | `126` |
 
-增量 MTEF writer 回归：`20260612-073259` 单文件 doc41 验证中，平坦 `\div` 等式链和多字符单除法改用 MathType `TM_BOX 0x1e` 片段后，WMF 目标尺寸仍为 `476/476` 在 `1%` 内，doc41 hard suspects 保持 `6`，low-tail failures 从 `17` 降到 `12`。
+增量 MTEF writer 回归：`20260612-074140` 单文件 doc41 验证中，平坦 `\div` 等式链、多字符单除法和纯数字单乘号等式改用 MathType `TM_BOX 0x1e` 片段后，WMF 目标尺寸仍为 `476/476` 在 `1%` 内，doc41 hard suspects 从 `6` 降到 `3`，low-tail failures 从 `12` 降到 `6`。
 
 ## 验证命令
 

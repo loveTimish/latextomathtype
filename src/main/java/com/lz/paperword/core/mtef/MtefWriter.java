@@ -481,6 +481,8 @@ public class MtefWriter {
         }
         if (isFlatDivisionEquationChain(root)) {
             writeFlatDivisionEquationChain(out, root);
+        } else if (isFlatMultiplicationEquation(root)) {
+            writeFlatMultiplicationEquation(out, root);
         } else {
             writeNode(out, root);          // 递归写入 AST 内容
         }
@@ -960,6 +962,68 @@ public class MtefWriter {
         writePlainSegment(out, segment);
     }
 
+    private boolean isFlatMultiplicationEquation(LaTeXNode root) {
+        List<LaTeXNode> nodes = root == null ? List.of() : root.getChildren();
+        if (nodes.size() < 5) {
+            return false;
+        }
+        boolean hasTimes = false;
+        boolean hasEquals = false;
+        boolean afterEquals = false;
+        int timesCount = 0;
+        for (LaTeXNode node : nodes) {
+            if (node.getType() == LaTeXNode.Type.COMMAND && "\\times".equals(node.getValue())) {
+                timesCount++;
+                hasTimes = true;
+                continue;
+            }
+            if (isCharValue(node, "=")) {
+                if (hasEquals) {
+                    return false;
+                }
+                hasEquals = true;
+                afterEquals = true;
+                continue;
+            }
+            if (node.getType() == LaTeXNode.Type.CHAR && node.getValue() != null && node.getValue().length() == 1) {
+                char ch = node.getValue().charAt(0);
+                if (Character.isDigit(ch) || Character.isWhitespace(ch)) {
+                    continue;
+                }
+                if (!afterEquals && (ch == '+' || ch == '-')) {
+                    continue;
+                }
+            }
+            return false;
+        }
+        return hasTimes && hasEquals && timesCount == 1;
+    }
+
+    private void writeFlatMultiplicationEquation(ByteArrayOutputStream out, LaTeXNode root) throws IOException {
+        List<LaTeXNode> nodes = root.getChildren();
+        boolean afterEquals = false;
+        for (int i = 0; i < nodes.size(); i++) {
+            LaTeXNode node = nodes.get(i);
+            if (node.getType() == LaTeXNode.Type.COMMAND && "\\times".equals(node.getValue())) {
+                writeCharNode(out, node);
+                List<LaTeXNode> factor = collectUntilArithmeticBoundary(nodes, i + 1);
+                writeBoxSegment(out, factor);
+                i += factor.size();
+                continue;
+            }
+            if (isCharValue(node, "=")) {
+                writeNode(out, node);
+                afterEquals = true;
+                continue;
+            }
+            if (afterEquals && isBoxableArithmeticChar(node)) {
+                writeBoxSegment(out, List.of(node));
+                continue;
+            }
+            writeNode(out, node);
+        }
+    }
+
     private List<LaTeXNode> collectUntilDivisionBoundary(List<LaTeXNode> nodes, int start) {
         List<LaTeXNode> out = new ArrayList<>();
         for (int i = start; i < nodes.size(); i++) {
@@ -973,6 +1037,29 @@ public class MtefWriter {
             out.add(node);
         }
         return out;
+    }
+
+    private List<LaTeXNode> collectUntilArithmeticBoundary(List<LaTeXNode> nodes, int start) {
+        List<LaTeXNode> out = new ArrayList<>();
+        for (int i = start; i < nodes.size(); i++) {
+            LaTeXNode node = nodes.get(i);
+            if (node.getType() == LaTeXNode.Type.COMMAND && "\\times".equals(node.getValue())) {
+                break;
+            }
+            if (isCharValue(node, "=") || isCharValue(node, "+") || isCharValue(node, "-")) {
+                break;
+            }
+            out.add(node);
+        }
+        return out;
+    }
+
+    private boolean isBoxableArithmeticChar(LaTeXNode node) {
+        return node != null
+                && node.getType() == LaTeXNode.Type.CHAR
+                && node.getValue() != null
+                && node.getValue().length() == 1
+                && Character.isLetterOrDigit(node.getValue().charAt(0));
     }
 
     private void writePlainSegment(ByteArrayOutputStream out, List<LaTeXNode> nodes) throws IOException {
