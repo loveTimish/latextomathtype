@@ -1295,6 +1295,17 @@ class MtefWriterTest {
             "multi-factor multiplication equations need a separate MathType pattern");
     }
 
+    @Test
+    void testLargeNumberMultiplicationEquationStaysFlat() {
+        LaTeXNode ast = parser.parseLaTeX("454\\times 229=103966");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(0, countOccurrences(mtef, box),
+            "large-number multiplication equations do not follow the one-digit boxed operand pattern");
+    }
+
     private boolean containsRecord(byte[] bytes, int recordType) {
         for (int i = 12; i < bytes.length; i++) {
             if ((bytes[i] & 0xFF) == recordType) {

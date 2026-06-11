@@ -971,10 +971,15 @@ public class MtefWriter {
         boolean hasEquals = false;
         boolean afterEquals = false;
         int timesCount = 0;
+        int leftDigits = 0;
+        int rightDigits = 0;
+        int resultDigits = 0;
+        boolean afterAdditive = false;
         for (LaTeXNode node : nodes) {
             if (node.getType() == LaTeXNode.Type.COMMAND && "\\times".equals(node.getValue())) {
                 timesCount++;
                 hasTimes = true;
+                afterAdditive = false;
                 continue;
             }
             if (isCharValue(node, "=")) {
@@ -983,20 +988,34 @@ public class MtefWriter {
                 }
                 hasEquals = true;
                 afterEquals = true;
+                afterAdditive = false;
                 continue;
             }
             if (node.getType() == LaTeXNode.Type.CHAR && node.getValue() != null && node.getValue().length() == 1) {
                 char ch = node.getValue().charAt(0);
-                if (Character.isDigit(ch) || Character.isWhitespace(ch)) {
+                if (Character.isDigit(ch)) {
+                    if (afterEquals) {
+                        resultDigits++;
+                    } else if (hasTimes && !afterAdditive) {
+                        rightDigits++;
+                    } else if (!hasTimes) {
+                        leftDigits++;
+                    }
+                    continue;
+                }
+                if (Character.isWhitespace(ch)) {
                     continue;
                 }
                 if (!afterEquals && (ch == '+' || ch == '-')) {
+                    afterAdditive = true;
                     continue;
                 }
             }
             return false;
         }
-        return hasTimes && hasEquals && timesCount == 1;
+        return hasTimes && hasEquals && timesCount == 1
+                && leftDigits == 1 && rightDigits == 1
+                && resultDigits >= 1 && resultDigits <= 2;
     }
 
     private void writeFlatMultiplicationEquation(ByteArrayOutputStream out, LaTeXNode root) throws IOException {
