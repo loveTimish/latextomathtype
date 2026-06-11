@@ -59,3 +59,4 @@ rebuild-assets/external/*.tmp/
 
 # Ad-hoc generated Word files
 测试*.docx
+wmf公式预览样例.docx

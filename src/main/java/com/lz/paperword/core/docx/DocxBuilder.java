@@ -805,11 +805,9 @@ public class DocxBuilder {
                         double maxWidthPt = resolveCompactFormulaMaxWidth(seg.rawText(), containsAnswerLine,
                             firstSegment);
                         mathEmbedder.embedEquation(para, mathRun, seg.ast(), seg.rawText(),
-                            displayScale, maxWidthPt);
+                            displayScale, maxWidthPt, seg.metrics(), seg.styleHints());
                     } catch (Exception e) {
-                        // 嵌入失败时降级为纯文本显示
-                        log.error("Failed to embed formula, falling back to text: {}", seg.rawText(), e);
-                        mathRun.setText("$" + seg.rawText() + "$");
+                        throw new IllegalStateException("Failed to embed formula: " + seg.rawText(), e);
                     }
                 } else {
                     // 草稿模式：保留 $...$ 标记，供 Windows 端 MathType 后处理器批量转换
@@ -828,25 +826,7 @@ public class DocxBuilder {
 
     private double resolveCompactFormulaDisplayScale(String rawLatex, boolean containsAnswerLine,
                                                      boolean firstSegment) {
-        if (!compactLayoutContext) {
-            return 1.0d;
-        }
-        String latex = rawLatex == null ? "" : rawLatex;
-        double scale;
-        if (isArrayLikeFormula(latex)) {
-            scale = firstSegment ? 1.02d : 0.88d;
-        } else if (containsFractionFormula(latex)) {
-            boolean denseFraction = isDenseFractionFormula(latex);
-            scale = isLongFormula(latex)
-                ? (firstSegment ? (denseFraction ? 0.95d : 0.98d) : 0.86d)
-                : 0.95d;
-        } else {
-            scale = 0.90d;
-        }
-        if (containsAnswerLine) {
-            scale *= isLongFormula(latex) ? 0.92d : 0.96d;
-        }
-        return scale;
+        return 1.0d;
     }
 
     private double resolveCompactFormulaMaxWidth(String rawLatex, boolean containsAnswerLine,

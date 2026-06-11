@@ -1,6 +1,7 @@
 package com.lz.paperword.core.mtef;
 
 import com.lz.paperword.core.latex.LaTeXNode;
+import com.lz.paperword.core.latex.LaTeXParser.FormulaStyleHints;
 import com.lz.paperword.core.layout.VerticalLayoutCompiler;
 import com.lz.paperword.core.layout.VerticalLayoutNodeFactory;
 import com.lz.paperword.core.layout.VerticalLayoutSpec;
@@ -95,6 +96,7 @@ public class MtefWriter {
     private final VerticalLayoutCompiler verticalLayoutCompiler = new VerticalLayoutCompiler();
     private final VerticalLayoutNodeFactory verticalLayoutNodeFactory = new VerticalLayoutNodeFactory();
     private final MtefPileRulerWriter pileRulerWriter = new MtefPileRulerWriter();
+    private FormulaStyleHints currentStyleHints = FormulaStyleHints.empty();
 
     /** OLE 模板资源路径 — 包含一个由 MathType 生成的已知正确的 OLE 对象，用于提取 MTEF 前缀 */
     private static final String TEMPLATE_OLE_RESOURCE = "/mathtype-template/oleObject-template.bin";
@@ -197,15 +199,29 @@ public class MtefWriter {
      * Returns the complete MTEF byte array including header.</p>
      */
     public byte[] write(LaTeXNode root) {
-        return write(mathIRConverter.convert(root));
+        return write(root, FormulaStyleHints.empty());
+    }
+
+    public byte[] write(LaTeXNode root, FormulaStyleHints styleHints) {
+        return write(mathIRConverter.convert(root), styleHints);
     }
 
     /**
      * Phase 3 入口：先面向 MathML-aligned IR，再落回现有的稳定 AST→MTEF 发射逻辑。
      */
     public byte[] write(MathIRNode root) {
+        return write(root, FormulaStyleHints.empty());
+    }
+
+    public byte[] write(MathIRNode root, FormulaStyleHints styleHints) {
+        FormulaStyleHints previous = currentStyleHints;
+        currentStyleHints = styleHints == null ? FormulaStyleHints.empty() : styleHints;
+        try {
         LaTeXNode normalizedAst = mathIRLowerer.lower(root);
         return writeNormalizedAst(normalizedAst);
+        } finally {
+            currentStyleHints = previous;
+        }
     }
 
     private byte[] writeNormalizedAst(LaTeXNode root) {
@@ -457,6 +473,12 @@ public class MtefWriter {
     private byte[] writeByTemplatePrefix(LaTeXNode root) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream(512);
         out.write(TEMPLATE_MTEF_PREFIX);   // 写入模板前缀（header + 字体 + SIZE + LINE 开头）
+        if (currentStyleHints.explicitBlackColor()) {
+            writeExplicitBlackColor(out);
+        }
+        if (currentStyleHints.explicitTopFullSize()) {
+            writeExplicitFullSizeRecord(out);
+        }
         writeNode(out, root);              // 递归写入 AST 内容
         out.write(MtefRecord.END);         // 第一个 END：关闭顶层 LINE 记录
         out.write(MtefRecord.END);         // 第二个 END：结束 MTEF 流
@@ -818,6 +840,14 @@ public class MtefWriter {
                 continue;
             }
 
+            // MathType writes literal "..." as three FN_FUNCTION periods, while a single
+            // decimal point remains FN_TEXT via the normal char map.
+            if (isThreeDotRun(nodes, i)) {
+                writeFunctionEllipsis(out);
+                i += 2;
+                continue;
+            }
+
             // ========== 括号表达式检测 ==========
             // 检测 '(' 或 '[' 开头的括号对，匹配对应的 ')' 或 ']'。
             // MathType 要求括号内容使用 TM_PAREN / TM_BRACK fence 模板。
@@ -834,9 +864,13 @@ public class MtefWriter {
 
                         if (closeNode.getType() == LaTeXNode.Type.SUPERSCRIPT
                                 || closeNode.getType() == LaTeXNode.Type.SUBSCRIPT) {
-                            // 模式：(...)^{exp} 或 (...)_{sub}
-                            // 先写括号 fence 模板，再写上标/下标附件
-                            writeParenFence(out, openCh, closeCh, parenContent);
+                            // 模式：(...)^{exp} 或 (...)_{sub}。测试集里的平坦括号表达式使用
+                            // 全角括号字符加脚本模板；只有高结构内容才需要拉伸 fence 模板。
+                            if (isLinearFenceContent(parenContent)) {
+                                writeFlatFenceChars(out, openCh, closeCh, parenContent);
+                            } else {
+                                writeParenFence(out, openCh, closeCh, parenContent);
+                            }
                             writeSupSubAttachment(out, closeNode);
                             // 括号+上下标组合也是模板，后面有更多内容时需要 FULL 恢复字号
                             if (closeIdx < nodes.size() - 1) {
@@ -845,8 +879,12 @@ public class MtefWriter {
                             i = closeIdx; // 跳过已处理的括号内容和闭括号节点
                             continue;
                         } else if (closeNode.getType() == LaTeXNode.Type.CHAR) {
-                            // 模式：(...) 独立括号 — 同样使用 TM_PAREN 模板
-                            writeParenFence(out, openCh, closeCh, parenContent);
+                            if (isLinearFenceContent(parenContent)) {
+                                writeFlatFenceChars(out, openCh, closeCh, parenContent);
+                            } else {
+                                // Tall or structured content still needs a stretchable MathType fence template.
+                                writeParenFence(out, openCh, closeCh, parenContent);
+                            }
                             i = closeIdx; // 跳过已处理的括号内容和闭括号节点
                             continue;
                         }
@@ -863,9 +901,55 @@ public class MtefWriter {
             // 关键：在 slot 末尾（即 i == nodes.size()-1 时）不能插入 FULL，
             // 否则会在 LINE END 之前产生多余的 FULL 记录导致 MathType 解析错误。
             if (i < nodes.size() - 1 && generatesTemplate(child)) {
-                out.write(MtefRecord.FULL);
+                writePostTemplateFullSize(out, child, nodes.subList(i + 1, nodes.size()));
             }
         }
+    }
+
+    private boolean isThreeDotRun(List<LaTeXNode> nodes, int index) {
+        return index + 2 < nodes.size()
+                && isCharValue(nodes.get(index), ".")
+                && isCharValue(nodes.get(index + 1), ".")
+                && isCharValue(nodes.get(index + 2), ".");
+    }
+
+    private boolean isCharValue(LaTeXNode node, String value) {
+        return node != null
+                && node.getType() == LaTeXNode.Type.CHAR
+                && value.equals(node.getValue());
+    }
+
+    private void writeFunctionEllipsis(ByteArrayOutputStream out) throws IOException {
+        writeCharRecord(out, MtefRecord.FN_FUNCTION, '.');
+        writeCharRecord(out, MtefRecord.FN_FUNCTION, '.');
+        writeCharRecord(out, MtefRecord.FN_FUNCTION, '.');
+    }
+
+    private void writePostTemplateFullSize(ByteArrayOutputStream out, LaTeXNode node, List<LaTeXNode> remaining) {
+        if ((node.getType() == LaTeXNode.Type.SUPERSCRIPT || node.getType() == LaTeXNode.Type.SUBSCRIPT)
+                && currentStyleHints.explicitScriptFullSize()) {
+            writeExplicitFullSizeRecord(out);
+            return;
+        }
+        out.write(MtefRecord.FULL);
+    }
+
+    private void writeExplicitFullSizeRecord(ByteArrayOutputStream out) {
+        out.write(MtefRecord.SIZE);
+        out.write(0x65);
+        out.write(0x50);
+        out.write(0x01);
+    }
+
+    private void writeExplicitBlackColor(ByteArrayOutputStream out) throws IOException {
+        out.write(MtefRecord.COLOR_DEF);
+        out.write(0x04);
+        out.write(new byte[] {0x00, 0x00, 0x00, 0x00});
+        out.write(0x00);
+        out.write("Black".getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+        out.write(0x00);
+        out.write(MtefRecord.COLOR);
+        out.write(0x01);
     }
 
     /**
@@ -1064,7 +1148,7 @@ public class MtefWriter {
             writeNode(out, n);
             // 内容中的模板节点后面有更多内容时，也需要 FULL 恢复字号
             if (ci < content.size() - 1 && generatesTemplate(n)) {
-                out.write(MtefRecord.FULL);
+                writePostTemplateFullSize(out, n, content.subList(ci + 1, content.size()));
             }
         }
         out.write(MtefRecord.END); // 关闭内容 LINE
@@ -1268,6 +1352,18 @@ public class MtefWriter {
         if ("\t".equals(ch)) {
             // MathType 制表符要以文本字符写入，不能落到默认变量字体。
             writeCharRecord(out, MtefRecord.FN_TEXT, '\t');
+            return;
+        }
+        if (",".equals(ch) && currentStyleHints.textFeComma()) {
+            writeCharRecord(out, MtefRecord.FN_TEXT_FE, 0xFF0C);
+            return;
+        }
+        if ("(".equals(ch) && currentStyleHints.fullwidthTextParen()) {
+            writeCharRecord(out, MtefRecord.FN_TEXT_FE, 0xFF08);
+            return;
+        }
+        if (")".equals(ch) && currentStyleHints.fullwidthTextParen()) {
+            writeCharRecord(out, MtefRecord.FN_TEXT_FE, 0xFF09);
             return;
         }
         MtefCharMap.CharEntry entry = MtefCharMap.lookupChar(ch.charAt(0));
@@ -1548,8 +1644,26 @@ public class MtefWriter {
         if (spec == null) {
             return false;
         }
-        writeFenceTemplate(out, spec, node.getChildren().isEmpty() ? null : node.getChildren().get(0));
+        LaTeXNode content = node.getChildren().isEmpty() ? null : node.getChildren().get(0);
+        if (shouldWriteFlatExplicitFence(spec, content)) {
+            writeFlatFenceChars(out, spec.leftChar(), spec.rightChar(), flatContentNodes(content));
+            return true;
+        }
+        writeFenceTemplate(out, spec, content);
         return true;
+    }
+
+    private boolean shouldWriteFlatExplicitFence(FenceSpec spec, LaTeXNode content) {
+        if (currentStyleHints.forceExplicitFenceTemplate()) {
+            return false;
+        }
+        if (!spec.hasLeft() || !spec.hasRight()) {
+            return false;
+        }
+        if (spec.selector() != MtefRecord.TM_PAREN && spec.selector() != MtefRecord.TM_BRACK) {
+            return false;
+        }
+        return isFlatFenceContent(flatContentNodes(content));
     }
 
     private FenceSpec resolveFenceSpec(String leftDelimiter, String rightDelimiter) {
@@ -1615,6 +1729,112 @@ public class MtefWriter {
         };
     }
 
+    private List<LaTeXNode> flatContentNodes(LaTeXNode content) {
+        if (content == null) {
+            return List.of();
+        }
+        if (content.getType() == LaTeXNode.Type.ROOT || content.getType() == LaTeXNode.Type.GROUP) {
+            return content.getChildren();
+        }
+        return List.of(content);
+    }
+
+    private void writeFlatFenceChars(ByteArrayOutputStream out, int openCh, int closeCh,
+                                     List<LaTeXNode> content) throws IOException {
+        writeMappedFenceCharRecord(out, openCh);
+        writeContentNodes(out, content);
+        writeMappedFenceCharRecord(out, closeCh);
+    }
+
+    private void writeMappedFenceCharRecord(ByteArrayOutputStream out, int ch) throws IOException {
+        if (ch == '(') {
+            if (currentStyleHints.asciiFlatParens()) {
+                writeCharRecord(out, MtefRecord.FN_FUNCTION, '(');
+            } else {
+                writeCharRecord(out, MtefRecord.FN_TEXT_FE, 0xFF08);
+            }
+            return;
+        }
+        if (ch == ')') {
+            if (currentStyleHints.asciiFlatParens()) {
+                writeCharRecord(out, MtefRecord.FN_FUNCTION, ')');
+            } else {
+                writeCharRecord(out, MtefRecord.FN_TEXT_FE, 0xFF09);
+            }
+            return;
+        }
+        MtefCharMap.CharEntry entry = MtefCharMap.lookupChar((char) ch);
+        if (entry != null) {
+            writeCharRecord(out, entry.typeface(), entry.mtcode());
+            return;
+        }
+        writeCharRecord(out, MtefRecord.FN_VARIABLE, ch);
+    }
+
+    private boolean isFlatFenceContent(List<LaTeXNode> content) {
+        if (content.isEmpty()) {
+            return true;
+        }
+        for (LaTeXNode child : content) {
+            if (!isFlatFenceNode(child)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isFlatFenceNode(LaTeXNode node) {
+        if (node == null) {
+            return true;
+        }
+        return switch (node.getType()) {
+            case ROOT, GROUP, TEXT, ROW, CELL -> isFlatFenceContent(node.getChildren());
+            case CHAR -> true;
+            case COMMAND -> isFlatFenceCommand(node);
+            default -> false;
+        };
+    }
+
+    private boolean isFlatFenceCommand(LaTeXNode node) {
+        String value = node.getValue();
+        if (LATEX_SPACING_COMMANDS.contains(value)) {
+            return true;
+        }
+        if (MtefCharMap.lookup(value) != null) {
+            return node.getChildren().stream().allMatch(this::isFlatFenceNode);
+        }
+        return "\\mathrm".equals(value) || "\\operatorname".equals(value) || "\\text".equals(value);
+    }
+
+    private boolean isLinearFenceContent(List<LaTeXNode> content) {
+        if (content.isEmpty()) {
+            return true;
+        }
+        for (LaTeXNode child : content) {
+            if (!isLinearFenceNode(child)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isLinearFenceNode(LaTeXNode node) {
+        if (node == null) {
+            return true;
+        }
+        return switch (node.getType()) {
+            case ROOT, GROUP, TEXT, ROW, CELL -> isLinearFenceContent(node.getChildren());
+            case CHAR -> true;
+            case COMMAND -> isFlatFenceCommand(node);
+            case SUPERSCRIPT, SUBSCRIPT -> {
+                LaTeXNode base = childAt(node, 0);
+                LaTeXNode script = childAt(node, 1);
+                yield isLinearFenceNode(base) && isLinearFenceNode(script);
+            }
+            default -> false;
+        };
+    }
+
     private void writeFenceTemplate(ByteArrayOutputStream out, FenceSpec spec, LaTeXNode content) throws IOException {
         switch (spec.selector()) {
             case MtefRecord.TM_ANGLE -> MtefTemplateBuilder.writeAngleHeader(out, spec.hasLeft(), spec.hasRight());
@@ -1674,14 +1894,35 @@ public class MtefWriter {
         MtefTemplateBuilder.writeFractionHeader(out);
         LaTeXNode numerator = node.getChildren().size() > 0 ? node.getChildren().get(0) : null;
         // Slot 0: 分子
-        writeSlot(out, numerator);
+        if (currentStyleHints.explicitFractionFullSize()) {
+            writeSlotWithLeadingExplicitFullSize(out, numerator);
+        } else {
+            writeSlot(out, numerator);
+        }
         // 条件性 FULL：仅当分子末尾是缩小字号的模板时才插入
-        if (needsFullAfterSlot(numerator)) {
+        if (currentStyleHints.explicitFractionFullSize()) {
+            // Reference MathType objects in the XSC corpus often write explicit full-size records
+            // at the beginning of both fraction slots rather than a single FULL between slots.
+        } else if (needsFullAfterSlot(numerator)) {
             out.write(MtefRecord.FULL);
         }
         // Slot 1: 分母
-        writeSlot(out, node.getChildren().size() > 1 ? node.getChildren().get(1) : null);
+        if (currentStyleHints.explicitFractionFullSize()) {
+            writeSlotWithLeadingExplicitFullSize(out, node.getChildren().size() > 1 ? node.getChildren().get(1) : null);
+        } else {
+            writeSlot(out, node.getChildren().size() > 1 ? node.getChildren().get(1) : null);
+        }
         out.write(MtefRecord.END); // 关闭分数模板
+    }
+
+    private void writeSlotWithLeadingExplicitFullSize(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        out.write(MtefRecord.LINE);
+        out.write(0x00);
+        writeExplicitFullSizeRecord(out);
+        if (node != null) {
+            writeNode(out, node);
+        }
+        out.write(MtefRecord.END);
     }
 
     /**
@@ -1828,6 +2069,9 @@ public class MtefWriter {
 
         // 标准上标模式：base^{sup}
         if (base != null) writeNode(out, base);    // base 写在模板外部
+        if (currentStyleHints.explicitScriptFullSize()) {
+            out.write(MtefRecord.FULL);
+        }
         MtefTemplateBuilder.writeSuperscriptHeader(out);  // TM_SUP 模板
         out.write(MtefRecord.SUB);    // typesize 记录
         writeNullLine(out);            // slot 0: NULL base（base 已在外部写入）
@@ -1871,6 +2115,9 @@ public class MtefWriter {
 
         // base 写在模板外部
         if (base != null) writeNode(out, base);
+        if (currentStyleHints.explicitScriptFullSize()) {
+            out.write(MtefRecord.FULL);
+        }
         MtefTemplateBuilder.writeSubscriptHeader(out);  // TM_SUB 模板
         out.write(MtefRecord.SUB);    // typesize 记录
         writeSlot(out, sub);           // slot 0: 下标内容（TM_SUB 先写内容！）
@@ -1887,24 +2134,69 @@ public class MtefWriter {
      * 这样 MathType 会以直立体（upright）而非斜体（italic）显示。</p>
      */
     private void writeTextNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        if (node.getChildren().isEmpty() || textNodeChildrenEmpty(node)) {
+            writeCharRecord(out, MtefRecord.FN_TEXT, ' ');
+            return;
+        }
         for (LaTeXNode child : node.getChildren()) {
             if (child.getType() == LaTeXNode.Type.GROUP) {
                 // GROUP 包装层：展开其子节点
-                for (LaTeXNode gc : child.getChildren()) {
-                    writeTextChar(out, gc);
-                }
+                writeTextChars(out, child.getChildren());
             } else {
                 writeTextChar(out, child);
             }
         }
     }
 
+    private boolean textNodeChildrenEmpty(LaTeXNode node) {
+        for (LaTeXNode child : node.getChildren()) {
+            if (child.getType() == LaTeXNode.Type.GROUP && child.getChildren().isEmpty()) {
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+
     /**
      * 将单个文本字符写为 FN_TEXT 字体的 CHAR 记录。
      * 支持多字符值（逐字符写入）。
      */
+    private void writeTextChars(ByteArrayOutputStream out, java.util.List<LaTeXNode> nodes) throws IOException {
+        for (int i = 0; i < nodes.size(); i++) {
+            LaTeXNode node = nodes.get(i);
+            if (node.getType() == LaTeXNode.Type.CHAR && "\\".equals(node.getValue())) {
+                StringBuilder command = new StringBuilder("\\");
+                int j = i + 1;
+                while (j < nodes.size()) {
+                    LaTeXNode next = nodes.get(j);
+                    String value = next.getValue();
+                    if (next.getType() == LaTeXNode.Type.CHAR && value != null && value.length() == 1
+                        && Character.isLetter(value.charAt(0))) {
+                        command.append(value);
+                        j++;
+                        continue;
+                    }
+                    break;
+                }
+                MtefCharMap.CharEntry entry = MtefCharMap.lookup(command.toString());
+                if (entry != null) {
+                    writeCharRecord(out, entry.typeface(), entry.mtcode());
+                    i = j - 1;
+                    continue;
+                }
+            }
+            writeTextChar(out, node);
+        }
+    }
+
     private void writeTextChar(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
         if (node.getType() == LaTeXNode.Type.CHAR && node.getValue() != null) {
+            MtefCharMap.CharEntry commandEntry = MtefCharMap.lookup(node.getValue());
+            if (commandEntry != null) {
+                writeCharRecord(out, commandEntry.typeface(), commandEntry.mtcode());
+                return;
+            }
             for (char c : node.getValue().toCharArray()) {
                 writeCharRecord(out, MtefRecord.FN_TEXT, c);
             }
@@ -2499,7 +2791,8 @@ public class MtefWriter {
         // 判断是否需要 bits8 字段（仅 Symbol 和 Greek 字体需要）
         boolean needBits8 = (typeface == MtefRecord.FN_SYMBOL
                           || typeface == MtefRecord.FN_LC_GREEK
-                          || typeface == MtefRecord.FN_UC_GREEK);
+                          || typeface == MtefRecord.FN_UC_GREEK
+                          || typeface == MtefRecord.FN_MTEXTRA);
         int bits8 = needBits8 ? MtefCharMap.getSymbolBits8(mtcode) : -1;
 
         // options: 如果有 bits8，设置 OPT_CHAR_ENC_CHAR_8 标志位

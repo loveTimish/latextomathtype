@@ -37,7 +37,7 @@ class MathTypeAlignmentRegressionTest {
     @Test
     void shouldUseExpectedPreviewForFractionFormula() throws IOException {
         ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithFormula("\\frac{1}{2}"));
-        assertEquals("png", generated.previewExtension);
+        assertEquals("wmf", generated.previewExtension);
         assertWithin(generated.positionHalfPt, -24, 4.0d, "fraction baseline position");
         assertTrue(generated.styleHeightPt >= 20.0d, "fraction preview height should stay close to MathType");
         assertTrue(generated.styleHeightPt <= 32.0d, "fraction preview height should not be oversized");
@@ -47,7 +47,7 @@ class MathTypeAlignmentRegressionTest {
     void shouldNotUseScaledBitmapSizeAsWordDisplaySize() throws IOException {
         ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithFormula("a^2+b^2=25"));
 
-        assertEquals("png", generated.previewExtension);
+        assertEquals("wmf", generated.previewExtension);
         assertTrue(generated.styleHeightPt <= 18.0d,
             "inline formula display height should use logical points, not high-DPI bitmap pixels");
         assertTrue(generated.styleWidthPt <= 95.0d,
@@ -63,8 +63,8 @@ class MathTypeAlignmentRegressionTest {
 
         assertTrue(reference.previewExtension.equals("wmf") || reference.previewExtension.equals("emf"),
             "reference preview should be vector");
-        assertEquals("png", generated.previewExtension);
-        // 预览链路已从参考文档的矢量图切到更收敛的 PNG 尺寸，断言只要求基线与尺寸保持在合理范围。
+        assertEquals("wmf", generated.previewExtension);
+        // 预览链路已切到 WMF 媒体，断言只要求基线与尺寸保持在合理范围。
         assertWithin(generated.positionHalfPt, reference.positionHalfPt, 8.0d, "baseline position");
         assertTrue(generated.styleHeightPt >= 12.0d, "style height should stay readable after preview shrink");
         assertTrue(generated.dyaOrig > 0, "dyaOrig should be positive");
@@ -109,7 +109,7 @@ class MathTypeAlignmentRegressionTest {
         assertNotNull(relsXml);
         assertTrue(documentXml.contains("<o:OLEObject"), "current long division should stay on OLE path");
         assertFalse(documentXml.contains("[\\longdiv[246]{5}{1234}]"), "current long division should not degrade to raw text");
-        assertEquals("media/image_eq1.png", extractRelationshipTarget(relsXml, extractFirstImageRelId(documentXml)));
+        assertEquals("media/image_eq1.wmf", extractRelationshipTarget(relsXml, extractFirstImageRelId(documentXml)));
     }
 
     @Test

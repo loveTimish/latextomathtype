@@ -130,9 +130,12 @@ public final class MtefCharMap {
         putSymbol("\\mp",        0x2213);  // ∓ 负正号
         putSymbol("\\cdot",      0x22C5);  // ⋅ 点乘
         putSymbol("\\bullet",    0x2022);  // • 实心圆点
-        putSymbol("\\circ",      0x2218);  // ∘ 空心圆（复合运算符）
+        putMtExtra("\\circ",     0x2218);  // ∘ MathType 原生常用 MT Extra 编码
         putSymbol("\\ast",       0x2217);  // ∗ 星号运算符
         putSymbol("\\star",      0x22C6);  // ⋆ 星号
+        putText("\\whitestar",   0x2606);  // ☆ 空心星形占位符
+        putText("\\blackstar",   0x2605);  // ★ 实心星形占位符
+        putText("\\&",           0x0026);  // & 自定义运算符
 
         // 关系运算符
         putSymbol("\\leq",       0x2264);  // ≤ 小于等于
@@ -147,8 +150,14 @@ public final class MtefCharMap {
         putSymbol("\\simeq",     0x2243);  // ≃ 渐近相等
         putSymbol("\\cong",      0x2245);  // ≅ 全等/同余
         putSymbol("\\propto",    0x221D);  // ∝ 正比于
+        putSymbol("\\prec",      0x227A);  // ≺ 先于
+        putSymbol("\\succ",      0x227B);  // ≻ 后于
+        putSymbol("\\preceq",    0x2AAF);  // ⪯ 先于或等于
+        putSymbol("\\succeq",    0x2AB0);  // ⪰ 后于或等于
         putSymbol("\\perp",      0x22A5);  // ⊥ 垂直
         putSymbol("\\parallel",  0x2225);  // ∥ 平行
+        putSymbol("\\|",         0x2225);  // ∥ 双竖线
+        putSymbol("\\colon",     0x2236);  // ∶ 比例号
 
         // 集合运算符
         putSymbol("\\subset",    0x2282);  // ⊂ 真子集
@@ -175,13 +184,23 @@ public final class MtefCharMap {
 
         // 其他数学符号
         putSymbol("\\oplus",     0x2295);  // ⊕ 圆加（直和）
+        putSymbol("\\ominus",    0x2296);  // ⊖ 圆减
         putSymbol("\\otimes",    0x2297);  // ⊗ 圆乘（张量积）
+        putSymbol("\\oslash",    0x2298);  // ⊘ 圆除
+        putSymbol("\\odot",      0x2299);  // ⊙ 圆点运算
         putSymbol("\\infty",     0x221E);  // ∞ 无穷大
         putSymbol("\\partial",   0x2202);  // ∂ 偏导数
         putSymbol("\\nabla",     0x2207);  // ∇ 梯度算子（nabla）
         putSymbol("\\angle",     0x2220);  // ∠ 角
         putText("\\triangle",     0x25B3);  // △ 几何三角形标记
+        putText("\\vartriangle",  0x25B3);  // △ 三角形变体
         putText("\\bigtriangleup",0x25B3);  // △ Pandoc 常输出该写法
+        putText("\\square",       0x25A1);  // □ 填空占位方框
+        putText("\\Box",          0x25A1);  // □ 方框别名
+        putText("\\blacksquare",  0x25A0);  // ■ 实心占位方块
+        putText("\\whitediamond", 0x25C7);  // ◇ 空心菱形占位符
+        putText("\\bigcirc",      0x25CB);  // ○ 填空占位圆圈
+        putText("\\underbracechar",0xFE38);  // ︸ 下花括号展示符
         putSymbol("\\therefore", 0x2234);  // ∴ 所以
         putSymbol("\\because",   0x2235);  // ∵ 因为
 
@@ -206,7 +225,7 @@ public final class MtefCharMap {
 
         // 省略号
         putSymbol("\\ldots",     0x2026);  // … 底部省略号
-        putSymbol("\\cdots",     0x22EF);  // ⋯ 居中省略号
+        putMtExtra("\\cdots",    0x22EF);  // ⋯ 居中省略号，MathType 原生使用 MT Extra
         putSymbol("\\vdots",     0x22EE);  // ⋮ 垂直省略号
         putSymbol("\\ddots",     0x22F1);  // ⋱ 对角省略号
 
@@ -476,6 +495,8 @@ public final class MtefCharMap {
         UNICODE_TO_SYMBOL_BITS8.put(0x2200, 0x22); // ∀
         UNICODE_TO_SYMBOL_BITS8.put(0x2203, 0x24); // ∃
         UNICODE_TO_SYMBOL_BITS8.put(0x22C5, 0xD7); // ⋅
+        UNICODE_TO_SYMBOL_BITS8.put(0x22EF, 0x4C); // ⋯ MathType MT Extra centered ellipsis
+        UNICODE_TO_SYMBOL_BITS8.put(0x2218, 0x6F); // ∘ MathType MT Extra composition ring
         UNICODE_TO_SYMBOL_BITS8.put(0x2026, 0xBC); // …
         UNICODE_TO_SYMBOL_BITS8.put(0x2032, 0xA2); // ′
         UNICODE_TO_SYMBOL_BITS8.put(0x223C, 0x7E); // ∼

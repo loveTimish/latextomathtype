@@ -13,7 +13,7 @@
 - 通过 `POST /api/export/word` 把 `PaperExportRequest` 导出为 Word。
 - 将公式写入 MathType 兼容的 OLE2 对象，并在 `Equation Native` 流中保存 MTEF 数据。
 - 将“公式可编辑本体”和“Word 页面上的显示框”分开处理，避免为了调版式而在 OLE/MTEF 里硬指定公式字号。
-- 优先使用 TeX/dvisvgm 渲染公式预览图，缺少 TeX 环境时回退到 JLaTeXMath。
+- 使用 TeX/dvisvgm 生成公式预览，并以 WMF 媒体嵌入 OLE 显示面；OLE 预览失败时直接报错，不回退到 PNG。
 - 可重复重建 `rebuild-assets/external/fraction-split-reference.docx` 参考文档。
 - 用 OLE 直接检查、Word/MathType 抽查、`docx2tex` 回切和公式框尺寸对比做验收。
 
@@ -86,11 +86,10 @@ Invoke-WebRequest `
 
 ## Linux 和 Docker
 
-Linux 使用纯 Java 的 MTEF/OLE 写入路径：
+服务使用纯 Java 的 MTEF/OLE 写入路径：
 
 ```bash
 java \
-  -Dmathtype.windows.enabled=false \
   -Dpaperword.render.cache.enabled=true \
   -Dpaperword.render.cache.dir=/var/cache/latextomathtype/formula-render \
   -jar target/paper-to-word-1.0.0.jar
@@ -161,6 +160,73 @@ Windows 上运行完整验收链路：
 target/reference-roundtrip/fraction-split-reference-regenerated.docx
 ```
 
+## xsc 全量验收
+
+xsc 测试集用于验证“完整 DOCX 重建”，不是只导出公式。默认源目录：
+
+```text
+F:\资料\xsc资料\word_files
+```
+
+推荐流水线：
+
+```powershell
+# 1. 先用 docxtolatex 重建 LaTeX corpus
+.\scripts\run_xsc_docxtolatex.ps1 `
+  -Start 1 `
+  -End 155 `
+  -OutRoot D:\latextomathtype\analysis\xsc-latex
+
+# 2. 从 LaTeX corpus 生成完整 PaperExportRequest
+python .\scripts\make_full_batch10_requests.py `
+  --start 1 `
+  --end 155 `
+  --latex-root D:\latextomathtype\analysis\xsc-latex `
+  --out-dir D:\latextomathtype\analysis\batch10-full-requests
+
+# 3. 分批生成 DOCX 并验收。大 corpus 建议按 10 个文件一批跑。
+.\scripts\run_xsc_acceptance.ps1 `
+  -Start 141 `
+  -End 155 `
+  -LatexRoot D:\latextomathtype\analysis\xsc-latex
+
+# 4. 汇总所有批次验收报告，作为 1% 尺寸门槛
+python .\scripts\summarize_xsc_full_acceptance.py
+```
+
+`summarize_xsc_full_acceptance.py` 默认会从 `D:\latextomathtype\analysis\acceptance-summary` 自动选择每个分段的最新报告。需要固定某次验收证据时，可传入 `--manifest`，文件格式为 JSON 数组：
+
+```json
+[
+  {"stamp": "20260612-064944", "start": 141, "end": 155}
+]
+```
+
+聚合脚本会检查：
+
+- 覆盖 `1..155`，无缺段、无重复段。
+- 生成侧预览全部是 WMF。
+- 成对公式的 WMF 目标物理宽高均在测试集 `1%` 误差内。
+- MTEF 对比对象数与尺寸对比对象数一致。
+
+最近一次全量验收报告：
+
+```text
+D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
+```
+
+关键指标：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 覆盖范围 | `1..155` |
+| 成对公式对象 | `39551` |
+| WMF 宽度 1% 内 | `39551/39551` |
+| WMF 高度 1% 内 | `39551/39551` |
+| 生成侧非 WMF | `0` |
+| MTEF clean pairs | `39248/39551` |
+| MTEF hard suspects | `223`，主要为短公式、旧模板和结构风格差异 |
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：
@@ -205,7 +271,6 @@ python rebuild\verify_docx2tex_formula_fragments.py `
 
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
-| `mathtype.windows.enabled` | `false` | 是否转发给外部 Windows MathType 服务 |
 | `paperword.latex.command` | `latex` | 原生 TeX 渲染命令 |
 | `paperword.dvisvgm.command` | `dvisvgm` | DVI 转 SVG 命令 |
 | `paperword.latex.timeout.seconds` | `15` | 原生 TeX 渲染超时 |
@@ -217,7 +282,7 @@ python rebuild\verify_docx2tex_formula_fragments.py `
 ```text
 src/main/java/com/lz/paperword
   controller/        REST 接口
-  service/           导出服务和可选 Windows MathType 桥接
+  service/           导出服务
   core/docx/         Word 文档构建和 MathType 嵌入
   core/latex/        LaTeX 分词、解析和内容切分
   core/mathml/       中间数学表示和降级转换

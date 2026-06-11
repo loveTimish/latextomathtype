@@ -1,6 +1,5 @@
 package com.lz.paperword.service;
 
-import com.lz.paperword.config.WindowsMathTypeProperties;
 import com.lz.paperword.core.docx.DocxBuilder;
 import com.lz.paperword.model.PaperExportRequest;
 import org.slf4j.Logger;
@@ -19,15 +18,6 @@ public class PaperExportService {
     private static final Logger log = LoggerFactory.getLogger(PaperExportService.class);
 
     private final DocxBuilder oleDocxBuilder = new DocxBuilder(true);
-    private final DocxBuilder draftDocxBuilder = new DocxBuilder(false);
-    private final WindowsMathTypeProperties windowsMathTypeProperties;
-    private final WindowsMathTypeClient windowsMathTypeClient;
-
-    public PaperExportService(WindowsMathTypeProperties windowsMathTypeProperties,
-                              WindowsMathTypeClient windowsMathTypeClient) {
-        this.windowsMathTypeProperties = windowsMathTypeProperties;
-        this.windowsMathTypeClient = windowsMathTypeClient;
-    }
 
     /**
      * Export a paper to a .docx byte array.
@@ -41,14 +31,7 @@ public class PaperExportService {
             request.getPaper() != null ? request.getPaper().getName() : "unnamed");
 
         long start = System.currentTimeMillis();
-        byte[] docx;
-
-        if (!windowsMathTypeProperties.isEnabled()) {
-            docx = oleDocxBuilder.build(request);
-        } else {
-            byte[] draft = draftDocxBuilder.build(request);
-            docx = windowsMathTypeClient.convert(draft);
-        }
+        byte[] docx = oleDocxBuilder.build(request);
 
         long elapsed = System.currentTimeMillis() - start;
 

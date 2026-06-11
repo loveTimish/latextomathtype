@@ -48,6 +48,42 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseSpacedSuperscriptFromDocxToLatex() {
+        LaTeXNode ast = parser.parseLaTeX("45 ^ { \\circ }");
+        assertNotNull(ast);
+        assertEquals(2, ast.getChildren().size());
+        assertEquals("4", flatten(ast.getChildren().get(0)));
+        LaTeXNode sup = ast.getChildren().get(1);
+        assertEquals(LaTeXNode.Type.SUPERSCRIPT, sup.getType());
+        assertEquals("5", flatten(sup.getChildren().get(0)));
+        assertEquals("\\circ", flatten(sup.getChildren().get(1)));
+    }
+
+    @Test
+    void testParseArrayLineBreaksWrittenAsThinSpacesByDocxToLatex() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{c} a=1 \\\\,b=2 \\\\,c=3 \\end{array}");
+        assertNotNull(ast);
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals(3, array.getChildren().size());
+        assertEquals("a=1", flatten(array.getChildren().get(0)));
+        assertEquals("b=2", flatten(array.getChildren().get(1)));
+        assertEquals("c=3", flatten(array.getChildren().get(2)));
+    }
+
+    @Test
+    void testParseArrayLineBreakBeforeCommandKeepsCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{c} 6 \\\\,\\div \\\\,8 \\end{array}");
+        assertNotNull(ast);
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals(3, array.getChildren().size());
+        assertEquals("6", flatten(array.getChildren().get(0)));
+        assertEquals("\\div", flatten(array.getChildren().get(1)));
+        assertEquals("8", flatten(array.getChildren().get(2)));
+    }
+
+    @Test
     void testParseSubscript() {
         LaTeXNode ast = parser.parseLaTeX("a_{n}");
         assertNotNull(ast);

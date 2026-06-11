@@ -115,6 +115,7 @@ public class LaTeXTokenizer {
         "times", "div", "pm", "mp", "cdot", "bullet",
         "leq", "le", "geq", "ge", "neq", "ne",
         "approx", "equiv", "sim", "simeq", "cong", "propto",
+        "prec", "succ", "preceq", "succeq",
         "perp", "parallel", "subset", "supset", "subseteq", "supseteq",
         "in", "notin", "ni", "cup", "cap",
         "emptyset", "varnothing", "exists", "forall",
