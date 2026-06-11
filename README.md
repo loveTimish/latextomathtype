@@ -230,6 +230,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 | MTEF 剩余 low-tail failures | `51` |
 | MTEF 剩余结构缺口 | `126` |
 
+增量 MTEF writer 回归：`20260612-071948` 单文件 doc41 验证中，平坦 `\div` 等式链改用 MathType `TM_BOX 0x1e` 片段后，WMF 目标尺寸仍为 `476/476` 在 `1%` 内，doc41 hard suspects 从 `26` 降到 `6`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：

@@ -1218,6 +1218,17 @@ class MtefWriterTest {
             "{}^{n}_{i}x should normalize to the same tmSUBSUP + tvSU_PRECEDES encoding");
     }
 
+    @Test
+    void testDivisionEquationChainUsesMathTypeBoxSegments() {
+        LaTeXNode ast = parser.parseLaTeX("AB\\div C=DE\\div F=GH\\div I=3");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(3, countOccurrences(mtef, box),
+            "MathType encodes divisor-chain operands as tmBOX 0x1e segments");
+    }
+
     private boolean containsRecord(byte[] bytes, int recordType) {
         for (int i = 12; i < bytes.length; i++) {
             if ((bytes[i] & 0xFF) == recordType) {

@@ -479,7 +479,11 @@ public class MtefWriter {
         if (currentStyleHints.explicitTopFullSize()) {
             writeExplicitFullSizeRecord(out);
         }
-        writeNode(out, root);              // 递归写入 AST 内容
+        if (isFlatDivisionEquationChain(root)) {
+            writeFlatDivisionEquationChain(out, root);
+        } else {
+            writeNode(out, root);          // 递归写入 AST 内容
+        }
         out.write(MtefRecord.END);         // 第一个 END：关闭顶层 LINE 记录
         out.write(MtefRecord.END);         // 第二个 END：结束 MTEF 流
         return out.toByteArray();
@@ -904,6 +908,90 @@ public class MtefWriter {
                 writePostTemplateFullSize(out, child, nodes.subList(i + 1, nodes.size()));
             }
         }
+    }
+
+    private boolean isFlatDivisionEquationChain(LaTeXNode root) {
+        List<LaTeXNode> nodes = root == null ? List.of() : root.getChildren();
+        if (nodes.size() < 3) {
+            return false;
+        }
+        boolean hasDivision = false;
+        boolean hasEquals = false;
+        for (LaTeXNode node : nodes) {
+            if (node.getType() == LaTeXNode.Type.COMMAND && "\\div".equals(node.getValue())) {
+                hasDivision = true;
+                continue;
+            }
+            if (isCharValue(node, "=")) {
+                hasEquals = true;
+                continue;
+            }
+            if (node.getType() == LaTeXNode.Type.CHAR && node.getValue() != null && node.getValue().length() == 1) {
+                char ch = node.getValue().charAt(0);
+                if (Character.isLetterOrDigit(ch) || ch == '+' || ch == '-' || Character.isWhitespace(ch)) {
+                    continue;
+                }
+            }
+            return false;
+        }
+        return hasDivision && hasEquals;
+    }
+
+    private void writeFlatDivisionEquationChain(ByteArrayOutputStream out, LaTeXNode root) throws IOException {
+        List<LaTeXNode> nodes = root.getChildren();
+        List<LaTeXNode> segment = new ArrayList<>();
+        for (int i = 0; i < nodes.size(); i++) {
+            LaTeXNode node = nodes.get(i);
+            if (node.getType() == LaTeXNode.Type.COMMAND && "\\div".equals(node.getValue())) {
+                writePlainSegment(out, segment);
+                segment.clear();
+                writeCharNode(out, node);
+                List<LaTeXNode> divisor = collectUntilDivisionBoundary(nodes, i + 1);
+                writeBoxSegment(out, divisor);
+                i += divisor.size();
+                continue;
+            }
+            segment.add(node);
+        }
+        writePlainSegment(out, segment);
+    }
+
+    private List<LaTeXNode> collectUntilDivisionBoundary(List<LaTeXNode> nodes, int start) {
+        List<LaTeXNode> out = new ArrayList<>();
+        for (int i = start; i < nodes.size(); i++) {
+            LaTeXNode node = nodes.get(i);
+            if (node.getType() == LaTeXNode.Type.COMMAND && "\\div".equals(node.getValue())) {
+                break;
+            }
+            if (isCharValue(node, "=")) {
+                break;
+            }
+            out.add(node);
+        }
+        return out;
+    }
+
+    private void writePlainSegment(ByteArrayOutputStream out, List<LaTeXNode> nodes) throws IOException {
+        for (LaTeXNode node : nodes) {
+            writeNode(out, node);
+        }
+    }
+
+    private void writeBoxSegment(ByteArrayOutputStream out, List<LaTeXNode> nodes) throws IOException {
+        if (nodes.isEmpty()) {
+            return;
+        }
+        MtefTemplateBuilder.writeBoxHeader(out, MtefRecord.TV_BX_LEFT
+            | MtefRecord.TV_BX_RIGHT
+            | MtefRecord.TV_BX_TOP
+            | MtefRecord.TV_BX_BOTTOM);
+        out.write(MtefRecord.LINE);
+        out.write(0x00);
+        for (LaTeXNode node : nodes) {
+            writeNode(out, node);
+        }
+        out.write(MtefRecord.END);
+        out.write(MtefRecord.END);
     }
 
     private boolean isThreeDotRun(List<LaTeXNode> nodes, int index) {
