@@ -1229,6 +1229,28 @@ class MtefWriterTest {
             "MathType encodes divisor-chain operands as tmBOX 0x1e segments");
     }
 
+    @Test
+    void testSingleDivisionUsesMathTypeBoxSegment() {
+        LaTeXNode ast = parser.parseLaTeX("12\\div 3");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(1, countOccurrences(mtef, box),
+            "MathType also boxes the divisor operand in a single division expression");
+    }
+
+    @Test
+    void testSingleLetterDivisionStaysFlat() {
+        LaTeXNode ast = parser.parseLaTeX("a\\div b");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(0, countOccurrences(mtef, box),
+            "single-letter variable division in the xsc corpus matches the flat MathType body better");
+    }
+
     private boolean containsRecord(byte[] bytes, int recordType) {
         for (int i = 12; i < bytes.length; i++) {
             if ((bytes[i] & 0xFF) == recordType) {

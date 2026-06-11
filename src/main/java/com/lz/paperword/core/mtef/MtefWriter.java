@@ -917,6 +917,7 @@ public class MtefWriter {
         }
         boolean hasDivision = false;
         boolean hasEquals = false;
+        int charsBeforeFirstDivision = 0;
         for (LaTeXNode node : nodes) {
             if (node.getType() == LaTeXNode.Type.COMMAND && "\\div".equals(node.getValue())) {
                 hasDivision = true;
@@ -929,12 +930,15 @@ public class MtefWriter {
             if (node.getType() == LaTeXNode.Type.CHAR && node.getValue() != null && node.getValue().length() == 1) {
                 char ch = node.getValue().charAt(0);
                 if (Character.isLetterOrDigit(ch) || ch == '+' || ch == '-' || Character.isWhitespace(ch)) {
+                    if (!hasDivision && !Character.isWhitespace(ch)) {
+                        charsBeforeFirstDivision++;
+                    }
                     continue;
                 }
             }
             return false;
         }
-        return hasDivision && hasEquals;
+        return hasDivision && (hasEquals || charsBeforeFirstDivision > 1);
     }
 
     private void writeFlatDivisionEquationChain(ByteArrayOutputStream out, LaTeXNode root) throws IOException {
