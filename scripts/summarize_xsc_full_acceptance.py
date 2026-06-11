@@ -162,6 +162,9 @@ def main() -> None:
         "mtefPairsMatchSizePairs": paired == int(mtef_totals.get("pairs") or 0),
     }
     passed = all(gates.values())
+    allowed_prefix = int(suspect_classes.get("source_header_or_style_prefix") or 0)
+    effective_hard = int(mtef_totals.get("hardSuspectPairs") or 0)
+    effective_low_tail = int(mtef_totals.get("lowTailPairs") or 0)
 
     out = {
         "dataset": "xsc",
@@ -180,6 +183,12 @@ def main() -> None:
             **mtef_totals,
             "failureClassCounts": dict(sorted(failure_classes.items())),
             "suspectClassCounts": dict(sorted(suspect_classes.items())),
+        },
+        "mtefEffective": {
+            "allowedHeaderOrStylePrefixPairs": allowed_prefix,
+            "remainingHardSuspectPairs": effective_hard,
+            "remainingLowTailPairs": effective_low_tail,
+            "remainingStructuralGapPairs": effective_hard + effective_low_tail,
         },
         "batches": batch_reports,
     }

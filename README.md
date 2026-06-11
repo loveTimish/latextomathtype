@@ -225,7 +225,10 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 | WMF 高度 1% 内 | `39551/39551` |
 | 生成侧非 WMF | `0` |
 | MTEF clean pairs | `39248/39551` |
-| MTEF hard suspects | `223`，主要为短公式、旧模板和结构风格差异 |
+| MTEF 允许的源头/样式前缀差异 | `176`，按公式头/样式前缀差异单独统计 |
+| MTEF 剩余 hard suspects | `75` |
+| MTEF 剩余 low-tail failures | `51` |
+| MTEF 剩余结构缺口 | `126` |
 
 ## 验证命令
 

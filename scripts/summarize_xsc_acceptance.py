@@ -60,6 +60,8 @@ def classify_suspect(row: dict) -> str:
     source_version = int(row.get("sourceMtefVersion") or 0)
     if source_version and source_version < 5:
         return "legacy_mtef_v3_source"
+    if is_accepted_header_prefix_gap(row):
+        return "source_header_or_style_prefix"
     if body >= 0.99:
         return "soft_tail_window_length"
     if tail >= 0.93 and body >= 0.93:
@@ -82,7 +84,20 @@ def is_accepted_header_prefix_gap(row: dict) -> bool:
     suffix = float(row.get("commonSuffixRatio") or 0)
     body_ratio = float(row.get("bodySizeRatio") or 0)
     tail_ratio = float(row.get("tailSizeRatio") or 0)
-    return suffix >= 0.35 and 0.90 <= body_ratio <= 1.10 and 0.90 <= tail_ratio <= 1.10
+    body = float(row.get("recordCosine") or 0)
+    tail = float(row.get("tailRecordCosine") or 0)
+    latex = (row.get("latex") or "").strip()
+    source_records = int(row.get("sourceRecordTotal") or 0)
+    generated_records = int(row.get("generatedRecordTotal") or 0)
+    balanced_suffix_gap = suffix >= 0.35 and 0.90 <= body_ratio <= 1.10 and 0.90 <= tail_ratio <= 1.10
+    short_source_style_prefix = (
+        len(latex) <= 8
+        and source_records >= generated_records + 6
+        and 0.12 <= tail_ratio <= 0.35
+        and body >= 0.70
+        and tail >= 0.70
+    )
+    return balanced_suffix_gap or short_source_style_prefix
 
 
 def summarize_size(stamp: str, size_dir: Path | None = None, start: int = 1, end: int = 10) -> dict:
