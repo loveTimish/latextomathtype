@@ -39,7 +39,7 @@ def parse_manifest(path: Path) -> list[tuple[str, int, int]]:
 
 
 def discover_latest_batches(summary_dir: Path, ranges: list[tuple[int, int]]) -> list[tuple[str, int, int]]:
-    candidates: dict[tuple[int, int], list[tuple[str, Path]]] = {r: [] for r in ranges}
+    candidates: dict[tuple[int, int], list[tuple[float, str, Path]]] = {r: [] for r in ranges}
     for path in summary_dir.glob("*.json"):
         if path.name == "xsc-full-acceptance.json":
             continue
@@ -55,14 +55,14 @@ def discover_latest_batches(summary_dir: Path, ranges: list[tuple[int, int]]) ->
             if key is None:
                 continue
         if key in candidates:
-            candidates[key].append((str(data.get("stamp") or path.stem), path))
+            candidates[key].append((path.stat().st_mtime, str(data.get("stamp") or path.stem), path))
     out = []
     for start, end in ranges:
         items = candidates[(start, end)]
         if not items:
             out.append(("", start, end))
             continue
-        stamp, _ = sorted(items, key=lambda item: item[0])[-1]
+        _, stamp, _ = sorted(items, key=lambda item: (item[0], item[1]))[-1]
         out.append((stamp, start, end))
     return out
 
