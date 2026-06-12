@@ -2061,8 +2061,67 @@ public class MtefWriter {
     private void writeFlatFenceChars(ByteArrayOutputStream out, int openCh, int closeCh,
                                      List<LaTeXNode> content) throws IOException {
         writeMappedFenceCharRecord(out, openCh);
-        writeContentNodes(out, content);
+        if (!tryWriteLetterGroupObarContent(out, content)) {
+            writeContentNodes(out, content);
+        }
         writeMappedFenceCharRecord(out, closeCh);
+    }
+
+    private boolean tryWriteLetterGroupObarContent(ByteArrayOutputStream out, List<LaTeXNode> content) throws IOException {
+        if (!currentStyleHints.letterGroupObarTemplate()) {
+            return false;
+        }
+        int plusIdx = singlePlusIndex(content);
+        if (plusIdx <= 0 || plusIdx >= content.size() - 1) {
+            return false;
+        }
+        List<LaTeXNode> left = content.subList(0, plusIdx);
+        List<LaTeXNode> right = content.subList(plusIdx + 1, content.size());
+        if (!isPlainLetterRun(left) || !isPlainLetterRun(right)) {
+            return false;
+        }
+        writeOverlineContent(out, left);
+        writeNode(out, content.get(plusIdx));
+        writeOverlineContent(out, right);
+        return true;
+    }
+
+    private int singlePlusIndex(List<LaTeXNode> content) {
+        int plusIdx = -1;
+        for (int i = 0; i < content.size(); i++) {
+            LaTeXNode node = content.get(i);
+            if (node.getType() == LaTeXNode.Type.CHAR && "+".equals(node.getValue())) {
+                if (plusIdx >= 0) {
+                    return -1;
+                }
+                plusIdx = i;
+            }
+        }
+        return plusIdx;
+    }
+
+    private boolean isPlainLetterRun(List<LaTeXNode> nodes) {
+        if (nodes == null || nodes.isEmpty()) {
+            return false;
+        }
+        for (LaTeXNode node : nodes) {
+            if (node.getType() != LaTeXNode.Type.CHAR
+                    || node.getValue() == null
+                    || node.getValue().length() != 1
+                    || !Character.isLetter(node.getValue().charAt(0))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void writeOverlineContent(ByteArrayOutputStream out, List<LaTeXNode> nodes) throws IOException {
+        MtefTemplateBuilder.writeOverlineHeader(out);
+        out.write(MtefRecord.LINE);
+        out.write(0x00);
+        writeContentNodes(out, nodes);
+        out.write(MtefRecord.END);
+        out.write(MtefRecord.END);
     }
 
     private void writeMappedFenceCharRecord(ByteArrayOutputStream out, int ch) throws IOException {

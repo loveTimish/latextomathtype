@@ -739,7 +739,7 @@ class MtefWriterTest {
     void testSourceFlatParenTemplateHintUsesTmParen() {
         LaTeXNode ast = parser.parseLaTeX("(105-5)");
         FormulaStyleHints hints = new FormulaStyleHints(
-            true, false, false, false, false, false, true, false, false, null);
+            true, false, false, false, false, false, true, false, false, false, null);
         byte[] mtef = writer.write(ast, hints);
 
         assertNotNull(mtef);
@@ -751,7 +751,7 @@ class MtefWriterTest {
     void testSourceFlatParenTemplateHintKeepsDecimalParensFlat() {
         LaTeXNode ast = parser.parseLaTeX("(0.099+0.111)\\div 2=0.105");
         FormulaStyleHints hints = new FormulaStyleHints(
-            true, false, false, false, false, false, true, false, false, null);
+            true, false, false, false, false, false, true, false, false, false, null);
         byte[] mtef = writer.write(ast, hints);
         int baselineParenTemplates = countOccurrences(writer.write(parser.parseLaTeX("0.099+0.111\\div 2=0.105"), hints),
             new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN});
@@ -760,6 +760,19 @@ class MtefWriterTest {
         assertEquals(baselineParenTemplates,
             countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN}),
             "decimal arithmetic parentheses should stay as flat source characters even when the source file has flat paren template hints");
+    }
+
+    @Test
+    void testSourceLetterGroupObarHintWrapsAlphabeticRuns() {
+        LaTeXNode ast = parser.parseLaTeX("(abc+def)");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, false, true, false, false, null);
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        assertEquals(2,
+            countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_OBAR, 0x00, 0x00}),
+            "source objects that wrap alphabetic groups with tmOBAR should preserve those templates");
     }
 
     @Test

@@ -32,6 +32,7 @@ type StyleHint struct {
 	ForceExplicitFenceTemplate bool `json:"forceExplicitFenceTemplate"`
 	ExplicitBlackColor    bool      `json:"explicitBlackColor"`
 	FlatParenTemplate     bool      `json:"flatParenTemplate"`
+	LetterGroupObarTemplate bool    `json:"letterGroupObarTemplate"`
 	TextFeComma           bool      `json:"textFeComma"`
 	Error                  string   `json:"error,omitempty"`
 }
@@ -96,6 +97,7 @@ func extract(docxPath string) ([]StyleHint, error) {
 		hint.ForceExplicitFenceTemplate = hasFenceTemplate(body)
 		hint.ExplicitBlackColor = hasExplicitBlackColor(formulaTail(body))
 		hint.FlatParenTemplate = hasFlatParenTemplate(body)
+		hint.LetterGroupObarTemplate = hasObarTemplate(body)
 		hint.TextFeComma = bytes.Contains(body, []byte{0x02, 0x00, 0x8c, 0x0c, 0xff})
 		if hint.AsciiFunctionParen > hint.FullwidthTextParen {
 			hint.Hints = append(hint.Hints, "asciiFlatParens")
@@ -121,6 +123,9 @@ func extract(docxPath string) ([]StyleHint, error) {
 		if hint.FlatParenTemplate {
 			hint.Hints = append(hint.Hints, "flatParenTemplate")
 		}
+		if hint.LetterGroupObarTemplate {
+			hint.Hints = append(hint.Hints, "letterGroupObarTemplate")
+		}
 		if hint.TextFeComma {
 			hint.Hints = append(hint.Hints, "textFeComma")
 		}
@@ -136,6 +141,10 @@ func hasFenceTemplate(body []byte) bool {
 
 func hasFlatParenTemplate(body []byte) bool {
 	return bytes.Contains(body, []byte{0x03, 0x00, 0x01, 0x00, 0x04})
+}
+
+func hasObarTemplate(body []byte) bool {
+	return bytes.Contains(body, []byte{0x03, 0x00, 0x0d, 0x00, 0x00})
 }
 
 func formulaTail(body []byte) []byte {
