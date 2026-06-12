@@ -163,6 +163,7 @@ def main() -> None:
     }
     passed = all(gates.values())
     allowed_prefix = int(suspect_classes.get("source_header_or_style_prefix") or 0)
+    allowed_char_stream = int(suspect_classes.get("char_stream_style_gap") or 0)
     effective_hard = int(mtef_totals.get("hardSuspectPairs") or 0)
     effective_low_tail = int(mtef_totals.get("lowTailPairs") or 0)
 
@@ -186,6 +187,8 @@ def main() -> None:
         },
         "mtefEffective": {
             "allowedHeaderOrStylePrefixPairs": allowed_prefix,
+            "allowedCharStreamStylePairs": allowed_char_stream,
+            "allowedNonStructuralPairs": allowed_prefix + allowed_char_stream,
             "remainingHardSuspectPairs": effective_hard,
             "remainingLowTailPairs": effective_low_tail,
             "remainingStructuralGapPairs": effective_hard + effective_low_tail,
