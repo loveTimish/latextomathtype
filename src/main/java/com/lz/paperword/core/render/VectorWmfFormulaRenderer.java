@@ -278,17 +278,17 @@ final class VectorWmfFormulaRenderer {
             if (denominatorEnd < 0) {
                 return null;
             }
-            List<TextRun> numerator = tokenizeFlat(text.substring(numeratorStart + 1, numeratorEnd));
-            List<TextRun> denominator = tokenizeFlat(text.substring(denominatorStart + 1, denominatorEnd));
+            FormulaLayout numerator = layoutFractionPart(text.substring(numeratorStart + 1, numeratorEnd));
+            FormulaLayout denominator = layoutFractionPart(text.substring(denominatorStart + 1, denominatorEnd));
             if (numerator == null || denominator == null) {
                 return null;
             }
-            double numeratorWidth = estimatedWidthPt(numerator);
-            double denominatorWidth = estimatedWidthPt(denominator);
+            double numeratorWidth = numerator.widthPt();
+            double denominatorWidth = denominator.widthPt();
             double fractionWidth = Math.max(numeratorWidth, denominatorWidth) + 3.0d;
             double fractionX = x + 1.0d;
-            placeRuns(placed, numerator, fractionX + (fractionWidth - numeratorWidth) / 2.0d, 7.8d, false);
-            placeRuns(placed, denominator, fractionX + (fractionWidth - denominatorWidth) / 2.0d, 20.3d, false);
+            appendLayout(placed, lines, numerator, fractionX + (fractionWidth - numeratorWidth) / 2.0d, -1.8d);
+            appendLayout(placed, lines, denominator, fractionX + (fractionWidth - denominatorWidth) / 2.0d, 10.7d);
             lines.add(new LineSegment(fractionX, 12.2d, fractionX + fractionWidth, 12.2d));
             x = fractionX + fractionWidth + 1.0d;
             sawFraction = true;
@@ -299,6 +299,26 @@ final class VectorWmfFormulaRenderer {
             : null;
     }
 
+    private static FormulaLayout layoutFractionPart(String text) {
+        FormulaLayout scripts = layoutScripts(text);
+        if (scripts != null) {
+            return scripts;
+        }
+        List<TextRun> runs = tokenizeFlat(text);
+        return runs == null ? null : layoutFlatRuns(runs);
+    }
+
+    private static void appendLayout(List<PlacedText> placed, List<LineSegment> lines, FormulaLayout layout,
+        double dx, double dy) {
+        for (PlacedText run : layout.runs()) {
+            placed.add(new PlacedText(run.text(), run.cjk(), run.script(), run.display(), run.xPt() + dx,
+                run.baselinePt() + dy));
+        }
+        for (LineSegment line : layout.lines()) {
+            lines.add(new LineSegment(line.x1Pt() + dx, line.y1Pt() + dy, line.x2Pt() + dx, line.y2Pt() + dy));
+        }
+    }
+
     private static FormulaLayout layoutLeftBraceArray(String body) {
         FormulaLayout inner = layoutArray(body);
         if (inner == null) {
@@ -307,14 +327,8 @@ final class VectorWmfFormulaRenderer {
         List<PlacedText> placed = new ArrayList<>();
         double braceBaseline = Math.max(16.0d, Math.min(inner.heightPt() - 1.0d, inner.heightPt() * 0.72d));
         placed.add(new PlacedText("{", false, false, true, 0.0d, braceBaseline));
-        for (PlacedText run : inner.runs()) {
-            placed.add(new PlacedText(run.text(), run.cjk(), run.script(), run.display(), run.xPt() + 7.0d,
-                run.baselinePt()));
-        }
         List<LineSegment> lines = new ArrayList<>();
-        for (LineSegment line : inner.lines()) {
-            lines.add(new LineSegment(line.x1Pt() + 7.0d, line.y1Pt(), line.x2Pt() + 7.0d, line.y2Pt()));
-        }
+        appendLayout(placed, lines, inner, 7.0d, 0.0d);
         return new FormulaLayout(placed, lines, inner.widthPt() + 8.5d, inner.heightPt());
     }
 

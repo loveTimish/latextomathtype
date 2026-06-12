@@ -40,40 +40,50 @@ def relationship_maps(docx: Path) -> tuple[dict[str, str], dict[str, str]]:
     return rid_to_target, target_to_rid
 
 
-def source_object_preview_targets(source_docx: Path) -> dict[str, str]:
-    rid_to_target, _ = relationship_maps(source_docx)
-    with zipfile.ZipFile(source_docx) as z:
-        document_xml = z.read("word/document.xml").decode("utf-8", "replace")
+def all_relationship_maps(docx: Path) -> dict[str, dict[str, str]]:
+    out: dict[str, dict[str, str]] = {}
+    with zipfile.ZipFile(docx) as z:
+        names = set(z.namelist())
+        for part in names:
+            if not part.startswith("word/") or not part.endswith(".xml") or part.endswith(".rels"):
+                continue
+            rel_part = rels_part_for_xml(part)
+            if rel_part not in names:
+                continue
+            rel_xml = z.read(rel_part).decode("utf-8", "replace")
+            rid_to_target: dict[str, str] = {}
+            for match in re.finditer(r"<Relationship\b[^>]*/>", rel_xml):
+                item = match.group(0)
+                rid_match = re.search(r'\bId="([^"]+)"', item)
+                target_match = re.search(r'\bTarget="([^"]+)"', item)
+                if not rid_match or not target_match:
+                    continue
+                rid_to_target[rid_match.group(1)] = resolve_part_target(part, target_match.group(1))
+            out[part] = rid_to_target
+    return out
+
+
+def object_preview_targets(docx: Path) -> dict[str, str]:
+    rels_by_part = all_relationship_maps(docx)
     out: dict[str, str] = {}
-    for match in re.finditer(r"<w:object\b[\s\S]*?</w:object>", document_xml):
-        body = match.group(0)
-        image = re.search(r'<v:imagedata [^>]*r:id="([^"]+)"', body)
-        ole = re.search(r'<o:OLEObject [^>]*r:id="([^"]+)"', body)
-        if not image or not ole:
-            continue
-        ole_target = rid_to_target.get(ole.group(1))
-        image_target = rid_to_target.get(image.group(1))
-        if ole_target and image_target:
-            out[word_path(ole_target)] = word_path(image_target)
+    with zipfile.ZipFile(docx) as z:
+        for part, rid_to_target in rels_by_part.items():
+            xml = z.read(part).decode("utf-8", "replace")
+            for match in re.finditer(r"<w:object\b[\s\S]*?</w:object>", xml):
+                body = match.group(0)
+                image = re.search(r'<v:imagedata [^>]*r:id="([^"]+)"', body)
+                ole = re.search(r'<o:OLEObject [^>]*r:id="([^"]+)"', body)
+                if not image or not ole:
+                    continue
+                ole_target = rid_to_target.get(ole.group(1))
+                image_target = rid_to_target.get(image.group(1))
+                if ole_target and image_target:
+                    out[word_path(ole_target)] = word_path(image_target)
     return out
 
 
 def generated_preview_by_ole(generated_docx: Path) -> dict[str, str]:
-    rid_to_target, _ = relationship_maps(generated_docx)
-    with zipfile.ZipFile(generated_docx) as z:
-        document_xml = z.read("word/document.xml").decode("utf-8", "replace")
-    out: dict[str, str] = {}
-    for match in re.finditer(r"<w:object\b[\s\S]*?</w:object>", document_xml):
-        body = match.group(0)
-        image = re.search(r'<v:imagedata [^>]*r:id="([^"]+)"', body)
-        ole = re.search(r'<o:OLEObject [^>]*r:id="([^"]+)"', body)
-        if not image or not ole:
-            continue
-        ole_target = rid_to_target.get(ole.group(1))
-        image_target = rid_to_target.get(image.group(1))
-        if ole_target and image_target:
-            out[word_path(ole_target)] = word_path(image_target)
-    return out
+    return object_preview_targets(generated_docx)
 
 
 def word_path(target: str) -> str:
@@ -81,6 +91,18 @@ def word_path(target: str) -> str:
     if target.startswith("word/"):
         return target
     return posixpath.normpath(posixpath.join("word", target))
+
+
+def rels_part_for_xml(part: str) -> str:
+    directory, name = posixpath.split(part)
+    return posixpath.join(directory, "_rels", f"{name}.rels")
+
+
+def resolve_part_target(part: str, target: str) -> str:
+    target = target.lstrip("/")
+    if target.startswith("word/"):
+        return posixpath.normpath(target)
+    return posixpath.normpath(posixpath.join(posixpath.dirname(part), target))
 
 
 def extract_docx(docx: Path, directory: Path) -> None:
@@ -105,7 +127,7 @@ def zip_dir(directory: Path, output: Path) -> None:
 
 def rebuild(source_docx: Path, generated_docx: Path, pair_csv: Path, output: Path) -> dict:
     pairs = read_pairs(pair_csv)
-    source_preview = source_object_preview_targets(source_docx)
+    source_preview = object_preview_targets(source_docx)
     generated_preview = generated_preview_by_ole(generated_docx)
 
     replaced_ole = 0

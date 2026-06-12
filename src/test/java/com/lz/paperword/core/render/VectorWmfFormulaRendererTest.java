@@ -100,6 +100,20 @@ class VectorWmfFormulaRendererTest {
     }
 
     @Test
+    void fractionsWithSimpleScriptsCanRenderAsVectorTextAndLines() throws IOException {
+        String latex = "\\frac { a_{ 1 } +a_{ 2 } +a_{ 3 } } { 3 }";
+        byte[] wmf = VectorWmfFormulaRenderer.render(latex, 54.0d, 28.0d);
+        List<Integer> records = records(wmf);
+
+        assertTrue(VectorWmfFormulaRenderer.canRender(latex));
+        assertTrue(VectorWmfFormulaRenderer.canRender("a=\\frac { k ^ { 2 } } { b-k }+k"));
+        assertTrue(records.contains(0x02FA));
+        assertTrue(records.contains(0x0325));
+        assertTrue(records.contains(0x0A32));
+        assertFalse(records.contains(0x0F43));
+    }
+
+    @Test
     void leftBraceArraysCanRenderAsVectorText() throws IOException {
         String latex = "\\left \\{ \\begin{array}{l}B=2 \\\\,s=14\\end{array} \\right.";
         byte[] wmf = VectorWmfFormulaRenderer.render(latex, 42.0d, 28.0d);
