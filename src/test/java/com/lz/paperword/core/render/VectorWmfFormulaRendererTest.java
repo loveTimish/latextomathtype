@@ -148,6 +148,22 @@ class VectorWmfFormulaRendererTest {
     }
 
     @Test
+    void widePuzzleArraysCanRenderAsVectorText() throws IOException {
+        String latex = "\\begin{array}{cccccccc} ( & \\mathrm{7} & + & \\mathrm{9} & )\\div & \\mathrm{8} & = & \\mathrm{2} \\\\,{} & + & {} & - & {} & \\div & {} & {} \\\\,{} & \\mathrm{1}\\mathrm{1} & - & \\mathrm{1}\\mathrm{0} & - & \\mathrm{1} & = & \\mathrm{0} \\\\,{} & - & {} & - & {} & - & {} & {} \\\\,{} & \\mathrm{1}\\mathrm{2} & - & \\mathrm{3} & \\times & \\mathrm{4} & = & \\mathrm{0} \\\\,{} & - & {} & + & {} & \\div & {} & {} \\\\,{} & \\mathrm{5} & + & \\mathrm{6} & \\div & \\mathrm{2} & = & \\mathrm{8} \\\\,{} & \\|\\| & {} & \\|\\| & {} & \\|\\| & {} & {} \\\\,{} & \\mathrm{1} & {} & \\mathrm{2} & {} & \\mathrm{6} & {} & {} \\end{array}";
+
+        assertTrue(VectorWmfFormulaRenderer.canRender(latex));
+        assertFalse(records(VectorWmfFormulaRenderer.render(latex, 150.0d, 110.0d)).contains(0x0F43));
+    }
+
+    @Test
+    void nestedArrayCellsCanRenderAsVectorText() throws IOException {
+        String latex = "\\begin{array}{ccccc} {} & {} & 11 & {} & {} \\\\,{} & 17 & {} & 13 & {} \\\\,23 & {} & 19 & {} & 15 \\\\,{} & 25 & {} & 21 & {} \\\\,{} & {} & 27 & {} & {} \\\\,\\to & \\begin{array}{ccccc} {} & \\end{array} & {} & {} & 27 \\\\,{} & {} & {} & 17 & {} \\\\,13 & {} & 23 & {} & 19 \\\\,{} & 15 & {} & 25 & {} \\\\,21 & {} & {} & {} & 11 \\\\,{} & {} & \\to & \\begin{array}{ccccc} {} & \\end{array} & {} \\\\,{} & 27 & {} & {} & {} \\\\,17 & {} & 13 & {} & 15 \\\\,{} & 19 & {} & 23 & {} \\\\,25 & {} & 21 & {} & {} \\\\,{} & 11 & {} & {} & \\to \\\\,\\begin{array}{ccc} 172713151923251121 & \\end{array} & \\end{array}";
+
+        assertTrue(VectorWmfFormulaRenderer.canRender(latex));
+        assertFalse(records(VectorWmfFormulaRenderer.render(latex, 168.0d, 205.0d)).contains(0x0F43));
+    }
+
+    @Test
     void standaloneScriptsAndEscapedUnderscoresCanRenderAsVectorText() throws IOException {
         byte[] script = VectorWmfFormulaRenderer.render("^ { \\mathrm{3} }", 12.0d, 13.0d);
         byte[] underline = VectorWmfFormulaRenderer.render("EF=\\_\\_\\_\\_\\_", 56.0d, 13.0d);

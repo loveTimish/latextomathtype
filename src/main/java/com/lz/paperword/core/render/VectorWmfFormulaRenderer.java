@@ -125,9 +125,9 @@ final class VectorWmfFormulaRenderer {
         if (compositeArray != null) {
             return compositeArray;
         }
-        Matcher array = ARRAY_PATTERN.matcher(text);
-        if (array.matches()) {
-            return layoutArray(array.group(1));
+        ArraySlice array = readArraySlice(text, 0);
+        if (array != null && array.end() == text.length()) {
+            return layoutArray(array.body());
         }
         FormulaLayout fractions = layoutFractions(text);
         if (fractions != null) {
@@ -443,19 +443,21 @@ final class VectorWmfFormulaRenderer {
     }
 
     private static FormulaLayout layoutArray(String body) {
-        String[] rowText = body.split("\\\\\\\\");
-        List<List<List<TextRun>>> rows = new ArrayList<>();
+        List<String> rowText = splitTopLevelRows(body);
+        List<List<FormulaLayout>> rows = new ArrayList<>();
         int columnCount = 0;
         for (String row : rowText) {
-            String[] cells = row.split("&", -1);
-            List<List<TextRun>> parsedRow = new ArrayList<>();
+            List<String> cells = splitTopLevelCells(row);
+            List<FormulaLayout> parsedRow = new ArrayList<>();
             for (String cell : cells) {
-                String normalized = cell.replace("{}", "").trim();
-                List<TextRun> runs = normalized.isEmpty() ? List.of() : tokenizeFlat(normalized);
-                if (runs == null) {
+                String normalized = normalizeArrayCell(cell);
+                FormulaLayout layout = normalized.isEmpty()
+                    ? new FormulaLayout(List.of(), List.of(), 0.0d, 13.0d)
+                    : layoutArrayCell(normalized);
+                if (layout == null) {
                     return null;
                 }
-                parsedRow.add(runs);
+                parsedRow.add(layout);
             }
             rows.add(parsedRow);
             columnCount = Math.max(columnCount, parsedRow.size());
@@ -464,13 +466,30 @@ final class VectorWmfFormulaRenderer {
             return null;
         }
         double[] widths = new double[columnCount];
-        for (List<List<TextRun>> row : rows) {
+        for (List<FormulaLayout> row : rows) {
             for (int i = 0; i < row.size(); i++) {
-                widths[i] = Math.max(widths[i], estimatedWidthPt(row.get(i)));
+                widths[i] = Math.max(widths[i], row.get(i).widthPt());
             }
         }
         for (int i = 0; i < widths.length; i++) {
-            widths[i] = Math.max(widths[i], 7.0d);
+            widths[i] = Math.max(widths[i], 4.0d);
+        }
+        if (columnCount > 4) {
+            double target = 0d;
+            for (double width : widths) {
+                target += Math.min(width, 10.0d);
+            }
+            target = Math.max(target, columnCount * 4.0d + 2.0d * Math.max(0, columnCount - 1));
+            double actual = 0d;
+            for (double width : widths) {
+                actual += width;
+            }
+            if (actual > target) {
+                double scale = target / actual;
+                for (int i = 0; i < widths.length; i++) {
+                    widths[i] = Math.max(4.0d, widths[i] * scale);
+                }
+            }
         }
         double[] x = new double[columnCount];
         double cursor = 0d;
@@ -479,17 +498,15 @@ final class VectorWmfFormulaRenderer {
             cursor += widths[i] + 2.0d;
         }
         List<PlacedText> placed = new ArrayList<>();
+        List<LineSegment> lines = new ArrayList<>();
         double rowHeight = rows.size() > 1 ? 12.0d : 13.0d;
         for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
-            List<List<TextRun>> row = rows.get(rowIndex);
-            double baseline = 9.6d + rowIndex * rowHeight;
+            List<FormulaLayout> row = rows.get(rowIndex);
+            double y = rowIndex * rowHeight;
             for (int col = 0; col < row.size(); col++) {
-                List<TextRun> runs = row.get(col);
-                double runX = x[col] + Math.max(0d, widths[col] - estimatedWidthPt(runs));
-                for (TextRun run : runs) {
-                    placed.add(new PlacedText(run.text(), run.cjk(), false, false, runX, baseline));
-                    runX += estimatedRunWidthPt(run);
-                }
+                FormulaLayout cell = row.get(col);
+                double runX = x[col] + Math.max(0d, (widths[col] - cell.widthPt()) / 2.0d);
+                appendLayout(placed, lines, cell, runX, y);
             }
         }
         double width = Math.max(cursor - 2.0d, 1.0d);
@@ -497,7 +514,85 @@ final class VectorWmfFormulaRenderer {
         if (placed.isEmpty()) {
             placed.add(new PlacedText(" ", false, false, false, 0.0d, 9.6d));
         }
-        return new FormulaLayout(placed, width, height);
+        return new FormulaLayout(placed, lines, width, height);
+    }
+
+    private static FormulaLayout layoutArrayCell(String text) {
+        ArraySlice nested = readArraySlice(text, 0);
+        if (nested != null && nested.end() == text.length()) {
+            return layoutArray(nested.body());
+        }
+        FormulaLayout fractions = layoutFractions(text);
+        if (fractions != null) {
+            return fractions;
+        }
+        FormulaLayout scripts = layoutScripts(text);
+        if (scripts != null) {
+            return scripts;
+        }
+        FormulaLayout standaloneScript = layoutStandaloneScript(text);
+        if (standaloneScript != null) {
+            return standaloneScript;
+        }
+        List<TextRun> runs = tokenizeFlat(text);
+        return runs == null ? null : layoutFlatRuns(runs);
+    }
+
+    private static String normalizeArrayCell(String cell) {
+        String normalized = cell.replace("{}", "").trim();
+        while (normalized.startsWith(",\\begin{array}")) {
+            normalized = normalized.substring(1).stripLeading();
+        }
+        return normalized;
+    }
+
+    private static List<String> splitTopLevelRows(String body) {
+        List<String> rows = new ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < body.length() - 1; i++) {
+            if (body.startsWith("\\begin{array}", i)) {
+                depth++;
+                continue;
+            }
+            if (body.startsWith("\\end{array}", i)) {
+                depth = Math.max(0, depth - 1);
+                continue;
+            }
+            if (depth == 0 && body.charAt(i) == '\\' && body.charAt(i + 1) == '\\') {
+                rows.add(body.substring(start, i));
+                int next = i + 2;
+                if (next < body.length() && body.charAt(next) == ',') {
+                    next++;
+                }
+                start = next;
+                i = next - 1;
+            }
+        }
+        rows.add(body.substring(start));
+        return rows;
+    }
+
+    private static List<String> splitTopLevelCells(String row) {
+        List<String> cells = new ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < row.length(); i++) {
+            if (row.startsWith("\\begin{array}", i)) {
+                depth++;
+                continue;
+            }
+            if (row.startsWith("\\end{array}", i)) {
+                depth = Math.max(0, depth - 1);
+                continue;
+            }
+            if (depth == 0 && row.charAt(i) == '&') {
+                cells.add(row.substring(start, i));
+                start = i + 1;
+            }
+        }
+        cells.add(row.substring(start));
+        return cells;
     }
 
     private static String normalizeFlatLatex(String text) {
@@ -550,6 +645,15 @@ final class VectorWmfFormulaRenderer {
             end++;
         }
         String name = text.substring(start + 1, end);
+        if (name.isEmpty() && end < text.length()) {
+            char symbol = text.charAt(end);
+            String mappedSymbol = switch (symbol) {
+                case '|' -> "|";
+                case '_' -> "_";
+                default -> null;
+            };
+            return mappedSymbol == null ? null : new Command(mappedSymbol, end + 1);
+        }
         String mapped = switch (name) {
             case "times" -> "×";
             case "div" -> "÷";
@@ -566,6 +670,7 @@ final class VectorWmfFormulaRenderer {
             case "bigcirc" -> "○";
             case "square" -> "□";
             case "vartriangle" -> "△";
+            case "to" -> "→";
             default -> null;
         };
         if (mapped == null) {
@@ -693,11 +798,26 @@ final class VectorWmfFormulaRenderer {
             return null;
         }
         String endToken = "\\end{array}";
-        int end = text.indexOf(endToken, specEnd + 1);
-        if (end < 0) {
-            return null;
+        int depth = 1;
+        int cursor = specEnd + 1;
+        while (cursor < text.length()) {
+            int nextBegin = text.indexOf(beginToken, cursor);
+            int nextEnd = text.indexOf(endToken, cursor);
+            if (nextEnd < 0) {
+                return null;
+            }
+            if (nextBegin >= 0 && nextBegin < nextEnd) {
+                depth++;
+                cursor = nextBegin + beginToken.length();
+                continue;
+            }
+            depth--;
+            if (depth == 0) {
+                return new ArraySlice(text.substring(specEnd + 1, nextEnd).trim(), nextEnd + endToken.length());
+            }
+            cursor = nextEnd + endToken.length();
         }
-        return new ArraySlice(text.substring(specEnd + 1, end).trim(), end + endToken.length());
+        return null;
     }
 
     private static double estimatedRunWidthPt(TextRun run) {
