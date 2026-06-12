@@ -915,6 +915,9 @@ public class MtefWriter {
     }
 
     private boolean isFlatDivisionEquationChain(LaTeXNode root) {
+        if (!shouldUseBoxedFlatDivisionEquation()) {
+            return false;
+        }
         List<LaTeXNode> nodes = root == null ? List.of() : root.getChildren();
         if (nodes.size() < 3) {
             return false;
@@ -943,6 +946,15 @@ public class MtefWriter {
             return false;
         }
         return hasDivision && (hasEquals || charsBeforeFirstDivision > 1);
+    }
+
+    private boolean shouldUseBoxedFlatDivisionEquation() {
+        var metrics = currentStyleHints.sourceMetrics();
+        if (metrics == null) {
+            return true;
+        }
+        double height = metrics.heightPt();
+        return height >= 16.0d && height <= 20.5d;
     }
 
     private void writeFlatDivisionEquationChain(ByteArrayOutputStream out, LaTeXNode root) throws IOException {

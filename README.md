@@ -254,6 +254,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 
 短公式颜色状态回归：`20260612-062027` 与 `20260612-064944` 的 doc121-doc130、doc141-doc155 复核中，`4\times 2`、`2\times 2`、`3\times 3` 等短平坦公式的源 MTEF 只额外写入 `COLOR_DEF Black`/`COLOR` 状态，主体字符流一致；验收脚本归入 `source_header_or_style_prefix`。doc141-doc155 hard suspects 降到 `0`，doc121-doc130 hard suspects 从 `4` 降到 `1`；全量剩余结构缺口降到 `57`。
 
+线性除法装箱回归：`20260612-101353` 的 doc21-doc30 复核中，`90\div 10=9`、`70\div 10=7`、`80\div 16=5` 等 13pt 普通线性除法不再套用高公式 box 写法，MTEF hard suspects 从 `5` 降到 `2`；全量剩余结构缺口降到 `54`，WMF 目标尺寸仍为宽 `39551/39551`、高 `39551/39551` 在 `1%` 内且非 WMF 为 `0`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：
