@@ -232,6 +232,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 
 增量 MTEF writer 回归：`20260612-074744` 的 doc41-doc43 验证中，平坦 `\div` 等式链、多字符单除法和一位数乘法等式改用 MathType `TM_BOX 0x1e` 片段后，WMF 目标尺寸为 `862/862` 在 `1%` 内且非 WMF 为 `0`。doc41 hard suspects 从 `6` 降到 `3`、low-tail failures 从 `12` 降到 `6`；doc43 大数乘法保持平坦写法，hard suspects 从误泛化时的 `7` 回到 `4`。
 
+符号语义回归：`20260612-081037` 的 doc41-doc43 验证中，特殊平坦 `\div`/`\times` 写入路径统一走命令映射，避免把 LaTeX 命令首字符 `\` 写成变量字符。doc41 四条 `164\div82=...` / `128\div64=...` 抽查从旧生成的 `0200835c00` 变为 MathType Symbol `÷` 记录 `020486f700b8`；doc41-doc43 的 WMF 目标尺寸仍为 `862/862` 在 `1%` 内且非 WMF 为 `0`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：

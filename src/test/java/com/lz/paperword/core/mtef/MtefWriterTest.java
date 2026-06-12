@@ -1227,6 +1227,10 @@ class MtefWriterTest {
         byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
         assertEquals(3, countOccurrences(mtef, box),
             "MathType encodes divisor-chain operands as tmBOX 0x1e segments");
+        assertTrue(containsBytes(mtef, new byte[]{0x02, 0x04, (byte) ((MtefRecord.FN_SYMBOL & 0x7F) | 0x80), (byte) 0xF7, 0x00, (byte) 0xB8}),
+            "flat division chain should write \\div as the MathType Symbol division glyph");
+        assertFalse(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) MtefRecord.FN_VARIABLE, 0x5C, 0x00}),
+            "flat division chain must not serialize the LaTeX command backslash as a variable");
     }
 
     @Test
@@ -1260,6 +1264,10 @@ class MtefWriterTest {
         byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
         assertEquals(3, countOccurrences(mtef, box),
             "MathType boxes the post-times operand and each result digit in simple multiplication equations");
+        assertTrue(containsBytes(mtef, new byte[]{0x02, 0x04, (byte) ((MtefRecord.FN_SYMBOL & 0x7F) | 0x80), (byte) 0xD7, 0x00, (byte) 0xB4}),
+            "flat multiplication equation should write \\times as the MathType Symbol multiplication glyph");
+        assertFalse(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) MtefRecord.FN_VARIABLE, 0x5C, 0x00}),
+            "flat multiplication equation must not serialize the LaTeX command backslash as a variable");
     }
 
     @Test

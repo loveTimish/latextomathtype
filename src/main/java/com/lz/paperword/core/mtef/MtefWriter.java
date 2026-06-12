@@ -951,7 +951,7 @@ public class MtefWriter {
             if (node.getType() == LaTeXNode.Type.COMMAND && "\\div".equals(node.getValue())) {
                 writePlainSegment(out, segment);
                 segment.clear();
-                writeCharNode(out, node);
+                writeCommandNode(out, node);
                 List<LaTeXNode> divisor = collectUntilDivisionBoundary(nodes, i + 1);
                 writeBoxSegment(out, divisor);
                 i += divisor.size();
@@ -1024,7 +1024,7 @@ public class MtefWriter {
         for (int i = 0; i < nodes.size(); i++) {
             LaTeXNode node = nodes.get(i);
             if (node.getType() == LaTeXNode.Type.COMMAND && "\\times".equals(node.getValue())) {
-                writeCharNode(out, node);
+                writeCommandNode(out, node);
                 List<LaTeXNode> factor = collectUntilArithmeticBoundary(nodes, i + 1);
                 writeBoxSegment(out, factor);
                 i += factor.size();
