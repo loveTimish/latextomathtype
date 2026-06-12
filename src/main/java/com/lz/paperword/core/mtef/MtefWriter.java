@@ -888,6 +888,8 @@ public class MtefWriter {
                             if (isEquationNumberFenceContent(parenContent)
                                     && isEquationNumberFenceContext(nodes, i, closeIdx)) {
                                 writeParenFence(out, openCh, closeCh, parenContent);
+                            } else if (shouldWriteFlatParenTemplate(openCh, closeCh, parenContent)) {
+                                writeParenFence(out, openCh, closeCh, parenContent);
                             } else if (isLinearFenceContent(parenContent)) {
                                 writeFlatFenceChars(out, openCh, closeCh, parenContent);
                             } else {
@@ -913,6 +915,13 @@ public class MtefWriter {
                 writePostTemplateFullSize(out, child, nodes.subList(i + 1, nodes.size()));
             }
         }
+    }
+
+    private boolean shouldWriteFlatParenTemplate(int openCh, int closeCh, List<LaTeXNode> content) {
+        return currentStyleHints.flatParenTemplate()
+            && openCh == '('
+            && closeCh == ')'
+            && isLinearFenceContent(content);
     }
 
     private boolean isFlatDivisionEquationChain(LaTeXNode root) {

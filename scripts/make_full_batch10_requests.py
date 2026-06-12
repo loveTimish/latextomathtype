@@ -25,6 +25,7 @@ SAFE_STYLE_HINTS = {
     "asciiFlatParens",
     "fullwidthTextParen",
     "forceExplicitFenceTemplate",
+    "flatParenTemplate",
     "textFeComma",
     "explicitFractionFullSize",
 }

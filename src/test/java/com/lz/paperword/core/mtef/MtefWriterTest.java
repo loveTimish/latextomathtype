@@ -736,6 +736,18 @@ class MtefWriterTest {
     }
 
     @Test
+    void testSourceFlatParenTemplateHintUsesTmParen() {
+        LaTeXNode ast = parser.parseLaTeX("(105-5)");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, true, false, false, null);
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN, 0x00, 0x04}),
+            "source objects that use MathType's flat tmPAREN wrapper should preserve it via style hints");
+    }
+
+    @Test
     void testWriteReversedIntervalFenceUsesTmInterval() {
         LaTeXNode ast = parser.parseLaTeX("\\left] x \\right(");
         byte[] mtef = writer.write(ast);

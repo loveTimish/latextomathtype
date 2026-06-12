@@ -114,10 +114,10 @@ public class LaTeXParser {
     public record FormulaStyleHints(boolean asciiFlatParens, boolean explicitScriptFullSize,
                                     boolean explicitFractionFullSize, boolean explicitTopFullSize,
                                     boolean forceExplicitFenceTemplate, boolean explicitBlackColor,
-                                    boolean textFeComma, boolean fullwidthTextParen,
+                                    boolean flatParenTemplate, boolean textFeComma, boolean fullwidthTextParen,
                                     FormulaMetrics sourceMetrics) {
         public static FormulaStyleHints empty() {
-            return new FormulaStyleHints(false, false, false, false, false, false, false, false, null);
+            return new FormulaStyleHints(false, false, false, false, false, false, false, false, false, null);
         }
 
         public FormulaStyleHints withSourceMetrics(FormulaMetrics metrics) {
@@ -125,7 +125,7 @@ public class LaTeXParser {
                 return this;
             }
             return new FormulaStyleHints(asciiFlatParens, explicitScriptFullSize, explicitFractionFullSize,
-                explicitTopFullSize, forceExplicitFenceTemplate, explicitBlackColor, textFeComma,
+                explicitTopFullSize, forceExplicitFenceTemplate, explicitBlackColor, flatParenTemplate, textFeComma,
                 fullwidthTextParen, metrics);
         }
     }
@@ -245,6 +245,7 @@ public class LaTeXParser {
         boolean explicitTopFullSize = false;
         boolean forceExplicitFenceTemplate = false;
         boolean explicitBlackColor = false;
+        boolean flatParenTemplate = false;
         boolean textFeComma = false;
         boolean fullwidthTextParen = false;
         for (String part : encoded.split(",")) {
@@ -261,6 +262,8 @@ public class LaTeXParser {
                 forceExplicitFenceTemplate = true;
             } else if ("explicitBlackColor".equals(hint)) {
                 explicitBlackColor = true;
+            } else if ("flatParenTemplate".equals(hint)) {
+                flatParenTemplate = true;
             } else if ("textFeComma".equals(hint)) {
                 textFeComma = true;
             } else if ("fullwidthTextParen".equals(hint)) {
@@ -268,8 +271,8 @@ public class LaTeXParser {
             }
         }
         return new FormulaStyleHints(asciiFlatParens, explicitScriptFullSize, explicitFractionFullSize,
-            explicitTopFullSize, forceExplicitFenceTemplate, explicitBlackColor, textFeComma, fullwidthTextParen,
-            null);
+            explicitTopFullSize, forceExplicitFenceTemplate, explicitBlackColor, flatParenTemplate, textFeComma,
+            fullwidthTextParen, null);
     }
 
     private record ParsedFormulaStyle(String latex, FormulaStyleHints styleHints) {}
