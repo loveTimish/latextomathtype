@@ -222,6 +222,10 @@ def token_at(data: bytes, i: int) -> tuple[dict, int]:
                 extra += 1
             if i + 1 + extra < len(data):
                 extra += 1
+    elif tag == 0x12:
+        start = next_formula_line_after_prefs(data, i)
+        if start > i:
+            extra = start - i - 1
     elif tag in {0x11, 0x13}:
         end = i + 2
         while end < len(data) and data[end] != 0:
@@ -238,6 +242,18 @@ def token_at(data: bytes, i: int) -> tuple[dict, int]:
     end = min(len(data), i + 1 + extra)
     token["hex"] = data[i:end].hex()
     return token, max(i + 1, end)
+
+
+def next_formula_line_after_prefs(data: bytes, i: int) -> int:
+    for pos in range(i + 1, len(data) - 2):
+        if (
+            data[pos] == 0x0A
+            and data[pos + 1] == 0x01
+            and data[pos + 2] in {0x00, 0x01, 0x04}
+            and line_has_meaningful_tail(data, pos + 1)
+        ):
+            return pos
+    return -1
 
 
 def tokenize(data: bytes) -> list[dict]:

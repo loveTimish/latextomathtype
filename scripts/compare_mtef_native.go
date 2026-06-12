@@ -340,7 +340,7 @@ func formulaTailCandidates(body []byte) [][]byte {
 
 func formulaCandidates(body []byte, primary []byte, includeLastOnly bool) [][]byte {
 	candidates := [][]byte{primary}
-	for i := 0; i+2 < len(body); i++ {
+	for i := mtefRecordStart(body); i+2 < len(body); i++ {
 		if body[i] == 0x0A && body[i+1] == 0x01 && (body[i+2] == 0x00 || body[i+2] == 0x01 || body[i+2] == 0x04) && lineHasMeaningfulTail(body[i+1:]) {
 			candidate := body[i:]
 			if includeLastOnly {
@@ -861,6 +861,10 @@ func recordPayloadLength(body []byte, i int) int {
 				return extra
 			}
 		}
+	case 0x12:
+		if start := nextFormulaLineAfterPrefs(body, i); start > i {
+			return start - i - 1
+		}
 	case 0x11:
 		end := i + 2
 		for end < len(body) && body[end] != 0 {
@@ -886,6 +890,17 @@ func recordPayloadLength(body []byte, i int) int {
 		}
 	}
 	return 0
+}
+
+func nextFormulaLineAfterPrefs(body []byte, i int) int {
+	for pos := i + 1; pos+2 < len(body); pos++ {
+		if body[pos] == 0x0A && body[pos+1] == 0x01 &&
+			(body[pos+2] == 0x00 || body[pos+2] == 0x01 || body[pos+2] == 0x04) &&
+			lineHasMeaningfulTail(body[pos+1:]) {
+			return pos
+		}
+	}
+	return -1
 }
 
 func nudgePayloadLength(body []byte, i int) int {
