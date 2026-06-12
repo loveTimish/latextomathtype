@@ -137,6 +137,17 @@ class VectorWmfFormulaRendererTest {
     }
 
     @Test
+    void adjacentArraysCanRenderAsVectorText() throws IOException {
+        String adjacent = "\\begin{array}{l}cba \\\\,\\times abc\\end{array}\\begin{array}{l}c \\\\,b \\\\,b \\\\,a\\end{array}";
+        String withText = "\\begin{array}{l}1b5 \\\\,\\times 5b1\\end{array}1b505\\begin{array}{l}1 \\\\,b \\\\,b \\\\,5\\end{array}";
+
+        assertTrue(VectorWmfFormulaRenderer.canRender(adjacent));
+        assertTrue(VectorWmfFormulaRenderer.canRender(withText));
+        assertFalse(records(VectorWmfFormulaRenderer.render(adjacent, 60.0d, 50.0d)).contains(0x0F43));
+        assertFalse(records(VectorWmfFormulaRenderer.render(withText, 92.0d, 50.0d)).contains(0x0F43));
+    }
+
+    @Test
     void standaloneScriptsAndEscapedUnderscoresCanRenderAsVectorText() throws IOException {
         byte[] script = VectorWmfFormulaRenderer.render("^ { \\mathrm{3} }", 12.0d, 13.0d);
         byte[] underline = VectorWmfFormulaRenderer.render("EF=\\_\\_\\_\\_\\_", 56.0d, 13.0d);

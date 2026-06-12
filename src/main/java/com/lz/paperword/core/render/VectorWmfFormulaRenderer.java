@@ -121,6 +121,10 @@ final class VectorWmfFormulaRenderer {
         if (parenArray.matches()) {
             return layoutParenArray(parenArray.group(1));
         }
+        FormulaLayout compositeArray = layoutCompositeArrays(text);
+        if (compositeArray != null) {
+            return compositeArray;
+        }
         Matcher array = ARRAY_PATTERN.matcher(text);
         if (array.matches()) {
             return layoutArray(array.group(1));
@@ -380,6 +384,64 @@ final class VectorWmfFormulaRenderer {
         return new FormulaLayout(placed, lines, inner.widthPt() + 16.0d, inner.heightPt());
     }
 
+    private static FormulaLayout layoutCompositeArrays(String text) {
+        if (!text.contains("\\begin{array}") || text.indexOf("\\begin{array}") == text.lastIndexOf("\\begin{array}")) {
+            return null;
+        }
+        List<PlacedText> placed = new ArrayList<>();
+        List<LineSegment> lines = new ArrayList<>();
+        double x = 0d;
+        double height = 13.0d;
+        int cursor = 0;
+        boolean sawArray = false;
+        while (cursor < text.length()) {
+            int begin = text.indexOf("\\begin{array}", cursor);
+            if (begin < 0) {
+                String tail = text.substring(cursor);
+                if (!tail.isBlank()) {
+                    FormulaLayout flat = layoutFlatText(tail);
+                    if (flat == null) {
+                        return null;
+                    }
+                    appendLayout(placed, lines, flat, x, 0.0d);
+                    x += flat.widthPt() + 1.5d;
+                    height = Math.max(height, flat.heightPt());
+                }
+                break;
+            }
+            String prefix = text.substring(cursor, begin);
+            if (!prefix.isBlank()) {
+                FormulaLayout flat = layoutFlatText(prefix);
+                if (flat == null) {
+                    return null;
+                }
+                appendLayout(placed, lines, flat, x, 0.0d);
+                x += flat.widthPt() + 1.5d;
+                height = Math.max(height, flat.heightPt());
+            }
+            ArraySlice slice = readArraySlice(text, begin);
+            if (slice == null || slice.body().contains("\\begin{array}")) {
+                return null;
+            }
+            FormulaLayout array = layoutArray(slice.body());
+            if (array == null) {
+                return null;
+            }
+            appendLayout(placed, lines, array, x, 0.0d);
+            x += array.widthPt() + 2.0d;
+            height = Math.max(height, array.heightPt());
+            sawArray = true;
+            cursor = slice.end();
+        }
+        return sawArray && !placed.isEmpty() ? new FormulaLayout(placed, lines, Math.max(1.0d, x - 1.5d), height)
+            : null;
+    }
+
+    private static FormulaLayout layoutFlatText(String text) {
+        List<TextRun> runs = tokenizeFlat(text);
+        return runs == null ? null : layoutFlatRuns(runs);
+    }
+
     private static FormulaLayout layoutArray(String body) {
         String[] rowText = body.split("\\\\\\\\");
         List<List<List<TextRun>>> rows = new ArrayList<>();
@@ -617,6 +679,27 @@ final class VectorWmfFormulaRenderer {
         return -1;
     }
 
+    private static ArraySlice readArraySlice(String text, int begin) {
+        String beginToken = "\\begin{array}";
+        if (!text.startsWith(beginToken, begin)) {
+            return null;
+        }
+        int specStart = skipWhitespaceForward(text, begin + beginToken.length());
+        if (specStart >= text.length() || text.charAt(specStart) != '{') {
+            return null;
+        }
+        int specEnd = findGroupEnd(text, specStart);
+        if (specEnd < 0) {
+            return null;
+        }
+        String endToken = "\\end{array}";
+        int end = text.indexOf(endToken, specEnd + 1);
+        if (end < 0) {
+            return null;
+        }
+        return new ArraySlice(text.substring(specEnd + 1, end).trim(), end + endToken.length());
+    }
+
     private static double estimatedRunWidthPt(TextRun run) {
         if (run.cjk()) {
             return 9.0d * run.text().length();
@@ -739,6 +822,9 @@ final class VectorWmfFormulaRenderer {
     }
 
     private record Command(String text, int end) {
+    }
+
+    private record ArraySlice(String body, int end) {
     }
 
     private static final class WmfBuilder {
