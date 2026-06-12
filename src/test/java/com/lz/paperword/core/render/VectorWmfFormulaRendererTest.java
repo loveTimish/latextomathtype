@@ -125,6 +125,19 @@ class VectorWmfFormulaRendererTest {
         assertFalse(records.contains(0x0F43));
     }
 
+    @Test
+    void standaloneScriptsAndEscapedUnderscoresCanRenderAsVectorText() throws IOException {
+        byte[] script = VectorWmfFormulaRenderer.render("^ { \\mathrm{3} }", 12.0d, 13.0d);
+        byte[] underline = VectorWmfFormulaRenderer.render("EF=\\_\\_\\_\\_\\_", 56.0d, 13.0d);
+
+        assertTrue(VectorWmfFormulaRenderer.canRender("^ { \\mathrm{3} }"));
+        assertTrue(VectorWmfFormulaRenderer.canRender("EF=\\_\\_\\_\\_\\_"));
+        assertTrue(records(script).contains(0x0A32));
+        assertTrue(records(underline).contains(0x0A32));
+        assertFalse(records(script).contains(0x0F43));
+        assertFalse(records(underline).contains(0x0F43));
+    }
+
     private static List<Integer> records(byte[] data) {
         int offset = hasPlaceableHeader(data) ? 22 : 0;
         offset += 18;

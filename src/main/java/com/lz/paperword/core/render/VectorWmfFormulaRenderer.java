@@ -125,6 +125,10 @@ final class VectorWmfFormulaRenderer {
         if (scripts != null) {
             return scripts;
         }
+        FormulaLayout standaloneScript = layoutStandaloneScript(text);
+        if (standaloneScript != null) {
+            return standaloneScript;
+        }
         List<TextRun> runs = tokenizeFlat(text);
         if (runs == null) {
             return null;
@@ -144,7 +148,7 @@ final class VectorWmfFormulaRenderer {
         text = normalizeFlatLatex(text);
         text = normalizeTextCommands(text);
         if (text.contains("\\begin") || text.contains("\\frac") || text.contains("\\sqrt")
-            || text.contains("\\over") || text.contains("^") || text.contains("_")) {
+            || text.contains("\\over") || text.contains("^")) {
             return null;
         }
         List<TextRun> out = new ArrayList<>();
@@ -233,6 +237,28 @@ final class VectorWmfFormulaRenderer {
             cursor = groupEnd + 1;
         }
         return sawScript && !placed.isEmpty() ? new FormulaLayout(placed, Math.max(x, 1.0d), 13.0d) : null;
+    }
+
+    private static FormulaLayout layoutStandaloneScript(String text) {
+        int op = skipWhitespaceForward(text, 0);
+        if (op >= text.length() || text.charAt(op) != '^') {
+            return null;
+        }
+        int groupStart = skipWhitespaceForward(text, op + 1);
+        if (groupStart >= text.length() || text.charAt(groupStart) != '{') {
+            return null;
+        }
+        int groupEnd = findGroupEnd(text, groupStart);
+        if (groupEnd < 0 || !text.substring(groupEnd + 1).isBlank()) {
+            return null;
+        }
+        List<TextRun> script = tokenizeFlat(text.substring(groupStart + 1, groupEnd));
+        if (script == null) {
+            return null;
+        }
+        List<PlacedText> placed = new ArrayList<>();
+        double width = placeRuns(placed, script, 0.0d, 5.4d, true);
+        return new FormulaLayout(placed, Math.max(width, 1.0d), 13.0d);
     }
 
     private static FormulaLayout layoutFractions(String text) {
@@ -388,6 +414,7 @@ final class VectorWmfFormulaRenderer {
     }
 
     private static String normalizeFlatLatex(String text) {
+        text = text.replace("\\_", "_");
         Matcher matcher = LEFT_RIGHT_PAREN.matcher(text);
         StringBuffer out = new StringBuffer();
         while (matcher.find()) {
