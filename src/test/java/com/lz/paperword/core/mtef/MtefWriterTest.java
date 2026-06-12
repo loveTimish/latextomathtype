@@ -710,6 +710,19 @@ class MtefWriterTest {
     }
 
     @Test
+    void testExplicitParenFenceWithSourceMetricsUsesTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\left ( { a,b } \\right )");
+        FormulaStyleHints hints = FormulaStyleHints.empty().withSourceMetrics(new FormulaMetrics(28.0d, 13.0d));
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN}),
+            "xsc reference objects keep explicit \\left...\\right parens as MathType fence templates");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x28, 0x00}),
+            "explicit paren template should write an expandable left paren");
+    }
+
+    @Test
     void testArithmeticDigitFencesStayFlat() {
         LaTeXNode ast = parser.parseLaTeX("5\\times (1)-(2)");
         byte[] mtef = writer.write(ast);

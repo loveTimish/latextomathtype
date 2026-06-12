@@ -1929,13 +1929,17 @@ public class MtefWriter {
     }
 
     private boolean shouldWriteFlatExplicitFence(FenceSpec spec, LaTeXNode content) {
-        if (currentStyleHints.forceExplicitFenceTemplate()) {
-            return false;
-        }
         if (!spec.hasLeft() || !spec.hasRight()) {
             return false;
         }
         if (spec.selector() != MtefRecord.TM_PAREN && spec.selector() != MtefRecord.TM_BRACK) {
+            return false;
+        }
+        if (currentStyleHints.forceExplicitFenceTemplate()) {
+            return false;
+        }
+        var metrics = currentStyleHints.sourceMetrics();
+        if (metrics != null) {
             return false;
         }
         if (isEquationNumberFenceContent(flatContentNodes(content))) {
