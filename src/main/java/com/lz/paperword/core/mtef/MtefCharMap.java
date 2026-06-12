@@ -278,7 +278,7 @@ public final class MtefCharMap {
 
         // 标点符号和括号使用 FN_TEXT（文本样式），保持直立体显示
         LATEX_TO_MTEF.put(",", new CharEntry(MtefRecord.FN_TEXT, ','));
-        LATEX_TO_MTEF.put(".", new CharEntry(MtefRecord.FN_TEXT, '.'));
+        LATEX_TO_MTEF.put(".", new CharEntry(MtefRecord.FN_FUNCTION, '.'));
         LATEX_TO_MTEF.put(":", new CharEntry(MtefRecord.FN_TEXT, ':'));
         LATEX_TO_MTEF.put(";", new CharEntry(MtefRecord.FN_TEXT, ';'));
         LATEX_TO_MTEF.put("!", new CharEntry(MtefRecord.FN_TEXT, '!'));

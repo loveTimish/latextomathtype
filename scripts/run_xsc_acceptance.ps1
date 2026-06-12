@@ -111,7 +111,7 @@ try {
 }
 
 Invoke-Checked "python" @(
-    (Join-Path $AnalysisDir "summarize_xsc_acceptance.py"),
+    (Join-Path $repoRoot "scripts\summarize_xsc_acceptance.py"),
     $Stamp,
     $sizeOut,
     $mtefOut,

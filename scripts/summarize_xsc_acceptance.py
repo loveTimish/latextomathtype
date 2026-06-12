@@ -186,18 +186,21 @@ def is_accepted_char_stream_style_gap(row: dict) -> bool:
 def pair_hex_paths(row: dict) -> tuple[Path, Path] | None:
     if CURRENT_REPORT_DIR is None or CURRENT_DOC is None:
         return None
-    try:
-        pair_index = int(row.get("index") or 0)
-    except ValueError:
-        return None
-    if pair_index <= 0:
-        return None
-    base = CURRENT_REPORT_DIR / str(CURRENT_DOC) / f"{CURRENT_DOC}_pair_{pair_index:03d}"
-    source = base.with_name(base.name + "_source_body.hex")
-    generated = base.with_name(base.name + "_generated_body.hex")
-    if not source.exists() or not generated.exists():
-        return None
-    return source, generated
+    candidates = []
+    for key in ("sourceIndex", "index"):
+        try:
+            pair_index = int(row.get(key) or 0)
+        except ValueError:
+            continue
+        if pair_index > 0 and pair_index not in candidates:
+            candidates.append(pair_index)
+    for pair_index in candidates:
+        base = CURRENT_REPORT_DIR / str(CURRENT_DOC) / f"{CURRENT_DOC}_pair_{pair_index:03d}"
+        source = base.with_name(base.name + "_source_body.hex")
+        generated = base.with_name(base.name + "_generated_body.hex")
+        if source.exists() and generated.exists():
+            return source, generated
+    return None
 
 
 def read_hex_dump(path: Path) -> bytes:

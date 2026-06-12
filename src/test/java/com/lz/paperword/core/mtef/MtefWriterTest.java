@@ -748,6 +748,21 @@ class MtefWriterTest {
     }
 
     @Test
+    void testSourceFlatParenTemplateHintKeepsDecimalParensFlat() {
+        LaTeXNode ast = parser.parseLaTeX("(0.099+0.111)\\div 2=0.105");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, true, false, false, null);
+        byte[] mtef = writer.write(ast, hints);
+        int baselineParenTemplates = countOccurrences(writer.write(parser.parseLaTeX("0.099+0.111\\div 2=0.105"), hints),
+            new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN});
+
+        assertNotNull(mtef);
+        assertEquals(baselineParenTemplates,
+            countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN}),
+            "decimal arithmetic parentheses should stay as flat source characters even when the source file has flat paren template hints");
+    }
+
+    @Test
     void testWriteReversedIntervalFenceUsesTmInterval() {
         LaTeXNode ast = parser.parseLaTeX("\\left] x \\right(");
         byte[] mtef = writer.write(ast);

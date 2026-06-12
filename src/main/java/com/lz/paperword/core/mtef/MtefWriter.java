@@ -921,7 +921,35 @@ public class MtefWriter {
         return currentStyleHints.flatParenTemplate()
             && openCh == '('
             && closeCh == ')'
-            && isLinearFenceContent(content);
+            && isLinearFenceContent(content)
+            && !containsCharValue(content, ".");
+    }
+
+    private boolean containsCharValue(List<LaTeXNode> nodes, String value) {
+        if (nodes == null || value == null) {
+            return false;
+        }
+        for (LaTeXNode node : nodes) {
+            if (containsCharValue(node, value)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean containsCharValue(LaTeXNode node, String value) {
+        if (node == null) {
+            return false;
+        }
+        if (node.getType() == LaTeXNode.Type.CHAR && value.equals(node.getValue())) {
+            return true;
+        }
+        for (LaTeXNode child : node.getChildren()) {
+            if (containsCharValue(child, value)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private boolean isFlatDivisionEquationChain(LaTeXNode root) {
