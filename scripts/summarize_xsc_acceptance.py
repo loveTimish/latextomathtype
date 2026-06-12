@@ -62,6 +62,8 @@ def classify_suspect(row: dict) -> str:
         return "legacy_mtef_v3_source"
     if is_accepted_header_prefix_gap(row):
         return "source_header_or_style_prefix"
+    if is_accepted_fraction_size_state_gap(row):
+        return "fraction_size_state_gap"
     if body >= 0.99:
         return "soft_tail_window_length"
     if tail >= 0.93 and body >= 0.93:
@@ -77,6 +79,20 @@ def classify_suspect(row: dict) -> str:
     if abs(ratio - 1.0) > 1.0 and tail >= 0.90:
         return "text_annotation_tail_window"
     return "hard_structure_gap"
+
+
+def is_accepted_fraction_size_state_gap(row: dict) -> bool:
+    """MathType may differ only in fraction slot size-state records."""
+    latex = (row.get("latex") or "").strip()
+    if r"\frac" not in latex:
+        return False
+    body_ratio = float(row.get("bodySizeRatio") or 0)
+    body = float(row.get("recordCosine") or 0)
+    tail = float(row.get("tailRecordCosine") or 0)
+    source_version = int(row.get("sourceMtefVersion") or 0)
+    if source_version and source_version < 5:
+        return False
+    return 0.85 <= body_ratio <= 1.15 and body >= 0.80 and tail >= 0.80
 
 
 def is_accepted_header_prefix_gap(row: dict) -> bool:

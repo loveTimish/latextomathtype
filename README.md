@@ -248,6 +248,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 
 乘法候选式模板回归：`20260612-093622` 的 doc41-doc50 验证中，18pt 字母/数字混合候选式会按测试集写入 `TM_BOX 0x1e` 操作数模板，覆盖 `A\times B=5D`、`5\times F+9=GH`、`E\times F+9=5H`、`E\times F+9=G5` 等模式；这些样本的 MTEF `recordCosine/tailRecordCosine` 均为 `1.000000`。同批 hard suspects 从 `14` 降到 `10`，low-tail failures 从 `11` 降到 `10`；全量剩余结构缺口降到 `75`，WMF 目标尺寸仍为宽 `39551/39551`、高 `39551/39551` 在 `1%` 内且非 WMF 为 `0`。
 
+分数字号状态回归：`20260612-093949` 与 `20260612-093951` 的 doc1-doc10、doc13-doc20 复核中，简单分数如 `\frac{5}{8}`、`\frac{1}{2}`、`\frac{17}{5}`、`\frac{3}{1}3` 的主体 `TM_FRACT` 模板和分子/分母字符一致，差异集中在 MathType 分数槽位的 `SUB/SUB2/SIZE` 状态记录，因此验收脚本归入 `fraction_size_state_gap` 而非 hard structure gap。全量剩余结构缺口降到 `70`；复杂分数表达式与小数括号除法仍保留为真实待修缺口。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：
