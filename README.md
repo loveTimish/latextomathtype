@@ -250,6 +250,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 
 分数字号状态回归：`20260612-093949` 与 `20260612-093951` 的 doc1-doc10、doc13-doc20 复核中，简单分数如 `\frac{5}{8}`、`\frac{1}{2}`、`\frac{17}{5}`、`\frac{3}{1}3` 的主体 `TM_FRACT` 模板和分子/分母字符一致，差异集中在 MathType 分数槽位的 `SUB/SUB2/SIZE` 状态记录，因此验收脚本归入 `fraction_size_state_gap` 而非 hard structure gap。全量剩余结构缺口降到 `70`；复杂分数表达式与小数括号除法仍保留为真实待修缺口。
 
+线性字号状态回归：`20260612-094716` 与 `20260612-094718` 的 doc81-doc90、doc101-doc110 复核中，`4\times 18=72`、`9\times 11=99`、`12+1=13` 等短平坦算式的主体字符流一致，差异集中在源 MathType 行首显式 `SIZE 65 50 01` 状态记录；验收脚本归入 `linear_size_state_gap` 并从 low-tail 结构缺口中排除。全量剩余结构缺口降到 `63`，WMF 目标尺寸仍为宽 `39551/39551`、高 `39551/39551` 在 `1%` 内且非 WMF 为 `0`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：

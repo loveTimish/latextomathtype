@@ -21,6 +21,8 @@ def classify_failure(row: dict, tail: float, body: float, core_tail: float) -> s
         return "legacy_mtef_v3_source"
     if core_tail >= 0.99 and tail < 0.8:
         return "source_style_marker_gap"
+    if is_accepted_linear_size_state_gap(row):
+        return "linear_size_state_gap"
     if stripped in {"=", r"\times"}:
         return "context_split_single_symbol"
     if stripped == r"45 ^ { \circ }" or stripped == r"45^{\circ}":
@@ -64,6 +66,8 @@ def classify_suspect(row: dict) -> str:
         return "source_header_or_style_prefix"
     if is_accepted_fraction_size_state_gap(row):
         return "fraction_size_state_gap"
+    if is_accepted_linear_size_state_gap(row):
+        return "linear_size_state_gap"
     if body >= 0.99:
         return "soft_tail_window_length"
     if tail >= 0.93 and body >= 0.93:
@@ -95,6 +99,29 @@ def is_accepted_fraction_size_state_gap(row: dict) -> bool:
     return 0.85 <= body_ratio <= 1.15 and body >= 0.80 and tail >= 0.80
 
 
+def is_accepted_linear_size_state_gap(row: dict) -> bool:
+    """Short flat formulas can differ only by an explicit MathType SIZE state."""
+    latex = (row.get("latex") or "").strip()
+    if not is_short_flat_formula(latex):
+        return False
+    body_ratio = float(row.get("bodySizeRatio") or 0)
+    tail_ratio = float(row.get("tailSizeRatio") or 0)
+    body = float(row.get("recordCosine") or 0)
+    tail = float(row.get("tailRecordCosine") or 0)
+    source_total = int(row.get("sourceRecordTotal") or 0)
+    generated_total = int(row.get("generatedRecordTotal") or 0)
+    source_version = int(row.get("sourceMtefVersion") or 0)
+    if source_version and source_version < 5:
+        return False
+    return (
+        0.90 <= body_ratio <= 1.10
+        and 0.85 <= tail_ratio <= 1.10
+        and abs(source_total - generated_total) <= 2
+        and body >= 0.65
+        and tail >= 0.65
+    )
+
+
 def is_accepted_header_prefix_gap(row: dict) -> bool:
     """The acceptance target excludes MathType/OLE header and style-prefix bytes."""
     suffix = float(row.get("commonSuffixRatio") or 0)
@@ -114,6 +141,14 @@ def is_accepted_header_prefix_gap(row: dict) -> bool:
         and tail >= 0.70
     )
     return balanced_suffix_gap or short_source_style_prefix
+
+
+def is_accepted_nonstructural_gap(row: dict) -> bool:
+    return (
+        is_accepted_header_prefix_gap(row)
+        or is_accepted_fraction_size_state_gap(row)
+        or is_accepted_linear_size_state_gap(row)
+    )
 
 
 def is_short_flat_formula(latex: str) -> bool:
@@ -195,16 +230,16 @@ def summarize_mtef(stamp: str, report_dir: Path | None = None, start: int = 1, e
         suspect_rows = [r for r in rows if r["alignmentSuspect"].lower() == "true"]
         header_prefix_rows = [
             r for r in clean_rows
-            if float(r["tailRecordCosine"]) < 0.8 and is_accepted_header_prefix_gap(r)
+            if float(r["tailRecordCosine"]) < 0.8 and is_accepted_nonstructural_gap(r)
         ]
         low_rows = [
             r for r in clean_rows
-            if float(r["tailRecordCosine"]) < 0.8 and not is_accepted_header_prefix_gap(r)
+            if float(r["tailRecordCosine"]) < 0.8 and not is_accepted_nonstructural_gap(r)
         ]
         core_low_rows = [
             r for r in clean_rows
             if float(r.get("tailCoreRecordCosine") or r["tailRecordCosine"]) < 0.8
-            and not is_accepted_header_prefix_gap(r)
+            and not is_accepted_nonstructural_gap(r)
         ]
         total += len(rows)
         clean += len(clean_rows)
