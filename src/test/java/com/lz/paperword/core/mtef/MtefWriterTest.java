@@ -776,6 +776,16 @@ class MtefWriterTest {
     }
 
     @Test
+    void testCjkCharactersUseFarEastTextTypeface() {
+        LaTeXNode ast = parser.parseLaTeX("S_{和}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) (MtefRecord.FN_TEXT_FE | 0x80), (byte) 0x8C, 0x54}),
+            "CJK text inside formulas should use MathType's Far East text typeface instead of variable italics");
+    }
+
+    @Test
     void testWriteReversedIntervalFenceUsesTmInterval() {
         LaTeXNode ast = parser.parseLaTeX("\\left] x \\right(");
         byte[] mtef = writer.write(ast);

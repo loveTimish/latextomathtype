@@ -1678,6 +1678,10 @@ public class MtefWriter {
             writeCharRecord(out, MtefRecord.FN_TEXT_FE, 0xFF09);
             return;
         }
+        if (ch.length() == 1 && isFarEastTextChar(ch.charAt(0))) {
+            writeCharRecord(out, MtefRecord.FN_TEXT_FE, ch.charAt(0));
+            return;
+        }
         MtefCharMap.CharEntry entry = MtefCharMap.lookupChar(ch.charAt(0));
         if (entry != null) {
             // 在字符映射表中找到 — 使用指定的字体类型和 MTEF 字符编码
@@ -1686,6 +1690,14 @@ public class MtefWriter {
             // 未在映射表中 — 默认为变量字体（FN_VARIABLE），使用原始字符码
             writeCharRecord(out, MtefRecord.FN_VARIABLE, ch.charAt(0));
         }
+    }
+
+    private boolean isFarEastTextChar(char ch) {
+        Character.UnicodeScript script = Character.UnicodeScript.of(ch);
+        return script == Character.UnicodeScript.HAN
+            || script == Character.UnicodeScript.HIRAGANA
+            || script == Character.UnicodeScript.KATAKANA
+            || script == Character.UnicodeScript.HANGUL;
     }
 
     /**
@@ -2643,7 +2655,7 @@ public class MtefWriter {
                 return;
             }
             for (char c : node.getValue().toCharArray()) {
-                writeCharRecord(out, MtefRecord.FN_TEXT, c);
+                writeCharRecord(out, isFarEastTextChar(c) ? MtefRecord.FN_TEXT_FE : MtefRecord.FN_TEXT, c);
             }
         }
     }
