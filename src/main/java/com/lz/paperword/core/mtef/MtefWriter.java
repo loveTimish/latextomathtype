@@ -885,7 +885,9 @@ public class MtefWriter {
                             i = closeIdx; // 跳过已处理的括号内容和闭括号节点
                             continue;
                         } else if (closeNode.getType() == LaTeXNode.Type.CHAR) {
-                            if (isLinearFenceContent(parenContent)) {
+                            if (isEquationNumberFenceContent(parenContent)) {
+                                writeParenFence(out, openCh, closeCh, parenContent);
+                            } else if (isLinearFenceContent(parenContent)) {
                                 writeFlatFenceChars(out, openCh, closeCh, parenContent);
                             } else {
                                 // Tall or structured content still needs a stretchable MathType fence template.
@@ -1861,6 +1863,9 @@ public class MtefWriter {
         if (spec.selector() != MtefRecord.TM_PAREN && spec.selector() != MtefRecord.TM_BRACK) {
             return false;
         }
+        if (isEquationNumberFenceContent(flatContentNodes(content))) {
+            return false;
+        }
         return isFlatFenceContent(flatContentNodes(content));
     }
 
@@ -1979,6 +1984,20 @@ public class MtefWriter {
             }
         }
         return true;
+    }
+
+    private boolean isEquationNumberFenceContent(List<LaTeXNode> content) {
+        if (content == null || content.size() != 1) {
+            return false;
+        }
+        LaTeXNode only = content.get(0);
+        if (only.getType() == LaTeXNode.Type.GROUP || only.getType() == LaTeXNode.Type.ROOT) {
+            return isEquationNumberFenceContent(only.getChildren());
+        }
+        return only.getType() == LaTeXNode.Type.CHAR
+            && only.getValue() != null
+            && only.getValue().length() == 1
+            && Character.isDigit(only.getValue().charAt(0));
     }
 
     private boolean isFlatFenceNode(LaTeXNode node) {

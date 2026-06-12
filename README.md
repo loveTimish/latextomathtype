@@ -240,6 +240,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 
 下括注补洞回归：`20260612-085409` 继续覆盖 `88\cdot \cdot \cdot 82007个8︸` 与 `999\cdots 9k个9︸` 两类剩余计数下括注，doc12 hard suspect 从 `2` 降到 `0`，clean pairs 为 `223/223`；WMF 目标尺寸仍为宽 `223/223`、高 `223/223` 在 `1%` 内且非 WMF 为 `0`。
 
+方程编号括号回归：`20260612-090833` 的 doc22 验证中，`\left ( { 1 } \right )-\left ( { 2 } \right )` 等单数字方程编号括号会保留 MathType `TM_PAREN` 模板，而不是退化为全角平铺括号。doc22 hard suspect 从旧批次 `4` 降到 `0`，clean pairs 为 `1056/1056`；WMF 目标尺寸为宽 `1056/1056`、高 `1056/1056` 在 `1%` 内且非 WMF 为 `0`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：

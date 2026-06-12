@@ -698,6 +698,16 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteEquationNumberFencesInsideExpressionUseParenTemplates() {
+        LaTeXNode ast = parser.parseLaTeX("\\left ( { 1 } \\right )-\\left ( { 2 } \\right )");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN}) >= 2,
+            "single-digit equation number fences inside expressions should keep MathType's tmPAREN templates");
+    }
+
+    @Test
     void testWriteReversedIntervalFenceUsesTmInterval() {
         LaTeXNode ast = parser.parseLaTeX("\\left] x \\right(");
         byte[] mtef = writer.write(ast);
