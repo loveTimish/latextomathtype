@@ -72,7 +72,7 @@ public class LaTeXImageRenderer {
     /** 系统属性：渲染磁盘缓存目录。 */
     private static final String CACHE_DIR_PROP = "paperword.render.cache.dir";
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v30-xsc-wmf-dib-cap";
+    private static final String CACHE_VERSION = "v31-xsc-vector-wmf-linear";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     /** 像素到磅的换算比例。 */
@@ -447,6 +447,13 @@ public class LaTeXImageRenderer {
 
             int widthPx = Math.max((int) Math.round(widthPt * PX_PER_PT), 4);
             int heightPx = Math.max((int) Math.round(heightPt * PX_PER_PT), 4);
+            if (VectorWmfFormulaRenderer.canRender(latex)) {
+                byte[] wmfData = VectorWmfFormulaRenderer.render(latex, widthPt, heightPt);
+                if (wmfData != null && wmfData.length > 0) {
+                    return new PreviewImage(wmfData, widthPx, heightPx, "wmf", "image/x-wmf", false,
+                        depthPt, widthPt, heightPt);
+                }
+            }
             int renderWidthPx = Math.max((int) Math.ceil(widthPx * PNG_OUTPUT_SCALE), widthPx);
             int renderHeightPx = Math.max((int) Math.ceil(heightPx * PNG_OUTPUT_SCALE), heightPx);
             byte[] pngData = svgToPng(svg, renderWidthPx, renderHeightPx);
