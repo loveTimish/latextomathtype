@@ -6,7 +6,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Minimal vector WMF formula preview writer.
@@ -24,6 +25,9 @@ final class VectorWmfFormulaRenderer {
     private static final int TRANSPARENT = 1;
     private static final int TA_BASELINE = 0x0018;
     private static final Charset GBK = Charset.forName("GBK");
+    private static final Pattern LEFT_RIGHT_PAREN = Pattern.compile(
+        "\\\\left\\s*\\(\\s*(?:\\{\\s*)?(.*?)(?:\\s*})?\\s*\\\\right\\s*\\)"
+    );
 
     private VectorWmfFormulaRenderer() {
     }
@@ -76,6 +80,7 @@ final class VectorWmfFormulaRenderer {
             return null;
         }
         String text = stripMetricsAndStyles(latex).trim();
+        text = normalizeFlatLatex(text);
         if (text.contains("\\begin") || text.contains("\\frac") || text.contains("\\sqrt")
             || text.contains("\\over") || text.contains("^") || text.contains("_")) {
             return null;
@@ -100,6 +105,16 @@ final class VectorWmfFormulaRenderer {
             i++;
         }
         return out.isEmpty() ? null : out;
+    }
+
+    private static String normalizeFlatLatex(String text) {
+        Matcher matcher = LEFT_RIGHT_PAREN.matcher(text);
+        StringBuffer out = new StringBuffer();
+        while (matcher.find()) {
+            matcher.appendReplacement(out, Matcher.quoteReplacement("(" + matcher.group(1).trim() + ")"));
+        }
+        matcher.appendTail(out);
+        return out.toString();
     }
 
     private static String stripMetricsAndStyles(String latex) {
@@ -142,6 +157,7 @@ final class VectorWmfFormulaRenderer {
             case "cdot" -> "·";
             case "pi" -> "π";
             case "circ" -> "°";
+            case "square" -> "□";
             default -> null;
         };
         if (mapped == null) {

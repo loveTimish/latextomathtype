@@ -30,6 +30,24 @@ class VectorWmfFormulaRendererTest {
         assertFalse(VectorWmfFormulaRenderer.canRender("\\begin{array}{c}1\\\\2\\end{array}"));
     }
 
+    @Test
+    void explicitFlatParenFenceCanRenderAsVectorText() throws IOException {
+        byte[] wmf = VectorWmfFormulaRenderer.render("\\left ( { 第+十+一+届+华+杯+赛 } \\right )", 141.0d, 19.0d);
+        List<Integer> records = records(wmf);
+
+        assertTrue(records.contains(0x0A32));
+        assertFalse(records.contains(0x0F43));
+    }
+
+    @Test
+    void squarePlaceholderCanRenderAsVectorText() throws IOException {
+        byte[] wmf = VectorWmfFormulaRenderer.render("+2=\\square", 40.0d, 13.0d);
+        List<Integer> records = records(wmf);
+
+        assertTrue(records.contains(0x0A32));
+        assertFalse(records.contains(0x0F43));
+    }
+
     private static List<Integer> records(byte[] data) {
         int offset = hasPlaceableHeader(data) ? 22 : 0;
         offset += 18;
