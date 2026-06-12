@@ -91,13 +91,46 @@ def is_accepted_header_prefix_gap(row: dict) -> bool:
     generated_records = int(row.get("generatedRecordTotal") or 0)
     balanced_suffix_gap = suffix >= 0.35 and 0.90 <= body_ratio <= 1.10 and 0.90 <= tail_ratio <= 1.10
     short_source_style_prefix = (
-        len(latex) <= 8
+        is_short_flat_formula(latex)
         and source_records >= generated_records + 6
         and 0.12 <= tail_ratio <= 0.35
         and body >= 0.70
         and tail >= 0.70
     )
     return balanced_suffix_gap or short_source_style_prefix
+
+
+def is_short_flat_formula(latex: str) -> bool:
+    """True for short one-line formulas whose MTEF differences are style records."""
+    text = latex.strip()
+    if not text:
+        return False
+    structural_tokens = [
+        r"\begin",
+        r"\frac",
+        r"\sqrt",
+        r"\left",
+        r"\right",
+        r"\underbrace",
+        r"\overbrace",
+        "^",
+        "_",
+        "(",
+        ")",
+        "[",
+        "]",
+    ]
+    if any(token in text for token in structural_tokens):
+        return False
+    normalized = re.sub(
+        r"\\(?:times|div|cdot|pm|mp|le|ge|ne|approx|lt|gt|leq|geq)",
+        "x",
+        text,
+    )
+    normalized = re.sub(r"\s+", "", normalized)
+    if len(normalized) > 12:
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9+\-*/=<>.,{}x]+", normalized))
 
 
 def summarize_size(stamp: str, size_dir: Path | None = None, start: int = 1, end: int = 10) -> dict:

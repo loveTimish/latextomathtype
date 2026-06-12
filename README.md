@@ -242,6 +242,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 
 方程编号括号回归：`20260612-090833` 的 doc22 验证中，`\left ( { 1 } \right )-\left ( { 2 } \right )` 等单数字方程编号括号会保留 MathType `TM_PAREN` 模板，而不是退化为全角平铺括号。doc22 hard suspect 从旧批次 `4` 降到 `0`，clean pairs 为 `1056/1056`；WMF 目标尺寸为宽 `1056/1056`、高 `1056/1056` 在 `1%` 内且非 WMF 为 `0`。
 
+源样式前缀分类回归：`20260612-063347` 的 doc131-doc140 复核中，doc135 的 `6\times 6` 源 MTEF 只比生成侧多出颜色/字体状态前缀（如 `Black` 定义），主体公式尾部一致，因此验收脚本将短平坦算式的这类差异归入 `source_header_or_style_prefix`，不再作为 hard structure gap。该批 hard suspects 从 `1` 降到 `0`；WMF 目标尺寸为宽 `1919/1919`、高 `1919/1919` 在 `1%` 内且非 WMF 为 `0`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：
