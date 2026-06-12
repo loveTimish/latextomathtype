@@ -64,7 +64,10 @@ public class MathTypeEmbedder {
                               double displayScale, double maxWidthPt, FormulaMetrics targetMetrics,
                               FormulaStyleHints styleHints) {
         try {
-            byte[] mtefData = mtefWriter.write(latexAst, styleHints);
+            FormulaStyleHints effectiveStyleHints = styleHints == null
+                ? FormulaStyleHints.empty()
+                : styleHints.withSourceMetrics(targetMetrics);
+            byte[] mtefData = mtefWriter.write(latexAst, effectiveStyleHints);
             byte[] oleData = olePackager.packageOle(mtefData);
 
             LaTeXImageRenderer.PreviewImage preview = targetMetrics != null

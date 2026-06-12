@@ -244,6 +244,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 
 源样式前缀分类回归：`20260612-063347` 的 doc131-doc140 复核中，doc135 的 `6\times 6` 源 MTEF 只比生成侧多出颜色/字体状态前缀（如 `Black` 定义），主体公式尾部一致，因此验收脚本将短平坦算式的这类差异归入 `source_header_or_style_prefix`，不再作为 hard structure gap。该批 hard suspects 从 `1` 降到 `0`；WMF 目标尺寸为宽 `1919/1919`、高 `1919/1919` 在 `1%` 内且非 WMF 为 `0`。
 
+短乘法等式回归：`20260612-092653` 的 doc11-doc12 验证中，13pt 普通行内算式 `7\times 9=63`、`9\times 6=54` 会保持 MathType 平坦字符流，不再误套 `TM_BOX 0x1e` 操作数模板；两条记录的 MTEF `recordCosine/tailRecordCosine` 均恢复到 `1.000000`。同时 `20260612-092536` 的 doc41-doc43 复核中，18pt 候选式 `3\times 4=12`、`3\times 4+9=21` 仍保持 box 模板路径，核心样本相似度为 `0.997434`/`0.996872`；doc11-doc12 clean pairs 为 `562/562`，WMF 目标尺寸为宽 `562/562`、高 `562/562` 在 `1%` 内且非 WMF 为 `0`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：

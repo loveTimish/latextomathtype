@@ -965,6 +965,9 @@ public class MtefWriter {
     }
 
     private boolean isFlatMultiplicationEquation(LaTeXNode root) {
+        if (!shouldUseBoxedFlatMultiplicationEquation()) {
+            return false;
+        }
         List<LaTeXNode> nodes = root == null ? List.of() : root.getChildren();
         if (nodes.size() < 5) {
             return false;
@@ -1018,6 +1021,15 @@ public class MtefWriter {
         return hasTimes && hasEquals && timesCount == 1
                 && leftDigits == 1 && rightDigits == 1
                 && resultDigits >= 1 && resultDigits <= 2;
+    }
+
+    private boolean shouldUseBoxedFlatMultiplicationEquation() {
+        var metrics = currentStyleHints.sourceMetrics();
+        if (metrics == null) {
+            return true;
+        }
+        double height = metrics.heightPt();
+        return height >= 16.0d && height <= 20.5d;
     }
 
     private void writeFlatMultiplicationEquation(ByteArrayOutputStream out, LaTeXNode root) throws IOException {

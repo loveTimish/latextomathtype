@@ -114,9 +114,19 @@ public class LaTeXParser {
     public record FormulaStyleHints(boolean asciiFlatParens, boolean explicitScriptFullSize,
                                     boolean explicitFractionFullSize, boolean explicitTopFullSize,
                                     boolean forceExplicitFenceTemplate, boolean explicitBlackColor,
-                                    boolean textFeComma, boolean fullwidthTextParen) {
+                                    boolean textFeComma, boolean fullwidthTextParen,
+                                    FormulaMetrics sourceMetrics) {
         public static FormulaStyleHints empty() {
-            return new FormulaStyleHints(false, false, false, false, false, false, false, false);
+            return new FormulaStyleHints(false, false, false, false, false, false, false, false, null);
+        }
+
+        public FormulaStyleHints withSourceMetrics(FormulaMetrics metrics) {
+            if (metrics == null) {
+                return this;
+            }
+            return new FormulaStyleHints(asciiFlatParens, explicitScriptFullSize, explicitFractionFullSize,
+                explicitTopFullSize, forceExplicitFenceTemplate, explicitBlackColor, textFeComma,
+                fullwidthTextParen, metrics);
         }
     }
 
@@ -258,7 +268,8 @@ public class LaTeXParser {
             }
         }
         return new FormulaStyleHints(asciiFlatParens, explicitScriptFullSize, explicitFractionFullSize,
-            explicitTopFullSize, forceExplicitFenceTemplate, explicitBlackColor, textFeComma, fullwidthTextParen);
+            explicitTopFullSize, forceExplicitFenceTemplate, explicitBlackColor, textFeComma, fullwidthTextParen,
+            null);
     }
 
     private record ParsedFormulaStyle(String latex, FormulaStyleHints styleHints) {}

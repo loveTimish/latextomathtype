@@ -2,6 +2,8 @@ package com.lz.paperword.core.mtef;
 
 import com.lz.paperword.core.latex.LaTeXNode;
 import com.lz.paperword.core.latex.LaTeXParser;
+import com.lz.paperword.core.latex.LaTeXParser.FormulaMetrics;
+import com.lz.paperword.core.latex.LaTeXParser.FormulaStyleHints;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -1278,6 +1280,32 @@ class MtefWriterTest {
             "flat multiplication equation should write \\times as the MathType Symbol multiplication glyph");
         assertFalse(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) MtefRecord.FN_VARIABLE, 0x5C, 0x00}),
             "flat multiplication equation must not serialize the LaTeX command backslash as a variable");
+    }
+
+    @Test
+    void testShortMultiplicationEquationWithLinearMetricsStaysFlat() {
+        LaTeXNode ast = parser.parseLaTeX("7\\times 9=63");
+        FormulaStyleHints hints = FormulaStyleHints.empty().withSourceMetrics(new FormulaMetrics(43.0d, 13.0d));
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(0, countOccurrences(mtef, box),
+            "13pt xsc inline arithmetic uses a flat MathType character stream, not boxed operand templates");
+        assertTrue(containsBytes(mtef, new byte[]{0x02, 0x04, (byte) ((MtefRecord.FN_SYMBOL & 0x7F) | 0x80), (byte) 0xD7, 0x00, (byte) 0xB4}),
+            "flat multiplication equation should still write \\times as the MathType Symbol multiplication glyph");
+    }
+
+    @Test
+    void testShortMultiplicationEquationWithTallMetricsUsesBoxSegments() {
+        LaTeXNode ast = parser.parseLaTeX("3\\times 4=12");
+        FormulaStyleHints hints = FormulaStyleHints.empty().withSourceMetrics(new FormulaMetrics(60.0d, 18.0d));
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(3, countOccurrences(mtef, box),
+            "18pt xsc multiplication candidates match MathType's boxed operand template pattern");
     }
 
     @Test
