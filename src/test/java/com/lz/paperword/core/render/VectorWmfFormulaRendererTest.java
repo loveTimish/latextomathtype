@@ -27,7 +27,6 @@ class VectorWmfFormulaRendererTest {
     void structuredFormulaIsNotClaimedAsVectorRenderableYet() {
         assertFalse(VectorWmfFormulaRenderer.canRender("\\frac{1}{2}"));
         assertFalse(VectorWmfFormulaRenderer.canRender("x^{2}"));
-        assertFalse(VectorWmfFormulaRenderer.canRender("\\begin{array}{c}1\\\\2\\end{array}"));
     }
 
     @Test
@@ -44,6 +43,16 @@ class VectorWmfFormulaRendererTest {
         byte[] wmf = VectorWmfFormulaRenderer.render("+2=\\square", 40.0d, 13.0d);
         List<Integer> records = records(wmf);
 
+        assertTrue(records.contains(0x0A32));
+        assertFalse(records.contains(0x0F43));
+    }
+
+    @Test
+    void simpleArrayCanRenderAsVectorText() throws IOException {
+        byte[] wmf = VectorWmfFormulaRenderer.render("\\begin{array}{ccccc} ABCD-EFGH2008 & \\end{array}", 89.0d, 49.0d);
+        List<Integer> records = records(wmf);
+
+        assertTrue(VectorWmfFormulaRenderer.canRender("\\begin{array}{c}1\\\\2\\end{array}"));
         assertTrue(records.contains(0x0A32));
         assertFalse(records.contains(0x0F43));
     }

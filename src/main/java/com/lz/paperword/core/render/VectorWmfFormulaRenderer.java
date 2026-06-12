@@ -28,17 +28,21 @@ final class VectorWmfFormulaRenderer {
     private static final Pattern LEFT_RIGHT_PAREN = Pattern.compile(
         "\\\\left\\s*\\(\\s*(?:\\{\\s*)?(.*?)(?:\\s*})?\\s*\\\\right\\s*\\)"
     );
+    private static final Pattern ARRAY_PATTERN = Pattern.compile(
+        "\\\\begin\\{array}\\{[^}]*}\\s*(.*?)\\s*\\\\end\\{array}",
+        Pattern.DOTALL
+    );
 
     private VectorWmfFormulaRenderer() {
     }
 
     static boolean canRender(String latex) {
-        return tokenize(latex) != null;
+        return layout(latex) != null;
     }
 
     static byte[] render(String latex, double widthPt, double heightPt) throws IOException {
-        List<TextRun> runs = tokenize(latex);
-        if (runs == null || widthPt <= 0d || heightPt <= 0d) {
+        FormulaLayout layout = layout(latex);
+        if (layout == null || widthPt <= 0d || heightPt <= 0d) {
             return null;
         }
         WmfBuilder builder = new WmfBuilder(widthPt, heightPt);
@@ -61,18 +65,33 @@ final class VectorWmfFormulaRenderer {
         builder.record(0x02FB, out -> writeFont(out, "Times New Roman", 12.0d)); // CreateFontIndirect
         builder.record(0x012D, out -> writeWord(out, 0)); // SelectObject
 
-        int x = Math.max(toTwips(0.5d), 0);
-        int baseline = Math.max(toTwips(heightPt - 3.3d), toTwips(heightPt * 0.68d));
-        double widthScale = widthPt / Math.max(estimatedWidthPt(runs), 1.0d);
+        double widthScale = widthPt / Math.max(layout.widthPt(), 1.0d);
         widthScale = Math.max(0.70d, Math.min(1.25d, widthScale));
-        for (TextRun run : runs) {
+        double heightScale = heightPt / Math.max(layout.heightPt(), 1.0d);
+        heightScale = Math.max(0.70d, Math.min(1.25d, heightScale));
+        for (PlacedText run : layout.runs()) {
             byte[] text = run.text().getBytes(run.cjk() ? GBK : StandardCharsets.ISO_8859_1);
-            final int runX = x;
-            final int runBaseline = baseline;
+            final int runX = toTwips(0.5d + run.xPt() * widthScale);
+            final int runBaseline = toTwips(1.0d + run.baselinePt() * heightScale);
             builder.record(0x0A32, out -> writeExtTextOut(out, runX, runBaseline, text));
-            x += toTwips(estimatedRunWidthPt(run) * widthScale);
         }
         return builder.finish();
+    }
+
+    private static FormulaLayout layout(String latex) {
+        if (latex == null || latex.isBlank()) {
+            return null;
+        }
+        String text = stripMetricsAndStyles(latex).trim();
+        Matcher array = ARRAY_PATTERN.matcher(text);
+        if (array.matches()) {
+            return layoutArray(array.group(1));
+        }
+        List<TextRun> runs = tokenizeFlat(text);
+        if (runs == null) {
+            return null;
+        }
+        return layoutFlatRuns(runs);
     }
 
     private static List<TextRun> tokenize(String latex) {
@@ -80,6 +99,10 @@ final class VectorWmfFormulaRenderer {
             return null;
         }
         String text = stripMetricsAndStyles(latex).trim();
+        return tokenizeFlat(text);
+    }
+
+    private static List<TextRun> tokenizeFlat(String text) {
         text = normalizeFlatLatex(text);
         if (text.contains("\\begin") || text.contains("\\frac") || text.contains("\\sqrt")
             || text.contains("\\over") || text.contains("^") || text.contains("_")) {
@@ -105,6 +128,72 @@ final class VectorWmfFormulaRenderer {
             i++;
         }
         return out.isEmpty() ? null : out;
+    }
+
+    private static FormulaLayout layoutFlatRuns(List<TextRun> runs) {
+        List<PlacedText> placed = new ArrayList<>();
+        double x = 0d;
+        double baseline = 9.6d;
+        for (TextRun run : runs) {
+            placed.add(new PlacedText(run.text(), run.cjk(), x, baseline));
+            x += estimatedRunWidthPt(run);
+        }
+        return new FormulaLayout(placed, Math.max(x, 1.0d), 13.0d);
+    }
+
+    private static FormulaLayout layoutArray(String body) {
+        String[] rowText = body.split("\\\\\\\\");
+        List<List<List<TextRun>>> rows = new ArrayList<>();
+        int columnCount = 0;
+        for (String row : rowText) {
+            String[] cells = row.split("&", -1);
+            List<List<TextRun>> parsedRow = new ArrayList<>();
+            for (String cell : cells) {
+                String normalized = cell.replace("{}", "").trim();
+                List<TextRun> runs = normalized.isEmpty() ? List.of() : tokenizeFlat(normalized);
+                if (runs == null) {
+                    return null;
+                }
+                parsedRow.add(runs);
+            }
+            rows.add(parsedRow);
+            columnCount = Math.max(columnCount, parsedRow.size());
+        }
+        if (rows.isEmpty() || columnCount == 0) {
+            return null;
+        }
+        double[] widths = new double[columnCount];
+        for (List<List<TextRun>> row : rows) {
+            for (int i = 0; i < row.size(); i++) {
+                widths[i] = Math.max(widths[i], estimatedWidthPt(row.get(i)));
+            }
+        }
+        for (int i = 0; i < widths.length; i++) {
+            widths[i] = Math.max(widths[i], 7.0d);
+        }
+        double[] x = new double[columnCount];
+        double cursor = 0d;
+        for (int i = 0; i < columnCount; i++) {
+            x[i] = cursor;
+            cursor += widths[i] + 2.0d;
+        }
+        List<PlacedText> placed = new ArrayList<>();
+        double rowHeight = rows.size() > 1 ? 12.0d : 13.0d;
+        for (int rowIndex = 0; rowIndex < rows.size(); rowIndex++) {
+            List<List<TextRun>> row = rows.get(rowIndex);
+            double baseline = 9.6d + rowIndex * rowHeight;
+            for (int col = 0; col < row.size(); col++) {
+                List<TextRun> runs = row.get(col);
+                double runX = x[col] + Math.max(0d, widths[col] - estimatedWidthPt(runs));
+                for (TextRun run : runs) {
+                    placed.add(new PlacedText(run.text(), run.cjk(), runX, baseline));
+                    runX += estimatedRunWidthPt(run);
+                }
+            }
+        }
+        double width = Math.max(cursor - 2.0d, 1.0d);
+        double height = Math.max(13.0d, 2.5d + rows.size() * rowHeight);
+        return placed.isEmpty() ? null : new FormulaLayout(placed, width, height);
     }
 
     private static String normalizeFlatLatex(String text) {
@@ -276,6 +365,12 @@ final class VectorWmfFormulaRenderer {
     }
 
     private record TextRun(String text, boolean cjk) {
+    }
+
+    private record PlacedText(String text, boolean cjk, double xPt, double baselinePt) {
+    }
+
+    private record FormulaLayout(List<PlacedText> runs, double widthPt, double heightPt) {
     }
 
     private record Command(String text, int end) {
