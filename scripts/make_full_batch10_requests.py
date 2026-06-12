@@ -18,8 +18,16 @@ from pathlib import Path
 
 ROOT = Path(r"D:\latextomathtype\analysis")
 DEFAULT_LATEX_ROOT = ROOT / "batch10-latex"
+DEFAULT_FALLBACK_LATEX_ROOT = ROOT / "batch10-latex"
 DEFAULT_OUT_DIR = ROOT / "batch10-full-requests"
 STYLE_HINTS_ROOT = ROOT / "mtef-style-hints"
+SAFE_STYLE_HINTS = {
+    "asciiFlatParens",
+    "fullwidthTextParen",
+    "forceExplicitFenceTemplate",
+    "textFeComma",
+    "explicitFractionFullSize",
+}
 PIC_RE = re.compile(r"beginPic\{([^}]+)\}endPic")
 METRICS_RE = re.compile(r"^\\pwmetrics\{[^}]+}\s*")
 STYLE_RE = re.compile(r"^\\pwstyle\{[^}]*}\s*")
@@ -89,6 +97,9 @@ def source_object_index(item: dict) -> int:
 def style_prefix(item: dict, styles: dict[int, str]) -> str:
     encoded = styles.get(source_object_index(item), "")
     latex = item.get("output") or ""
+    if encoded:
+        parts = [part for part in encoded.split(",") if part in SAFE_STYLE_HINTS]
+        encoded = ",".join(parts)
     if "forceExplicitFenceTemplate" in encoded and "\\left" not in latex and "\\right" not in latex:
         parts = [part for part in encoded.split(",") if part != "forceExplicitFenceTemplate"]
         encoded = ",".join(parts)
@@ -370,6 +381,7 @@ def main() -> None:
     parser.add_argument("--start", type=int, default=1)
     parser.add_argument("--end", type=int, default=10)
     parser.add_argument("--latex-root", type=Path, default=DEFAULT_LATEX_ROOT)
+    parser.add_argument("--fallback-latex-root", type=Path, default=DEFAULT_FALLBACK_LATEX_ROOT)
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR)
     parser.add_argument("--style-hints-root", type=Path, default=STYLE_HINTS_ROOT)
     args = parser.parse_args()
@@ -378,11 +390,17 @@ def main() -> None:
     summary = []
     for index in range(args.start, args.end + 1):
         tex_path = args.latex_root / str(index) / f"{index}.tex"
+        latex_root = args.latex_root
         if not tex_path.exists():
-            raise FileNotFoundError(f"missing tex: {tex_path}")
+            fallback_tex = args.fallback_latex_root / str(index) / f"{index}.tex"
+            if fallback_tex.exists():
+                tex_path = fallback_tex
+                latex_root = args.fallback_latex_root
+            else:
+                raise FileNotFoundError(f"missing tex: {tex_path}")
         styles = style_hint_lookup(index, args.style_hints_root)
-        request = build_request(index, tex_path, args.latex_root, styles)
-        appended_missing = append_missing_report_equations(index, request, args.latex_root, styles)
+        request = build_request(index, tex_path, latex_root, styles)
+        appended_missing = append_missing_report_equations(index, request, latex_root, styles)
         out_path = args.out_dir / f"full-{index:02d}.request.json"
         out_path.write_text(json.dumps(request, ensure_ascii=False, indent=2), encoding="utf-8")
         question_count = len(request["sections"][0]["questions"])
