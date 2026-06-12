@@ -25,8 +25,8 @@ class VectorWmfFormulaRendererTest {
 
     @Test
     void structuredFormulaIsNotClaimedAsVectorRenderableYet() {
-        assertFalse(VectorWmfFormulaRenderer.canRender("\\frac{1}{2}"));
         assertFalse(VectorWmfFormulaRenderer.canRender("x^{\\frac{1}{2}}"));
+        assertFalse(VectorWmfFormulaRenderer.canRender("\\sqrt{\\frac{1}{2}}"));
     }
 
     @Test
@@ -80,6 +80,21 @@ class VectorWmfFormulaRendererTest {
         assertTrue(VectorWmfFormulaRenderer.canRender("C\\times D=kD ^ { 2 }"));
         assertTrue(records.contains(0x02FB));
         assertTrue(records.contains(0x012D));
+        assertTrue(records.contains(0x0A32));
+        assertFalse(records.contains(0x0F43));
+    }
+
+    @Test
+    void simpleFractionsCanRenderAsVectorTextAndLines() throws IOException {
+        byte[] wmf = VectorWmfFormulaRenderer.render("\\frac { 1 } { 15 }", 24.0d, 28.0d);
+        List<Integer> records = records(wmf);
+
+        assertTrue(VectorWmfFormulaRenderer.canRender("\\frac { 1 } { 15 }"));
+        assertTrue(VectorWmfFormulaRenderer.canRender(
+            "\\left ( { 1+2+\\cdots +9+a+b+c } \\right )\\div 3=15+\\frac { a+b+c } { 3 }"
+        ));
+        assertTrue(records.contains(0x02FA), "fraction vector WMF should create a pen");
+        assertTrue(records.contains(0x0325), "fraction vector WMF should draw a fraction bar");
         assertTrue(records.contains(0x0A32));
         assertFalse(records.contains(0x0F43));
     }

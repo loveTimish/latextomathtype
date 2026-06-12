@@ -65,12 +65,24 @@ final class VectorWmfFormulaRenderer {
         }); // SetTextColor black
         builder.record(0x02FB, out -> writeFont(out, "Times New Roman", 12.0d)); // CreateFontIndirect
         builder.record(0x02FB, out -> writeFont(out, "Times New Roman", 8.0d)); // CreateFontIndirect
+        builder.record(0x02FA, VectorWmfFormulaRenderer::writeBlackPen); // CreatePen
         builder.record(0x012D, out -> writeWord(out, 0)); // SelectObject
 
         double widthScale = widthPt / Math.max(layout.widthPt(), 1.0d);
         widthScale = Math.max(0.70d, Math.min(1.25d, widthScale));
         double heightScale = heightPt / Math.max(layout.heightPt(), 1.0d);
         heightScale = Math.max(0.70d, Math.min(1.25d, heightScale));
+        if (!layout.lines().isEmpty()) {
+            builder.record(0x012D, out -> writeWord(out, 2)); // SelectObject pen
+            for (LineSegment line : layout.lines()) {
+                int x1 = toTwips(0.5d + line.x1Pt() * widthScale);
+                int y1 = toTwips(1.0d + line.y1Pt() * heightScale);
+                int x2 = toTwips(0.5d + line.x2Pt() * widthScale);
+                int y2 = toTwips(1.0d + line.y2Pt() * heightScale);
+                builder.record(0x0325, out -> writePolyline(out, x1, y1, x2, y2));
+            }
+            builder.record(0x012D, out -> writeWord(out, 0));
+        }
         boolean scriptFontSelected = false;
         for (PlacedText run : layout.runs()) {
             if (run.script() != scriptFontSelected) {
@@ -94,6 +106,10 @@ final class VectorWmfFormulaRenderer {
         Matcher array = ARRAY_PATTERN.matcher(text);
         if (array.matches()) {
             return layoutArray(array.group(1));
+        }
+        FormulaLayout fractions = layoutFractions(text);
+        if (fractions != null) {
+            return fractions;
         }
         FormulaLayout scripts = layoutScripts(text);
         if (scripts != null) {
@@ -207,6 +223,70 @@ final class VectorWmfFormulaRenderer {
             cursor = groupEnd + 1;
         }
         return sawScript && !placed.isEmpty() ? new FormulaLayout(placed, Math.max(x, 1.0d), 13.0d) : null;
+    }
+
+    private static FormulaLayout layoutFractions(String text) {
+        List<PlacedText> placed = new ArrayList<>();
+        List<LineSegment> lines = new ArrayList<>();
+        double x = 0d;
+        int cursor = 0;
+        boolean sawFraction = false;
+        while (cursor < text.length()) {
+            int frac = text.indexOf("\\frac", cursor);
+            if (frac < 0) {
+                String tail = text.substring(cursor);
+                if (!tail.isBlank()) {
+                    List<TextRun> suffix = tokenizeFlat(tail);
+                    if (suffix == null) {
+                        return null;
+                    }
+                    x = placeRuns(placed, suffix, x, 14.4d, false);
+                }
+                break;
+            }
+            String prefixText = text.substring(cursor, frac);
+            if (!prefixText.isBlank()) {
+                List<TextRun> prefix = tokenizeFlat(prefixText);
+                if (prefix == null) {
+                    return null;
+                }
+                x = placeRuns(placed, prefix, x, 14.4d, false);
+            }
+            int numeratorStart = skipWhitespaceForward(text, frac + 5);
+            if (numeratorStart >= text.length() || text.charAt(numeratorStart) != '{') {
+                return null;
+            }
+            int numeratorEnd = findGroupEnd(text, numeratorStart);
+            if (numeratorEnd < 0) {
+                return null;
+            }
+            int denominatorStart = skipWhitespaceForward(text, numeratorEnd + 1);
+            if (denominatorStart >= text.length() || text.charAt(denominatorStart) != '{') {
+                return null;
+            }
+            int denominatorEnd = findGroupEnd(text, denominatorStart);
+            if (denominatorEnd < 0) {
+                return null;
+            }
+            List<TextRun> numerator = tokenizeFlat(text.substring(numeratorStart + 1, numeratorEnd));
+            List<TextRun> denominator = tokenizeFlat(text.substring(denominatorStart + 1, denominatorEnd));
+            if (numerator == null || denominator == null) {
+                return null;
+            }
+            double numeratorWidth = estimatedWidthPt(numerator);
+            double denominatorWidth = estimatedWidthPt(denominator);
+            double fractionWidth = Math.max(numeratorWidth, denominatorWidth) + 3.0d;
+            double fractionX = x + 1.0d;
+            placeRuns(placed, numerator, fractionX + (fractionWidth - numeratorWidth) / 2.0d, 7.8d, false);
+            placeRuns(placed, denominator, fractionX + (fractionWidth - denominatorWidth) / 2.0d, 20.3d, false);
+            lines.add(new LineSegment(fractionX, 12.2d, fractionX + fractionWidth, 12.2d));
+            x = fractionX + fractionWidth + 1.0d;
+            sawFraction = true;
+            cursor = denominatorEnd + 1;
+        }
+        return sawFraction && !placed.isEmpty()
+            ? new FormulaLayout(placed, lines, Math.max(x, 1.0d), 25.5d)
+            : null;
     }
 
     private static FormulaLayout layoutArray(String body) {
@@ -473,6 +553,22 @@ final class VectorWmfFormulaRenderer {
         }
     }
 
+    private static void writeBlackPen(ByteArrayOutputStream out) throws IOException {
+        writeWord(out, 0); // PS_SOLID
+        writeShort(out, Math.max(1, toTwips(0.45d)));
+        writeShort(out, 0);
+        writeDWord(out, 0);
+    }
+
+    private static void writePolyline(ByteArrayOutputStream out, int x1, int y1, int x2, int y2)
+        throws IOException {
+        writeWord(out, 2);
+        writeShort(out, x1);
+        writeShort(out, y1);
+        writeShort(out, x2);
+        writeShort(out, y2);
+    }
+
     private static void writeFont(ByteArrayOutputStream out, String face, double sizePt) throws IOException {
         writeShort(out, -toTwips(sizePt));
         writeShort(out, 0);
@@ -537,7 +633,13 @@ final class VectorWmfFormulaRenderer {
     private record PlacedText(String text, boolean cjk, boolean script, double xPt, double baselinePt) {
     }
 
-    private record FormulaLayout(List<PlacedText> runs, double widthPt, double heightPt) {
+    private record LineSegment(double x1Pt, double y1Pt, double x2Pt, double y2Pt) {
+    }
+
+    private record FormulaLayout(List<PlacedText> runs, List<LineSegment> lines, double widthPt, double heightPt) {
+        private FormulaLayout(List<PlacedText> runs, double widthPt, double heightPt) {
+            this(runs, List.of(), widthPt, heightPt);
+        }
     }
 
     private record Command(String text, int end) {
@@ -566,7 +668,7 @@ final class VectorWmfFormulaRenderer {
             if ((bytes.length & 1) == 1) {
                 records.write(0);
             }
-            if (function == 0x02FB) {
+            if (function == 0x02FB || function == 0x02FA) {
                 objectCount++;
             }
             maxRecordWords = Math.max(maxRecordWords, words);
