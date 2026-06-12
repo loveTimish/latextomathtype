@@ -26,7 +26,7 @@ class VectorWmfFormulaRendererTest {
     @Test
     void structuredFormulaIsNotClaimedAsVectorRenderableYet() {
         assertFalse(VectorWmfFormulaRenderer.canRender("\\frac{1}{2}"));
-        assertFalse(VectorWmfFormulaRenderer.canRender("x^{2}"));
+        assertFalse(VectorWmfFormulaRenderer.canRender("x^{\\frac{1}{2}}"));
     }
 
     @Test
@@ -64,7 +64,22 @@ class VectorWmfFormulaRendererTest {
 
         assertTrue(VectorWmfFormulaRenderer.canRender("\\mathrm{9}"));
         assertTrue(VectorWmfFormulaRenderer.canRender("\\vartriangle"));
+        assertTrue(VectorWmfFormulaRenderer.canRender("1\\sim 9"));
+        assertTrue(VectorWmfFormulaRenderer.canRender("\\bigcirc"));
         assertTrue(VectorWmfFormulaRenderer.canRender("(1+2+3+\\cdots +9)\\div 3=15"));
+        assertTrue(records.contains(0x0A32));
+        assertFalse(records.contains(0x0F43));
+    }
+
+    @Test
+    void simpleScriptsCanRenderAsVectorText() throws IOException {
+        byte[] wmf = VectorWmfFormulaRenderer.render("C\\times D=kD ^ { 2 }", 92.0d, 13.0d);
+        List<Integer> records = records(wmf);
+
+        assertTrue(VectorWmfFormulaRenderer.canRender("a_{ 1 }"));
+        assertTrue(VectorWmfFormulaRenderer.canRender("C\\times D=kD ^ { 2 }"));
+        assertTrue(records.contains(0x02FB));
+        assertTrue(records.contains(0x012D));
         assertTrue(records.contains(0x0A32));
         assertFalse(records.contains(0x0F43));
     }

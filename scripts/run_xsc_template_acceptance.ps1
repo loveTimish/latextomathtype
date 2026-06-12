@@ -2,7 +2,7 @@ param(
     [int]$Start = 1,
     [int]$End = 10,
     [string]$Stamp = "",
-    [string]$DatasetDir = "F:\资料\xsc资料\word_files",
+    [string]$DatasetDir = "",
     [string]$AnalysisDir = "D:\latextomathtype\analysis",
     [string]$LatexRoot = "D:\latextomathtype\analysis\xsc-latex",
     [string]$DocxToLatexDir = "D:\docxtolatex\docxtolatex",
@@ -10,6 +10,10 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not $DatasetDir) {
+    $DatasetDir = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String("Rjpc6LWE5paZXHhzY+i1hOaWmVx3b3JkX2ZpbGVz"))
+}
 
 if (-not $Stamp) {
     $Stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -72,7 +76,9 @@ try {
     for ($i = $Start; $i -le $End; $i++) {
         $pad = "{0:D2}" -f $i
         $sourceDocx = Join-Path $DatasetDir "$i.docx"
-        $generatedDocx = Join-Path $generatedDir "xsc测试集完整重建_$pad.docx"
+        $generatedMatch = Get-ChildItem -LiteralPath $generatedDir -Filter "*_$pad.docx" |
+            Select-Object -First 1
+        $generatedDocx = if ($generatedMatch) { $generatedMatch.FullName } else { Join-Path $generatedDir "$pad.docx" }
         $reportPath = Join-Path $LatexRoot "$i\$i.report.json"
         if (-not (Test-Path -LiteralPath $reportPath)) {
             $fallbackReport = Join-Path $AnalysisDir "batch10-latex\$i\$i.report.json"
@@ -82,7 +88,7 @@ try {
         }
         $requestPath = Join-Path $AnalysisDir "batch10-full-requests\full-$pad.request.json"
         $pairOut = Join-Path $pairDir "$i"
-        $templateDocx = Join-Path $templateDir "xsc模板保真重建_$pad.docx"
+        $templateDocx = Join-Path $templateDir "xsc-template-rebuild_$pad.docx"
         $recordJson = Join-Path $recordDir "$i-wmf-records.json"
         $metricOut = Join-Path $metricDir "$i"
         New-Item -ItemType Directory -Force -Path $pairOut, $metricOut | Out-Null

@@ -64,13 +64,19 @@ final class VectorWmfFormulaRenderer {
             writeWord(out, 0);
         }); // SetTextColor black
         builder.record(0x02FB, out -> writeFont(out, "Times New Roman", 12.0d)); // CreateFontIndirect
+        builder.record(0x02FB, out -> writeFont(out, "Times New Roman", 8.0d)); // CreateFontIndirect
         builder.record(0x012D, out -> writeWord(out, 0)); // SelectObject
 
         double widthScale = widthPt / Math.max(layout.widthPt(), 1.0d);
         widthScale = Math.max(0.70d, Math.min(1.25d, widthScale));
         double heightScale = heightPt / Math.max(layout.heightPt(), 1.0d);
         heightScale = Math.max(0.70d, Math.min(1.25d, heightScale));
+        boolean scriptFontSelected = false;
         for (PlacedText run : layout.runs()) {
+            if (run.script() != scriptFontSelected) {
+                builder.record(0x012D, out -> writeWord(out, run.script() ? 1 : 0));
+                scriptFontSelected = run.script();
+            }
             byte[] text = run.text().getBytes(run.cjk() ? GBK : StandardCharsets.ISO_8859_1);
             final int runX = toTwips(0.5d + run.xPt() * widthScale);
             final int runBaseline = toTwips(1.0d + run.baselinePt() * heightScale);
@@ -88,6 +94,10 @@ final class VectorWmfFormulaRenderer {
         Matcher array = ARRAY_PATTERN.matcher(text);
         if (array.matches()) {
             return layoutArray(array.group(1));
+        }
+        FormulaLayout scripts = layoutScripts(text);
+        if (scripts != null) {
+            return scripts;
         }
         List<TextRun> runs = tokenizeFlat(text);
         if (runs == null) {
@@ -138,10 +148,65 @@ final class VectorWmfFormulaRenderer {
         double x = 0d;
         double baseline = 9.6d;
         for (TextRun run : runs) {
-            placed.add(new PlacedText(run.text(), run.cjk(), x, baseline));
+            placed.add(new PlacedText(run.text(), run.cjk(), false, x, baseline));
             x += estimatedRunWidthPt(run);
         }
         return new FormulaLayout(placed, Math.max(x, 1.0d), 13.0d);
+    }
+
+    private static FormulaLayout layoutScripts(String text) {
+        List<PlacedText> placed = new ArrayList<>();
+        double x = 0d;
+        int cursor = 0;
+        boolean sawScript = false;
+        while (cursor < text.length()) {
+            int op = nextScriptOperator(text, cursor);
+            if (op < 0) {
+                String tail = text.substring(cursor);
+                if (!tail.isBlank()) {
+                    List<TextRun> suffix = tokenizeFlat(tail);
+                    if (suffix == null) {
+                        return null;
+                    }
+                    x = placeRuns(placed, suffix, x, 9.6d, false);
+                }
+                break;
+            }
+            int atomEnd = skipWhitespaceBackward(text, op);
+            int atomStart = findAtomStart(text, atomEnd);
+            if (atomStart < cursor || atomStart >= atomEnd) {
+                return null;
+            }
+            int groupStart = skipWhitespaceForward(text, op + 1);
+            if (groupStart >= text.length() || text.charAt(groupStart) != '{') {
+                return null;
+            }
+            int groupEnd = findGroupEnd(text, groupStart);
+            if (groupEnd < 0) {
+                return null;
+            }
+            String prefixText = text.substring(cursor, atomStart);
+            if (!prefixText.isBlank()) {
+                List<TextRun> prefix = tokenizeFlat(prefixText);
+                if (prefix == null) {
+                    return null;
+                }
+                x = placeRuns(placed, prefix, x, 9.6d, false);
+            }
+            List<TextRun> base = tokenizeFlat(text.substring(atomStart, atomEnd));
+            List<TextRun> script = tokenizeFlat(text.substring(groupStart + 1, groupEnd));
+            if (base == null || script == null) {
+                return null;
+            }
+            double baseWidth = estimatedWidthPt(base);
+            x = placeRuns(placed, base, x, 9.6d, false);
+            double scriptBaseline = text.charAt(op) == '^' ? 5.4d : 12.1d;
+            placeRuns(placed, script, x + 0.4d, scriptBaseline, true);
+            x += Math.max(0d, estimatedScriptWidthPt(script) - baseWidth) + 1.5d;
+            sawScript = true;
+            cursor = groupEnd + 1;
+        }
+        return sawScript && !placed.isEmpty() ? new FormulaLayout(placed, Math.max(x, 1.0d), 13.0d) : null;
     }
 
     private static FormulaLayout layoutArray(String body) {
@@ -189,7 +254,7 @@ final class VectorWmfFormulaRenderer {
                 List<TextRun> runs = row.get(col);
                 double runX = x[col] + Math.max(0d, widths[col] - estimatedWidthPt(runs));
                 for (TextRun run : runs) {
-                    placed.add(new PlacedText(run.text(), run.cjk(), runX, baseline));
+                    placed.add(new PlacedText(run.text(), run.cjk(), false, runX, baseline));
                     runX += estimatedRunWidthPt(run);
                 }
             }
@@ -260,6 +325,8 @@ final class VectorWmfFormulaRenderer {
             case "cdots" -> "⋯";
             case "pi" -> "π";
             case "circ" -> "°";
+            case "sim" -> "~";
+            case "bigcirc" -> "○";
             case "square" -> "□";
             case "vartriangle" -> "△";
             default -> null;
@@ -288,6 +355,91 @@ final class VectorWmfFormulaRenderer {
             width += estimatedRunWidthPt(run);
         }
         return width;
+    }
+
+    private static double estimatedScriptWidthPt(List<TextRun> runs) {
+        return estimatedWidthPt(runs) * 0.66d;
+    }
+
+    private static double placeRuns(List<PlacedText> placed, List<TextRun> runs, double x, double baseline,
+        boolean script) {
+        double cursor = x;
+        for (TextRun run : runs) {
+            placed.add(new PlacedText(run.text(), run.cjk(), script, cursor, baseline));
+            cursor += script ? estimatedRunWidthPt(run) * 0.66d : estimatedRunWidthPt(run);
+        }
+        return cursor;
+    }
+
+    private static int nextScriptOperator(String text, int start) {
+        for (int i = start; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '^' || ch == '_') {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static int skipWhitespaceBackward(String text, int start) {
+        int i = start;
+        while (i > 0 && Character.isWhitespace(text.charAt(i - 1))) {
+            i--;
+        }
+        return i;
+    }
+
+    private static int skipWhitespaceForward(String text, int start) {
+        int i = start;
+        while (i < text.length() && Character.isWhitespace(text.charAt(i))) {
+            i++;
+        }
+        return i;
+    }
+
+    private static int findAtomStart(String text, int atomEnd) {
+        int i = atomEnd - 1;
+        if (i < 0) {
+            return atomEnd;
+        }
+        char ch = text.charAt(i);
+        if (ch == '}') {
+            int depth = 1;
+            i--;
+            while (i >= 0) {
+                char current = text.charAt(i);
+                if (current == '}') {
+                    depth++;
+                } else if (current == '{') {
+                    depth--;
+                    if (depth == 0) {
+                        return i;
+                    }
+                }
+                i--;
+            }
+            return atomEnd;
+        }
+        if (Character.isLetterOrDigit(ch) || ch > 127) {
+            return i;
+        }
+        return i;
+    }
+
+    private static int findGroupEnd(String text, int groupStart) {
+        int depth = 0;
+        for (int i = groupStart; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '{') {
+                depth++;
+            } else if (ch == '}') {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     private static double estimatedRunWidthPt(TextRun run) {
@@ -382,7 +534,7 @@ final class VectorWmfFormulaRenderer {
     private record TextRun(String text, boolean cjk) {
     }
 
-    private record PlacedText(String text, boolean cjk, double xPt, double baselinePt) {
+    private record PlacedText(String text, boolean cjk, boolean script, double xPt, double baselinePt) {
     }
 
     private record FormulaLayout(List<PlacedText> runs, double widthPt, double heightPt) {
@@ -396,6 +548,7 @@ final class VectorWmfFormulaRenderer {
         private final double widthPt;
         private final double heightPt;
         private int maxRecordWords;
+        private int objectCount;
 
         private WmfBuilder(double widthPt, double heightPt) {
             this.widthPt = widthPt;
@@ -413,6 +566,9 @@ final class VectorWmfFormulaRenderer {
             if ((bytes.length & 1) == 1) {
                 records.write(0);
             }
+            if (function == 0x02FB) {
+                objectCount++;
+            }
             maxRecordWords = Math.max(maxRecordWords, words);
         }
 
@@ -426,7 +582,7 @@ final class VectorWmfFormulaRenderer {
             writeWord(out, 9);
             writeWord(out, 0x0300);
             writeDWord(out, fileSizeWords);
-            writeWord(out, 1);
+            writeWord(out, Math.max(1, objectCount));
             writeDWord(out, maxRecordWords);
             writeWord(out, 0);
             out.write(recordBytes);
