@@ -140,7 +140,14 @@ def is_accepted_header_prefix_gap(row: dict) -> bool:
         and body >= 0.70
         and tail >= 0.70
     )
-    return balanced_suffix_gap or short_source_style_prefix
+    short_source_color_state = (
+        is_short_flat_formula(latex)
+        and source_records >= generated_records + 8
+        and 0.12 <= tail_ratio <= 0.35
+        and body >= 0.80
+        and tail >= 0.80
+    )
+    return balanced_suffix_gap or short_source_style_prefix or short_source_color_state
 
 
 def is_accepted_nonstructural_gap(row: dict) -> bool:

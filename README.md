@@ -252,6 +252,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 
 线性字号状态回归：`20260612-094716` 与 `20260612-094718` 的 doc81-doc90、doc101-doc110 复核中，`4\times 18=72`、`9\times 11=99`、`12+1=13` 等短平坦算式的主体字符流一致，差异集中在源 MathType 行首显式 `SIZE 65 50 01` 状态记录；验收脚本归入 `linear_size_state_gap` 并从 low-tail 结构缺口中排除。全量剩余结构缺口降到 `63`，WMF 目标尺寸仍为宽 `39551/39551`、高 `39551/39551` 在 `1%` 内且非 WMF 为 `0`。
 
+短公式颜色状态回归：`20260612-062027` 与 `20260612-064944` 的 doc121-doc130、doc141-doc155 复核中，`4\times 2`、`2\times 2`、`3\times 3` 等短平坦公式的源 MTEF 只额外写入 `COLOR_DEF Black`/`COLOR` 状态，主体字符流一致；验收脚本归入 `source_header_or_style_prefix`。doc141-doc155 hard suspects 降到 `0`，doc121-doc130 hard suspects 从 `4` 降到 `1`；全量剩余结构缺口降到 `57`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：
