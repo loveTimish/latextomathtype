@@ -242,6 +242,15 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testControlSpaceCommandIsIgnoredAsSpacing() {
+        String dump = parser.dumpMathIR("1\\ 2");
+
+        assertFalse(dump.contains("UNSUPPORTED(\\ )"));
+        assertTrue(dump.contains("NUMBER(1)"));
+        assertTrue(dump.contains("NUMBER(2)"));
+    }
+
+    @Test
     void testParseMathIrNormalizesOverarcToDedicatedArcNode() {
         MathIRNode ir = parser.parseMathIR("\\overarc{AB}");
 

@@ -55,7 +55,7 @@ public class MathIRConverter {
     );
 
     private static final Set<String> SPACING_COMMANDS = Set.of(
-        "\\,", "\\;", "\\:", "\\!", "\\quad", "\\qquad", "\\hspace", "\\hskip"
+        "\\ ", "\\,", "\\;", "\\:", "\\!", "\\quad", "\\qquad", "\\hspace", "\\hskip"
     );
 
     public MathIRNode convert(LaTeXNode root) {

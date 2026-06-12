@@ -234,6 +234,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 
 符号语义回归：`20260612-081037` 的 doc41-doc43 验证中，特殊平坦 `\div`/`\times` 写入路径统一走命令映射，避免把 LaTeX 命令首字符 `\` 写成变量字符。doc41 四条 `164\div82=...` / `128\div64=...` 抽查从旧生成的 `0200835c00` 变为 MathType Symbol `÷` 记录 `020486f700b8`；doc41-doc43 的 WMF 目标尺寸仍为 `862/862` 在 `1%` 内且非 WMF 为 `0`。
 
+解析结构回归：`20260612-083107` 的 doc41-doc43 验证中，`preNormalizeLatex` 不再把 array 行分隔后的 `\\ ` 误当成 control-space，十字交叉等多行 array 会保留行结构并继续写入 MT Extra 斜箭头。相关 `LaTeXParser`/`MathIR`/`MtefWriter`/`VerticalLayoutCompiler` 测试通过；doc41-doc43 的 WMF 目标尺寸仍为 `862/862` 在 `1%` 内且非 WMF 为 `0`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：

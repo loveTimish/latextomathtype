@@ -336,13 +336,31 @@ public class LaTeXParser {
             .replaceAll("\\\\(?:rm|bf|it|cal)\\b", "")
             .replaceAll("\\\\lt\\b", "<")
             .replaceAll("\\\\gt\\b", ">")
-            .replace("\\ ", " ")
             .replaceAll("\\\\left\\s+(?=\\\\begin\\b)", "\\\\left. ");
+        normalized = normalizeControlSpaces(normalized);
         normalized = normalizeArrayLineBreakSpacing(normalized);
         if (hasTopLevelLineBreak(normalized)) {
             normalized = "\\begin{array}{l} " + normalized + " \\end{array}";
         }
         return normalized;
+    }
+
+    private static String normalizeControlSpaces(String latex) {
+        if (latex == null || latex.indexOf("\\ ") < 0) {
+            return latex;
+        }
+        StringBuilder out = new StringBuilder(latex.length());
+        for (int i = 0; i < latex.length(); i++) {
+            char ch = latex.charAt(i);
+            if (ch == '\\' && i + 1 < latex.length() && latex.charAt(i + 1) == ' '
+                    && (i == 0 || latex.charAt(i - 1) != '\\')) {
+                out.append(' ');
+                i++;
+                continue;
+            }
+            out.append(ch);
+        }
+        return out.toString();
     }
 
     private static String normalizeArrayLineBreakSpacing(String latex) {

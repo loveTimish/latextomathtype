@@ -287,6 +287,15 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testPreNormalizeKeepsArrayLineBreakBeforeSpace() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{c}1 \\\\ 2\\end{array}");
+
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(2, array.getChildren().size(),
+            "array row break followed by a space must not be normalized as a control-space command");
+    }
+
+    @Test
     void testParseMatrixEnvironmentPromotesToArray() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{matrix}1&2\\\\3&4\\end{matrix}");
         assertNotNull(ast);
