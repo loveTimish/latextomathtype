@@ -645,6 +645,28 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testPreNormalizeVisualUnderbraceCounterAsTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("a=1515\\cdots 151004个15︸\\times 333\\cdots 32008个3︸");
+
+        LaTeXNode underbrace = ast.getChildren().get(2);
+        assertEquals(LaTeXNode.Type.SUBSCRIPT, underbrace.getType());
+        assertEquals("\\underbrace", underbrace.getChildren().get(0).getValue());
+        assertEquals("1515\\cdots15", flatten(underbrace.getChildren().get(0).getChildren().get(0)));
+        assertEquals("1004个15", flatten(underbrace.getChildren().get(1)));
+    }
+
+    @Test
+    void testPreNormalizeJoinedVisualUnderbraceCounterAsTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("=505050\\cdots 51004个5和1003个0︸\\times 999\\cdots 92008个9︸");
+
+        LaTeXNode underbrace = ast.getChildren().get(1);
+        assertEquals(LaTeXNode.Type.SUBSCRIPT, underbrace.getType());
+        assertEquals("\\underbrace", underbrace.getChildren().get(0).getValue());
+        assertEquals("505050\\cdots5", flatten(underbrace.getChildren().get(0).getChildren().get(0)));
+        assertEquals("1004个5和1003个0", flatten(underbrace.getChildren().get(1)));
+    }
+
+    @Test
     void testParseOverbracketAsUnaryCommand() {
         LaTeXNode ast = parser.parseLaTeX("\\overbracket{a+b+c}");
         assertNotNull(ast);

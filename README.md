@@ -236,6 +236,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 
 解析结构回归：`20260612-083107` 的 doc41-doc43 验证中，`preNormalizeLatex` 不再把 array 行分隔后的 `\\ ` 误当成 control-space，十字交叉等多行 array 会保留行结构并继续写入 MT Extra 斜箭头。相关 `LaTeXParser`/`MathIR`/`MtefWriter`/`VerticalLayoutCompiler` 测试通过；doc41-doc43 的 WMF 目标尺寸仍为 `862/862` 在 `1%` 内且非 WMF 为 `0`。
 
+下括注结构回归：`20260612-084603` 的 doc12 验证中，xsc/docxtolatex 输出的 `1515\cdots 151004个15︸`、`505050\cdots 51004个5和1003个0︸` 等视觉下括号计数串会在解析前规范化为 `\underbrace{...}_{...}`，从平铺字符恢复到 MathType `TM_HBRACE` 模板路径。doc12 的 hard suspect 从旧批次 `8` 降到 `2`；WMF 目标尺寸保持 `223/223` 在 `1%` 内且非 WMF 为 `0`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：

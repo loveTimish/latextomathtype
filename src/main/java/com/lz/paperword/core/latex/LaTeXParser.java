@@ -338,6 +338,7 @@ public class LaTeXParser {
             .replaceAll("\\\\gt\\b", ">")
             .replaceAll("\\\\left\\s+(?=\\\\begin\\b)", "\\\\left. ");
         normalized = normalizeControlSpaces(normalized);
+        normalized = normalizeVisualUnderbraceCounters(normalized);
         normalized = normalizeArrayLineBreakSpacing(normalized);
         if (hasTopLevelLineBreak(normalized)) {
             normalized = "\\begin{array}{l} " + normalized + " \\end{array}";
@@ -361,6 +362,112 @@ public class LaTeXParser {
             out.append(ch);
         }
         return out.toString();
+    }
+
+    private static final Pattern VISUAL_UNDERBRACE_COUNTER =
+        Pattern.compile("(?<body>(?:\\\\mathrm\\{[0-9]\\}|[0-9])+\\s*(?:\\\\cdots|\\.\\.\\.)\\s*(?:\\\\mathrm\\{[0-9]\\}|[0-9])+)\\s*(?<note>\\d+个(?:\\\\mathrm\\{[0-9]\\}|[0-9])+(?:和\\d+个(?:\\\\mathrm\\{[0-9]\\}|[0-9])+)?|\\d+个[0-9]+(?:和\\d+个[0-9]+)?)︸");
+
+    private static String normalizeVisualUnderbraceCounters(String latex) {
+        if (latex == null || latex.indexOf('︸') < 0) {
+            return latex;
+        }
+        String joinedVisualCounters = normalizeJoinedVisualUnderbraceCounters(latex);
+
+        Matcher matcher = VISUAL_UNDERBRACE_COUNTER.matcher(joinedVisualCounters);
+        StringBuffer out = new StringBuffer(joinedVisualCounters.length());
+        while (matcher.find()) {
+            String body = matcher.group("body").trim();
+            String note = matcher.group("note").trim();
+            matcher.appendReplacement(out, Matcher.quoteReplacement("\\underbrace{" + body + "}_{" + note + "}"));
+        }
+        matcher.appendTail(out);
+        return out.toString();
+    }
+
+    private static String normalizeJoinedVisualUnderbraceCounters(String latex) {
+        StringBuilder out = new StringBuilder(latex.length());
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int brace = latex.indexOf('︸', cursor);
+            if (brace < 0) {
+                out.append(latex.substring(cursor));
+                break;
+            }
+            int ellipsis = lastEllipsisBefore(latex, cursor, brace);
+            if (ellipsis < 0) {
+                out.append(latex, cursor, brace + 1);
+                cursor = brace + 1;
+                continue;
+            }
+            int suffixStart = ellipsis + (latex.startsWith("\\cdots", ellipsis) ? "\\cdots".length() : "...".length());
+            int ge = latex.indexOf('个', suffixStart);
+            if (ge < 0 || ge > brace) {
+                out.append(latex, cursor, brace + 1);
+                cursor = brace + 1;
+                continue;
+            }
+            while (suffixStart < ge && Character.isWhitespace(latex.charAt(suffixStart))) {
+                suffixStart++;
+            }
+            int digitsStart = ge - 1;
+            while (digitsStart >= suffixStart && Character.isDigit(latex.charAt(digitsStart))) {
+                digitsStart--;
+            }
+            digitsStart++;
+            if (digitsStart >= ge) {
+                out.append(latex, cursor, brace + 1);
+                cursor = brace + 1;
+                continue;
+            }
+            String beforeGe = latex.substring(digitsStart, ge);
+            String unit = readCounterUnit(latex, ge + 1, brace);
+            if (unit.isEmpty() || !beforeGe.startsWith(unit) || beforeGe.length() == unit.length()) {
+                out.append(latex, cursor, brace + 1);
+                cursor = brace + 1;
+                continue;
+            }
+            int bodyStart = findVisualUnderbraceBodyStart(latex, cursor, ellipsis);
+            String body = latex.substring(bodyStart, digitsStart) + unit;
+            String note = beforeGe.substring(unit.length()) + latex.substring(ge, brace);
+            out.append(latex, cursor, bodyStart);
+            out.append("\\underbrace{")
+                .append(body)
+                .append("}_{")
+                .append(note)
+                .append("}");
+            cursor = brace + 1;
+        }
+        return out.toString();
+    }
+
+    private static int findVisualUnderbraceBodyStart(String latex, int from, int ellipsis) {
+        int best = from;
+        String[] delimiters = {"\\times", "\\div", "=", "+", "-", "("};
+        for (String delimiter : delimiters) {
+            int idx = latex.lastIndexOf(delimiter, ellipsis);
+            if (idx >= from) {
+                best = Math.max(best, idx + delimiter.length());
+            }
+        }
+        while (best < ellipsis && Character.isWhitespace(latex.charAt(best))) {
+            best++;
+        }
+        return best;
+    }
+
+    private static int lastEllipsisBefore(String latex, int from, int to) {
+        int cdots = latex.lastIndexOf("\\cdots", to);
+        int dots = latex.lastIndexOf("...", to);
+        int best = Math.max(cdots, dots);
+        return best >= from ? best : -1;
+    }
+
+    private static String readCounterUnit(String latex, int from, int to) {
+        int i = from;
+        while (i < to && Character.isDigit(latex.charAt(i))) {
+            i++;
+        }
+        return i > from ? latex.substring(from, i) : "";
     }
 
     private static String normalizeArrayLineBreakSpacing(String latex) {
