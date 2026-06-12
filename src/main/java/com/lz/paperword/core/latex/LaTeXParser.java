@@ -399,7 +399,7 @@ public class LaTeXParser {
                 cursor = brace + 1;
                 continue;
             }
-            int suffixStart = ellipsis + (latex.startsWith("\\cdots", ellipsis) ? "\\cdots".length() : "...".length());
+            int suffixStart = ellipsis + ellipsisLengthAt(latex, ellipsis);
             int ge = latex.indexOf('个', suffixStart);
             if (ge < 0 || ge > brace) {
                 out.append(latex, cursor, brace + 1);
@@ -409,26 +409,22 @@ public class LaTeXParser {
             while (suffixStart < ge && Character.isWhitespace(latex.charAt(suffixStart))) {
                 suffixStart++;
             }
-            int digitsStart = ge - 1;
-            while (digitsStart >= suffixStart && Character.isDigit(latex.charAt(digitsStart))) {
-                digitsStart--;
-            }
-            digitsStart++;
-            if (digitsStart >= ge) {
+            String tail = latex.substring(suffixStart, ge);
+            String unit = readCounterUnit(latex, ge + 1, brace);
+            if (unit.isEmpty() || !tail.startsWith(unit) || tail.length() == unit.length()) {
                 out.append(latex, cursor, brace + 1);
                 cursor = brace + 1;
                 continue;
             }
-            String beforeGe = latex.substring(digitsStart, ge);
-            String unit = readCounterUnit(latex, ge + 1, brace);
-            if (unit.isEmpty() || !beforeGe.startsWith(unit) || beforeGe.length() == unit.length()) {
+            String count = tail.substring(unit.length());
+            if (!isCounterCount(count)) {
                 out.append(latex, cursor, brace + 1);
                 cursor = brace + 1;
                 continue;
             }
             int bodyStart = findVisualUnderbraceBodyStart(latex, cursor, ellipsis);
-            String body = latex.substring(bodyStart, digitsStart) + unit;
-            String note = beforeGe.substring(unit.length()) + latex.substring(ge, brace);
+            String body = latex.substring(bodyStart, suffixStart) + unit;
+            String note = count + latex.substring(ge, brace);
             out.append(latex, cursor, bodyStart);
             out.append("\\underbrace{")
                 .append(body)
@@ -438,6 +434,16 @@ public class LaTeXParser {
             cursor = brace + 1;
         }
         return out.toString();
+    }
+
+    private static int ellipsisLengthAt(String latex, int index) {
+        if (latex.startsWith("\\cdot \\cdot \\cdot", index)) {
+            return "\\cdot \\cdot \\cdot".length();
+        }
+        if (latex.startsWith("\\cdots", index)) {
+            return "\\cdots".length();
+        }
+        return "...".length();
     }
 
     private static int findVisualUnderbraceBodyStart(String latex, int from, int ellipsis) {
@@ -458,16 +464,40 @@ public class LaTeXParser {
     private static int lastEllipsisBefore(String latex, int from, int to) {
         int cdots = latex.lastIndexOf("\\cdots", to);
         int dots = latex.lastIndexOf("...", to);
-        int best = Math.max(cdots, dots);
+        int cdotDots = latex.lastIndexOf("\\cdot \\cdot \\cdot", to);
+        int best = Math.max(Math.max(cdots, dots), cdotDots);
         return best >= from ? best : -1;
     }
 
     private static String readCounterUnit(String latex, int from, int to) {
         int i = from;
-        while (i < to && Character.isDigit(latex.charAt(i))) {
+        if (latex.startsWith("\\mathrm{", i)) {
+            int close = latex.indexOf('}', i + "\\mathrm{".length());
+            if (close > i && close < to) {
+                return latex.substring(i, close + 1);
+            }
+        }
+        while (i < to && (Character.isDigit(latex.charAt(i)) || isAsciiLetter(latex.charAt(i)))) {
             i++;
         }
         return i > from ? latex.substring(from, i) : "";
+    }
+
+    private static boolean isCounterCount(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (!Character.isDigit(ch) && !isAsciiLetter(ch)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isAsciiLetter(char ch) {
+        return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
     }
 
     private static String normalizeArrayLineBreakSpacing(String latex) {

@@ -238,6 +238,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 
 下括注结构回归：`20260612-084603` 的 doc12 验证中，xsc/docxtolatex 输出的 `1515\cdots 151004个15︸`、`505050\cdots 51004个5和1003个0︸` 等视觉下括号计数串会在解析前规范化为 `\underbrace{...}_{...}`，从平铺字符恢复到 MathType `TM_HBRACE` 模板路径。doc12 的 hard suspect 从旧批次 `8` 降到 `2`；WMF 目标尺寸保持 `223/223` 在 `1%` 内且非 WMF 为 `0`。
 
+下括注补洞回归：`20260612-085409` 继续覆盖 `88\cdot \cdot \cdot 82007个8︸` 与 `999\cdots 9k个9︸` 两类剩余计数下括注，doc12 hard suspect 从 `2` 降到 `0`，clean pairs 为 `223/223`；WMF 目标尺寸仍为宽 `223/223`、高 `223/223` 在 `1%` 内且非 WMF 为 `0`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：
