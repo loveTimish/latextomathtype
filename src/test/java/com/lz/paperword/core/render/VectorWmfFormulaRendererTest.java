@@ -57,6 +57,18 @@ class VectorWmfFormulaRendererTest {
         assertFalse(records.contains(0x0F43));
     }
 
+    @Test
+    void textCommandsCanRenderAsVectorText() throws IOException {
+        byte[] wmf = VectorWmfFormulaRenderer.render("\\vartriangle =\\mathrm{9}+\\cdots", 70.0d, 13.0d);
+        List<Integer> records = records(wmf);
+
+        assertTrue(VectorWmfFormulaRenderer.canRender("\\mathrm{9}"));
+        assertTrue(VectorWmfFormulaRenderer.canRender("\\vartriangle"));
+        assertTrue(VectorWmfFormulaRenderer.canRender("(1+2+3+\\cdots +9)\\div 3=15"));
+        assertTrue(records.contains(0x0A32));
+        assertFalse(records.contains(0x0F43));
+    }
+
     private static List<Integer> records(byte[] data) {
         int offset = hasPlaceableHeader(data) ? 22 : 0;
         offset += 18;

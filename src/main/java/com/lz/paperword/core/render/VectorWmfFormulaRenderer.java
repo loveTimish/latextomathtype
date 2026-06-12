@@ -32,6 +32,7 @@ final class VectorWmfFormulaRenderer {
         "\\\\begin\\{array}\\{[^}]*}\\s*(.*?)\\s*\\\\end\\{array}",
         Pattern.DOTALL
     );
+    private static final Pattern MATHRM_PATTERN = Pattern.compile("\\\\mathrm\\s*\\{\\s*([^{}]*)\\s*}");
 
     private VectorWmfFormulaRenderer() {
     }
@@ -83,6 +84,7 @@ final class VectorWmfFormulaRenderer {
             return null;
         }
         String text = stripMetricsAndStyles(latex).trim();
+        text = normalizeTextCommands(text);
         Matcher array = ARRAY_PATTERN.matcher(text);
         if (array.matches()) {
             return layoutArray(array.group(1));
@@ -104,6 +106,7 @@ final class VectorWmfFormulaRenderer {
 
     private static List<TextRun> tokenizeFlat(String text) {
         text = normalizeFlatLatex(text);
+        text = normalizeTextCommands(text);
         if (text.contains("\\begin") || text.contains("\\frac") || text.contains("\\sqrt")
             || text.contains("\\over") || text.contains("^") || text.contains("_")) {
             return null;
@@ -206,6 +209,16 @@ final class VectorWmfFormulaRenderer {
         return out.toString();
     }
 
+    private static String normalizeTextCommands(String text) {
+        Matcher matcher = MATHRM_PATTERN.matcher(text);
+        StringBuffer out = new StringBuffer();
+        while (matcher.find()) {
+            matcher.appendReplacement(out, Matcher.quoteReplacement(matcher.group(1).trim()));
+        }
+        matcher.appendTail(out);
+        return out.toString();
+    }
+
     private static String stripMetricsAndStyles(String latex) {
         String text = latex.strip();
         boolean changed;
@@ -244,9 +257,11 @@ final class VectorWmfFormulaRenderer {
             case "lt" -> "<";
             case "gt" -> ">";
             case "cdot" -> "·";
+            case "cdots" -> "⋯";
             case "pi" -> "π";
             case "circ" -> "°";
             case "square" -> "□";
+            case "vartriangle" -> "△";
             default -> null;
         };
         if (mapped == null) {
