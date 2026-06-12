@@ -99,6 +99,18 @@ class VectorWmfFormulaRendererTest {
         assertFalse(records.contains(0x0F43));
     }
 
+    @Test
+    void leftBraceArraysCanRenderAsVectorText() throws IOException {
+        String latex = "\\left \\{ \\begin{array}{l}B=2 \\\\,s=14\\end{array} \\right.";
+        byte[] wmf = VectorWmfFormulaRenderer.render(latex, 42.0d, 28.0d);
+        List<Integer> records = records(wmf);
+
+        assertTrue(VectorWmfFormulaRenderer.canRender(latex));
+        assertTrue(records.contains(0x02FB));
+        assertTrue(records.contains(0x0A32));
+        assertFalse(records.contains(0x0F43));
+    }
+
     private static List<Integer> records(byte[] data) {
         int offset = hasPlaceableHeader(data) ? 22 : 0;
         offset += 18;

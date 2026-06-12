@@ -32,6 +32,10 @@ final class VectorWmfFormulaRenderer {
         "\\\\begin\\{array}\\{[^}]*}\\s*(.*?)\\s*\\\\end\\{array}",
         Pattern.DOTALL
     );
+    private static final Pattern LEFT_BRACE_ARRAY_PATTERN = Pattern.compile(
+        "\\\\left\\s*\\\\\\{\\s*\\\\begin\\{array}\\{[^}]*}\\s*(.*?)\\s*\\\\end\\{array}\\s*\\\\right\\s*\\.",
+        Pattern.DOTALL
+    );
     private static final Pattern MATHRM_PATTERN = Pattern.compile("\\\\mathrm\\s*\\{\\s*([^{}]*)\\s*}");
 
     private VectorWmfFormulaRenderer() {
@@ -65,6 +69,7 @@ final class VectorWmfFormulaRenderer {
         }); // SetTextColor black
         builder.record(0x02FB, out -> writeFont(out, "Times New Roman", 12.0d)); // CreateFontIndirect
         builder.record(0x02FB, out -> writeFont(out, "Times New Roman", 8.0d)); // CreateFontIndirect
+        builder.record(0x02FB, out -> writeFont(out, "Times New Roman", 22.0d)); // CreateFontIndirect
         builder.record(0x02FA, VectorWmfFormulaRenderer::writeBlackPen); // CreatePen
         builder.record(0x012D, out -> writeWord(out, 0)); // SelectObject
 
@@ -73,7 +78,7 @@ final class VectorWmfFormulaRenderer {
         double heightScale = heightPt / Math.max(layout.heightPt(), 1.0d);
         heightScale = Math.max(0.70d, Math.min(1.25d, heightScale));
         if (!layout.lines().isEmpty()) {
-            builder.record(0x012D, out -> writeWord(out, 2)); // SelectObject pen
+            builder.record(0x012D, out -> writeWord(out, 3)); // SelectObject pen
             for (LineSegment line : layout.lines()) {
                 int x1 = toTwips(0.5d + line.x1Pt() * widthScale);
                 int y1 = toTwips(1.0d + line.y1Pt() * heightScale);
@@ -83,11 +88,12 @@ final class VectorWmfFormulaRenderer {
             }
             builder.record(0x012D, out -> writeWord(out, 0));
         }
-        boolean scriptFontSelected = false;
+        int selectedFont = 0;
         for (PlacedText run : layout.runs()) {
-            if (run.script() != scriptFontSelected) {
-                builder.record(0x012D, out -> writeWord(out, run.script() ? 1 : 0));
-                scriptFontSelected = run.script();
+            int fontIndex = run.display() ? 2 : (run.script() ? 1 : 0);
+            if (fontIndex != selectedFont) {
+                builder.record(0x012D, out -> writeWord(out, fontIndex));
+                selectedFont = fontIndex;
             }
             byte[] text = run.text().getBytes(run.cjk() ? GBK : StandardCharsets.ISO_8859_1);
             final int runX = toTwips(0.5d + run.xPt() * widthScale);
@@ -103,6 +109,10 @@ final class VectorWmfFormulaRenderer {
         }
         String text = stripMetricsAndStyles(latex).trim();
         text = normalizeTextCommands(text);
+        Matcher leftBraceArray = LEFT_BRACE_ARRAY_PATTERN.matcher(text);
+        if (leftBraceArray.matches()) {
+            return layoutLeftBraceArray(leftBraceArray.group(1));
+        }
         Matcher array = ARRAY_PATTERN.matcher(text);
         if (array.matches()) {
             return layoutArray(array.group(1));
@@ -164,7 +174,7 @@ final class VectorWmfFormulaRenderer {
         double x = 0d;
         double baseline = 9.6d;
         for (TextRun run : runs) {
-            placed.add(new PlacedText(run.text(), run.cjk(), false, x, baseline));
+            placed.add(new PlacedText(run.text(), run.cjk(), false, false, x, baseline));
             x += estimatedRunWidthPt(run);
         }
         return new FormulaLayout(placed, Math.max(x, 1.0d), 13.0d);
@@ -289,6 +299,25 @@ final class VectorWmfFormulaRenderer {
             : null;
     }
 
+    private static FormulaLayout layoutLeftBraceArray(String body) {
+        FormulaLayout inner = layoutArray(body);
+        if (inner == null) {
+            return null;
+        }
+        List<PlacedText> placed = new ArrayList<>();
+        double braceBaseline = Math.max(16.0d, Math.min(inner.heightPt() - 1.0d, inner.heightPt() * 0.72d));
+        placed.add(new PlacedText("{", false, false, true, 0.0d, braceBaseline));
+        for (PlacedText run : inner.runs()) {
+            placed.add(new PlacedText(run.text(), run.cjk(), run.script(), run.display(), run.xPt() + 7.0d,
+                run.baselinePt()));
+        }
+        List<LineSegment> lines = new ArrayList<>();
+        for (LineSegment line : inner.lines()) {
+            lines.add(new LineSegment(line.x1Pt() + 7.0d, line.y1Pt(), line.x2Pt() + 7.0d, line.y2Pt()));
+        }
+        return new FormulaLayout(placed, lines, inner.widthPt() + 8.5d, inner.heightPt());
+    }
+
     private static FormulaLayout layoutArray(String body) {
         String[] rowText = body.split("\\\\\\\\");
         List<List<List<TextRun>>> rows = new ArrayList<>();
@@ -334,7 +363,7 @@ final class VectorWmfFormulaRenderer {
                 List<TextRun> runs = row.get(col);
                 double runX = x[col] + Math.max(0d, widths[col] - estimatedWidthPt(runs));
                 for (TextRun run : runs) {
-                    placed.add(new PlacedText(run.text(), run.cjk(), false, runX, baseline));
+                    placed.add(new PlacedText(run.text(), run.cjk(), false, false, runX, baseline));
                     runX += estimatedRunWidthPt(run);
                 }
             }
@@ -445,7 +474,7 @@ final class VectorWmfFormulaRenderer {
         boolean script) {
         double cursor = x;
         for (TextRun run : runs) {
-            placed.add(new PlacedText(run.text(), run.cjk(), script, cursor, baseline));
+            placed.add(new PlacedText(run.text(), run.cjk(), script, false, cursor, baseline));
             cursor += script ? estimatedRunWidthPt(run) * 0.66d : estimatedRunWidthPt(run);
         }
         return cursor;
@@ -630,7 +659,8 @@ final class VectorWmfFormulaRenderer {
     private record TextRun(String text, boolean cjk) {
     }
 
-    private record PlacedText(String text, boolean cjk, boolean script, double xPt, double baselinePt) {
+    private record PlacedText(String text, boolean cjk, boolean script, boolean display, double xPt,
+        double baselinePt) {
     }
 
     private record LineSegment(double x1Pt, double y1Pt, double x2Pt, double y2Pt) {
