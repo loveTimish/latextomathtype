@@ -710,6 +710,19 @@ class MtefWriterTest {
     }
 
     @Test
+    void testArithmeticDigitFencesStayFlat() {
+        LaTeXNode ast = parser.parseLaTeX("5\\times (1)-(2)");
+        byte[] mtef = writer.write(ast);
+        int baselineParenTemplates = countOccurrences(writer.write(parser.parseLaTeX("5\\times 1-2")),
+            new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN});
+
+        assertNotNull(mtef);
+        assertEquals(baselineParenTemplates,
+            countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN}),
+            "single-digit arithmetic operands should stay as flat parenthesis characters, not equation-number templates");
+    }
+
+    @Test
     void testWriteReversedIntervalFenceUsesTmInterval() {
         LaTeXNode ast = parser.parseLaTeX("\\left] x \\right(");
         byte[] mtef = writer.write(ast);

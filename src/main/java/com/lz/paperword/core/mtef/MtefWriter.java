@@ -885,7 +885,8 @@ public class MtefWriter {
                             i = closeIdx; // 跳过已处理的括号内容和闭括号节点
                             continue;
                         } else if (closeNode.getType() == LaTeXNode.Type.CHAR) {
-                            if (isEquationNumberFenceContent(parenContent)) {
+                            if (isEquationNumberFenceContent(parenContent)
+                                    && isEquationNumberFenceContext(nodes, i, closeIdx)) {
                                 writeParenFence(out, openCh, closeCh, parenContent);
                             } else if (isLinearFenceContent(parenContent)) {
                                 writeFlatFenceChars(out, openCh, closeCh, parenContent);
@@ -2072,6 +2073,59 @@ public class MtefWriter {
             && only.getValue() != null
             && only.getValue().length() == 1
             && Character.isDigit(only.getValue().charAt(0));
+    }
+
+    private boolean isEquationNumberFenceContext(List<LaTeXNode> nodes, int openIdx, int closeIdx) {
+        if (nodes == null || openIdx < 0 || closeIdx <= openIdx || closeIdx >= nodes.size()) {
+            return false;
+        }
+        LaTeXNode previous = previousNonSpacingNode(nodes, openIdx);
+        LaTeXNode next = nextNonSpacingNode(nodes, closeIdx);
+        if (next != null) {
+            return false;
+        }
+        return previous == null || !isArithmeticOperandPrefix(previous);
+    }
+
+    private LaTeXNode previousNonSpacingNode(List<LaTeXNode> nodes, int idx) {
+        for (int i = idx - 1; i >= 0; i--) {
+            LaTeXNode node = nodes.get(i);
+            if (!isSpacingNode(node)) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private LaTeXNode nextNonSpacingNode(List<LaTeXNode> nodes, int idx) {
+        for (int i = idx + 1; i < nodes.size(); i++) {
+            LaTeXNode node = nodes.get(i);
+            if (!isSpacingNode(node)) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private boolean isSpacingNode(LaTeXNode node) {
+        return node != null
+            && node.getType() == LaTeXNode.Type.COMMAND
+            && LATEX_SPACING_COMMANDS.contains(node.getValue());
+    }
+
+    private boolean isArithmeticOperandPrefix(LaTeXNode node) {
+        if (node == null) {
+            return false;
+        }
+        if (node.getType() == LaTeXNode.Type.COMMAND) {
+            String value = node.getValue();
+            return "\\times".equals(value) || "\\div".equals(value) || "\\cdot".equals(value);
+        }
+        if (node.getType() != LaTeXNode.Type.CHAR || node.getValue() == null || node.getValue().length() != 1) {
+            return false;
+        }
+        char ch = node.getValue().charAt(0);
+        return ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '=' || ch == '<' || ch == '>';
     }
 
     private boolean isFlatFenceNode(LaTeXNode node) {
