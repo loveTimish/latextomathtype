@@ -420,6 +420,13 @@ func mtefRecordStart(body []byte) int {
 	if len(body) <= 5 {
 		return 0
 	}
+	if bytes.Equal(body[5:min(len(body), 10)], []byte("DSMT6")) {
+		for i := 10; i < len(body); i++ {
+			if body[i] == 0 {
+				return min(len(body), i+2)
+			}
+		}
+	}
 	for i := 5; i < len(body); i++ {
 		if body[i] == 0 {
 			return i + 1

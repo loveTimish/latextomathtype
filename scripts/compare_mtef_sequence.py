@@ -67,6 +67,10 @@ def record_payload_len(data: bytes, i: int) -> int:
 def mtef_record_start(data: bytes) -> int:
     if len(data) <= 5:
         return 0
+    if data[5:10] == b"DSMT6":
+        marker_end = data.find(b"\x00", 10)
+        if marker_end >= 0:
+            return min(len(data), marker_end + 2)
     for i in range(5, len(data)):
         if data[i] == 0:
             return i + 1
