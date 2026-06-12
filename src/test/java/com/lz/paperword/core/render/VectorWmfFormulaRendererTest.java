@@ -126,6 +126,17 @@ class VectorWmfFormulaRendererTest {
     }
 
     @Test
+    void emptyAndParenArraysCanRenderAsVectorText() throws IOException {
+        String empty = "\\begin{array}{cccc} {} & \\end{array}";
+        String paren = "\\left ( { \\begin{array}{cc} {} & 4, \\\\,8 & \\end{array} } \\right )";
+
+        assertTrue(VectorWmfFormulaRenderer.canRender(empty));
+        assertTrue(VectorWmfFormulaRenderer.canRender(paren));
+        assertFalse(records(VectorWmfFormulaRenderer.render(empty, 18.0d, 13.0d)).contains(0x0F43));
+        assertFalse(records(VectorWmfFormulaRenderer.render(paren, 34.0d, 33.0d)).contains(0x0F43));
+    }
+
+    @Test
     void standaloneScriptsAndEscapedUnderscoresCanRenderAsVectorText() throws IOException {
         byte[] script = VectorWmfFormulaRenderer.render("^ { \\mathrm{3} }", 12.0d, 13.0d);
         byte[] underline = VectorWmfFormulaRenderer.render("EF=\\_\\_\\_\\_\\_", 56.0d, 13.0d);

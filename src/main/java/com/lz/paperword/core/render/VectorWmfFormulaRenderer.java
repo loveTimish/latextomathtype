@@ -36,6 +36,10 @@ final class VectorWmfFormulaRenderer {
         "\\\\left\\s*\\\\\\{\\s*\\\\begin\\{array}\\{[^}]*}\\s*(.*?)\\s*\\\\end\\{array}\\s*\\\\right\\s*\\.",
         Pattern.DOTALL
     );
+    private static final Pattern PAREN_ARRAY_PATTERN = Pattern.compile(
+        "\\\\left\\s*\\(\\s*\\{\\s*\\\\begin\\{array}\\{[^}]*}\\s*(.*?)\\s*\\\\end\\{array}\\s*}\\s*\\\\right\\s*\\)",
+        Pattern.DOTALL
+    );
     private static final Pattern MATHRM_PATTERN = Pattern.compile("\\\\mathrm\\s*\\{\\s*([^{}]*)\\s*}");
 
     private VectorWmfFormulaRenderer() {
@@ -112,6 +116,10 @@ final class VectorWmfFormulaRenderer {
         Matcher leftBraceArray = LEFT_BRACE_ARRAY_PATTERN.matcher(text);
         if (leftBraceArray.matches()) {
             return layoutLeftBraceArray(leftBraceArray.group(1));
+        }
+        Matcher parenArray = PAREN_ARRAY_PATTERN.matcher(text);
+        if (parenArray.matches()) {
+            return layoutParenArray(parenArray.group(1));
         }
         Matcher array = ARRAY_PATTERN.matcher(text);
         if (array.matches()) {
@@ -358,6 +366,20 @@ final class VectorWmfFormulaRenderer {
         return new FormulaLayout(placed, lines, inner.widthPt() + 8.5d, inner.heightPt());
     }
 
+    private static FormulaLayout layoutParenArray(String body) {
+        FormulaLayout inner = layoutArray(body);
+        if (inner == null) {
+            return null;
+        }
+        List<PlacedText> placed = new ArrayList<>();
+        double braceBaseline = Math.max(16.0d, Math.min(inner.heightPt() - 1.0d, inner.heightPt() * 0.72d));
+        placed.add(new PlacedText("(", false, false, true, 0.0d, braceBaseline));
+        List<LineSegment> lines = new ArrayList<>();
+        appendLayout(placed, lines, inner, 7.0d, 0.0d);
+        placed.add(new PlacedText(")", false, false, true, inner.widthPt() + 7.5d, braceBaseline));
+        return new FormulaLayout(placed, lines, inner.widthPt() + 16.0d, inner.heightPt());
+    }
+
     private static FormulaLayout layoutArray(String body) {
         String[] rowText = body.split("\\\\\\\\");
         List<List<List<TextRun>>> rows = new ArrayList<>();
@@ -410,7 +432,10 @@ final class VectorWmfFormulaRenderer {
         }
         double width = Math.max(cursor - 2.0d, 1.0d);
         double height = Math.max(13.0d, 2.5d + rows.size() * rowHeight);
-        return placed.isEmpty() ? null : new FormulaLayout(placed, width, height);
+        if (placed.isEmpty()) {
+            placed.add(new PlacedText(" ", false, false, false, 0.0d, 9.6d));
+        }
+        return new FormulaLayout(placed, width, height);
     }
 
     private static String normalizeFlatLatex(String text) {
