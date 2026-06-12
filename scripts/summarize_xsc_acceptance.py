@@ -238,6 +238,10 @@ def parse_mtef_semantic_stream(data: bytes) -> dict[str, list[tuple[int, ...]]]:
 def mtef_record_start(data: bytes) -> int:
     if len(data) <= 5:
         return 0
+    if data[5:10] == b"DSMT6":
+        marker_end = data.find(b"\x00", 10)
+        if marker_end >= 0:
+            return min(len(data), marker_end + 2)
     for i in range(5, len(data)):
         if data[i] == 0:
             return i + 1
@@ -328,9 +332,37 @@ def next_record_offset(data: bytes, i: int) -> int:
                 extra += 1
             if i + 1 + extra < len(data):
                 extra += 1
+    elif tag == 0x12:
+        start = next_formula_line_after_prefs(data, i)
+        if start > i:
+            extra = start - i - 1
     elif tag >= 100 and i + 1 < len(data):
         extra = 1 + data[i + 1]
     return min(len(data), max(i + 1, i + 1 + extra))
+
+
+def next_formula_line_after_prefs(data: bytes, i: int) -> int:
+    for pos in range(i + 1, len(data) - 2):
+        if (
+            data[pos] == 0x0A
+            and data[pos + 1] == 0x01
+            and data[pos + 2] in {0x00, 0x01, 0x04}
+            and line_has_meaningful_tail(data, pos + 1)
+        ):
+            return pos
+    return -1
+
+
+def line_has_meaningful_tail(data: bytes, start: int) -> bool:
+    i = start + 2
+    while i < len(data):
+        tag = data[i]
+        if tag in {0x02, 0x03, 0x04, 0x05}:
+            return True
+        if tag == 0x00:
+            return False
+        i = next_record_offset(data, i)
+    return False
 
 
 def nudge_len(data: bytes, i: int) -> int:
