@@ -968,6 +968,7 @@ public class MtefWriter {
         if (!shouldUseBoxedFlatMultiplicationEquation()) {
             return false;
         }
+        boolean hasSourceMetrics = currentStyleHints.sourceMetrics() != null;
         List<LaTeXNode> nodes = root == null ? List.of() : root.getChildren();
         if (nodes.size() < 5) {
             return false;
@@ -976,9 +977,9 @@ public class MtefWriter {
         boolean hasEquals = false;
         boolean afterEquals = false;
         int timesCount = 0;
-        int leftDigits = 0;
-        int rightDigits = 0;
-        int resultDigits = 0;
+        int leftItems = 0;
+        int rightItems = 0;
+        int resultItems = 0;
         boolean afterAdditive = false;
         for (LaTeXNode node : nodes) {
             if (node.getType() == LaTeXNode.Type.COMMAND && "\\times".equals(node.getValue())) {
@@ -998,13 +999,16 @@ public class MtefWriter {
             }
             if (node.getType() == LaTeXNode.Type.CHAR && node.getValue() != null && node.getValue().length() == 1) {
                 char ch = node.getValue().charAt(0);
-                if (Character.isDigit(ch)) {
+                if (Character.isLetterOrDigit(ch)) {
+                    if (Character.isLetter(ch) && !hasSourceMetrics) {
+                        return false;
+                    }
                     if (afterEquals) {
-                        resultDigits++;
+                        resultItems++;
                     } else if (hasTimes && !afterAdditive) {
-                        rightDigits++;
+                        rightItems++;
                     } else if (!hasTimes) {
-                        leftDigits++;
+                        leftItems++;
                     }
                     continue;
                 }
@@ -1019,8 +1023,9 @@ public class MtefWriter {
             return false;
         }
         return hasTimes && hasEquals && timesCount == 1
-                && leftDigits == 1 && rightDigits == 1
-                && resultDigits >= 1 && resultDigits <= 2;
+                && leftItems >= 1 && leftItems <= 2
+                && rightItems >= 1 && rightItems <= 2
+                && resultItems >= 1 && resultItems <= 2;
     }
 
     private boolean shouldUseBoxedFlatMultiplicationEquation() {
@@ -1035,13 +1040,22 @@ public class MtefWriter {
     private void writeFlatMultiplicationEquation(ByteArrayOutputStream out, LaTeXNode root) throws IOException {
         List<LaTeXNode> nodes = root.getChildren();
         boolean afterEquals = false;
+        boolean beforeTimes = true;
+        List<LaTeXNode> leftFactor = collectUntilArithmeticBoundary(nodes, 0);
         for (int i = 0; i < nodes.size(); i++) {
             LaTeXNode node = nodes.get(i);
             if (node.getType() == LaTeXNode.Type.COMMAND && "\\times".equals(node.getValue())) {
+                if (shouldBoxLeadingMultiplicationFactor(leftFactor, nodes)) {
+                    writeBoxSegment(out, leftFactor);
+                }
                 writeCommandNode(out, node);
                 List<LaTeXNode> factor = collectUntilArithmeticBoundary(nodes, i + 1);
                 writeBoxSegment(out, factor);
                 i += factor.size();
+                beforeTimes = false;
+                continue;
+            }
+            if (beforeTimes && shouldBoxLeadingMultiplicationFactor(leftFactor, nodes) && leftFactor.contains(node)) {
                 continue;
             }
             if (isCharValue(node, "=")) {
@@ -1055,6 +1069,26 @@ public class MtefWriter {
             }
             writeNode(out, node);
         }
+    }
+
+    private boolean shouldBoxLeadingMultiplicationFactor(List<LaTeXNode> leftFactor, List<LaTeXNode> nodes) {
+        var metrics = currentStyleHints.sourceMetrics();
+        if (metrics == null) {
+            return false;
+        }
+        if (leftFactor.isEmpty() || !allBoxableArithmeticChars(leftFactor)) {
+            return false;
+        }
+        int additiveBeforeEquals = 0;
+        for (LaTeXNode node : nodes) {
+            if (isCharValue(node, "=")) {
+                break;
+            }
+            if (isCharValue(node, "+") || isCharValue(node, "-")) {
+                additiveBeforeEquals++;
+            }
+        }
+        return additiveBeforeEquals > 0 || containsLetter(leftFactor);
     }
 
     private List<LaTeXNode> collectUntilDivisionBoundary(List<LaTeXNode> nodes, int start) {
@@ -1093,6 +1127,22 @@ public class MtefWriter {
                 && node.getValue() != null
                 && node.getValue().length() == 1
                 && Character.isLetterOrDigit(node.getValue().charAt(0));
+    }
+
+    private boolean allBoxableArithmeticChars(List<LaTeXNode> nodes) {
+        return nodes != null && !nodes.isEmpty() && nodes.stream().allMatch(this::isBoxableArithmeticChar);
+    }
+
+    private boolean containsLetter(List<LaTeXNode> nodes) {
+        if (nodes == null) {
+            return false;
+        }
+        for (LaTeXNode node : nodes) {
+            if (isBoxableArithmeticChar(node) && Character.isLetter(node.getValue().charAt(0))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void writePlainSegment(ByteArrayOutputStream out, List<LaTeXNode> nodes) throws IOException {

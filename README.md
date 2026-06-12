@@ -246,6 +246,8 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
 
 短乘法等式回归：`20260612-092653` 的 doc11-doc12 验证中，13pt 普通行内算式 `7\times 9=63`、`9\times 6=54` 会保持 MathType 平坦字符流，不再误套 `TM_BOX 0x1e` 操作数模板；两条记录的 MTEF `recordCosine/tailRecordCosine` 均恢复到 `1.000000`。同时 `20260612-092536` 的 doc41-doc43 复核中，18pt 候选式 `3\times 4=12`、`3\times 4+9=21` 仍保持 box 模板路径，核心样本相似度为 `0.997434`/`0.996872`；doc11-doc12 clean pairs 为 `562/562`，WMF 目标尺寸为宽 `562/562`、高 `562/562` 在 `1%` 内且非 WMF 为 `0`。
 
+乘法候选式模板回归：`20260612-093622` 的 doc41-doc50 验证中，18pt 字母/数字混合候选式会按测试集写入 `TM_BOX 0x1e` 操作数模板，覆盖 `A\times B=5D`、`5\times F+9=GH`、`E\times F+9=5H`、`E\times F+9=G5` 等模式；这些样本的 MTEF `recordCosine/tailRecordCosine` 均为 `1.000000`。同批 hard suspects 从 `14` 降到 `10`，low-tail failures 从 `11` 降到 `10`；全量剩余结构缺口降到 `75`，WMF 目标尺寸仍为宽 `39551/39551`、高 `39551/39551` 在 `1%` 内且非 WMF 为 `0`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：

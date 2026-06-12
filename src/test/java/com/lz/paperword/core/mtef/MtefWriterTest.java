@@ -1309,14 +1309,27 @@ class MtefWriterTest {
     }
 
     @Test
-    void testMultiplicationEquationLeavesAddendFlat() {
-        LaTeXNode ast = parser.parseLaTeX("3\\times 4+9=21");
-        byte[] mtef = writer.write(ast);
+    void testTallVariableMultiplicationCandidateBoxesAllOperands() {
+        LaTeXNode ast = parser.parseLaTeX("E\\times F+9=G5");
+        FormulaStyleHints hints = FormulaStyleHints.empty().withSourceMetrics(new FormulaMetrics(75.0d, 18.0d));
+        byte[] mtef = writer.write(ast, hints);
 
         assertNotNull(mtef);
         byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
-        assertEquals(3, countOccurrences(mtef, box),
-            "MathType keeps the +9 addend flat while boxing the multiplier and result digits");
+        assertEquals(4, countOccurrences(mtef, box),
+            "18pt letter/digit multiplication candidates box both factors and each result character");
+    }
+
+    @Test
+    void testMultiplicationEquationLeavesAddendFlat() {
+        LaTeXNode ast = parser.parseLaTeX("3\\times 4+9=21");
+        FormulaStyleHints hints = FormulaStyleHints.empty().withSourceMetrics(new FormulaMetrics(75.0d, 18.0d));
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(4, countOccurrences(mtef, box),
+            "MathType keeps the +9 addend flat while boxing both factors and result digits");
     }
 
     @Test
