@@ -1317,3 +1317,35 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v122c-exact-s1-relation-height-width\formula-preview-ink-source-vs-v122c-first30.json`
 - v122c aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v122c-exact-s1-relation-height-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v123b targets long-chain script relations such as
+  `S_{1}\colon S_{3}\colon S_{2}\colon S_{4}=a^{2}\colon b^{2}\colon ab\colon ab`.
+  Lowering `SCRIPT_RELATION_LONG_CHAIN_FONT_Y_SCALE` from `0.906` to `0.890`
+  fixes the old sourceIndex `2` height outlier, but only if the actual X
+  layout scale is widened from `0.987` to `0.9895`. Do not rely on
+  `SCRIPT_RELATION_LONG_CHAIN_WIDTH_COMPENSATION` alone for this case; that
+  changes the preview box more than the ink width.
+- Do not keep the v123 first attempt as-is. `SCRIPT_RELATION_LONG_CHAIN_FONT_Y_SCALE
+  = 0.890` with `SCRIPT_RELATION_LONG_CHAIN_WIDTH_COMPENSATION = 1.026`
+  improved first-30 height max from `0.210pt` to `0.127pt`, but worsened width
+  max from `0.298pt` to `0.313pt`. The kept v123b branch returns the
+  compensation to `1.022` and widens the long-chain ink scale instead.
+- v123b on doc 61 first-30 ink versus v122c: height average improved from
+  `0.079pt` to `0.075pt`, p90 improved from `0.113pt` to `0.112pt`, and max
+  improved from `0.210pt` to `0.127pt`. Width average improved from `0.133pt`
+  to `0.117pt`, median improved from `0.126pt` to `0.082pt`, p90 improved from
+  `0.260pt` to `0.246pt`, and max stayed `0.298pt`.
+- v123b structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal target
+  shape width/height `520/520` within 1%.
+- v123b sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v123b-long-chain-relation-height-xscale\xsc测试集完整重建_61.docx`
+- v123b leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v123b-long-chain-relation-height-xscale\leak-scan-61.json`
+- v123b WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v123b-long-chain-relation-height-xscale\wmf-report-61.json`
+- v123b first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v123b-long-chain-relation-height-xscale\formula-preview-ink-source-vs-v123b-first30.json`
+- v123b aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v123b-long-chain-relation-height-xscale\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
