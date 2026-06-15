@@ -45,7 +45,7 @@ final class VectorWmfFormulaRenderer {
     private static final Font CJK_FONT = new Font("SimSun", Font.PLAIN, 12);
     private static final double SHORT_GEOMETRY_LABEL_WIDTH_SCALE = 0.90d;
     private static final double SIMPLE_LINEAR_FONT_Y_SCALE = 0.92d;
-    private static final double SCRIPT_FONT_HEIGHT_SCALE = 0.92d;
+    private static final double SCRIPT_FONT_HEIGHT_SCALE = 0.90d;
     private static final double SCRIPT_GLYPH_WIDTH_SCALE = 0.84d;
     private static final double STANDALONE_TWO_DIGIT_WIDTH_SCALE = 0.81d;
     private static final double STANDALONE_SINGLE_S_WIDTH_SCALE = 1.10d;

@@ -637,3 +637,36 @@ batch, then append any useful lesson or pitfall found in that round.
   `scriptRelationFontYEligible`, so the next broad run should include more
   relation chains and visual spot checks for short equations, triangle chains,
   and long ratio chains.
+- The leak and WMF report scripts use `--out`, not `--json-out`. If they fail
+  with argparse errors, rerun `scripts/scan_docx_latex_leaks.py ... --out ...`
+  and `scripts/wmf_record_report.py ... --out ...` before judging the document.
+- v100 lowers `SCRIPT_FONT_HEIGHT_SCALE` from `0.92` to `0.90` and bumps
+  `LaTeXImageRenderer.CACHE_VERSION` to
+  `v100-xsc-short-script-height-tightened`. This is a small positive scoped
+  to simple short scripts: doc 61 first-30 width average improved from v99
+  `0.191pt` to `0.188pt`, and height average from `0.171pt` to `0.164pt`.
+  The worst height stayed `0.449pt`, so `S_1` / `S_3` are not solved by script
+  font height alone; their remaining height error is likely base glyph or
+  overall vertical layout, not subscript font size.
+- v100 structural checks on doc 61 still passed: `520` valid MathType OLE,
+  `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE, zero bitmap
+  WMF, zero WMF LaTeX leaks, and zero review-required suspicious WMF text.
+  Aligned physical target metrics remained within the 1% guardrail for all
+  `520` objects: shape width/height max error `0`, WMF width max error about
+  `0.178%`, WMF height max error about `0.177%`.
+- v100 no-context review found no P0/P1 issue. It confirmed
+  `SCRIPT_FONT_HEIGHT_SCALE` flows through `simpleShortScriptScale()` and does
+  not touch OLE/MTEF or relation-chain writing, while the cache version reaches
+  the renderer cache key.
+- v100 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v100-short-script-height\xsc测试集完整重建_61.docx`
+- v100 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v100-short-script-height\leak-scan-61.json`
+- v100 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v100-short-script-height\wmf-report-61.json`
+- v100 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v100-short-script-height\formula-preview-ink-source-vs-v100-first30.json`
+- v100 short-script ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v100-short-script-height\formula-preview-ink-source-vs-v100-short-scripts.json`
+- v100 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v100-short-script-height\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
