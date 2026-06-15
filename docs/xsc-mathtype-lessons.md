@@ -826,3 +826,36 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v107-a-equals-one-width\formula-preview-ink-source-vs-v107-first30.json`
 - v107 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v107-a-equals-one-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v108 narrows only repeated parenthesized-power equations by changing
+  `EQUATION_PAREN_POWER_WIDTH_SCALE` from `0.93` to `0.925` and bumping the
+  cache to `v108-xsc-repeated-paren-width`. This is deliberately scoped to
+  `repeatedEquationParenPower`, so single formulas like
+  `S=\left(a+b\right)^2=9` and standalone `\left(a+b\right)^2` keep their
+  existing behavior.
+- A failed test-tightening attempt showed that the existing WMF unit-level
+  assertions (`<2200`) are too coarse for proving this small change; reducing
+  them to `<2190` failed even though the real DOCX ink metric improved. For
+  micro width tuning, keep unit tests as behavioral guards and trust the
+  rendered DOCX ink comparison for acceptance evidence.
+- v108 on doc 61 improved sourceIndex `18`
+  (`S=\left(a+b\right)^{2}=\left(1+2\right)^{2}=9`) from width delta
+  `+0.448pt` to `+0.348pt`. First-30 width average improved from v107
+  `0.157pt` to `0.154pt`, and width max improved from `0.448pt` to `0.414pt`.
+  Height average/max stayed `0.116pt` / `0.330pt`. The next visible targets
+  are sourceIndex `15` (`S_{1}=a^{2}=1`, `-0.414pt`) and the relation-chain
+  height group led by sourceIndex `30` (`+0.330pt`).
+- v108 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal
+  target shape width/height `520/520` within 1%.
+- v108 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v108-repeated-paren-width\xsc测试集完整重建_61.docx`
+- v108 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v108-repeated-paren-width\leak-scan-61.json`
+- v108 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v108-repeated-paren-width\wmf-report-61.json`
+- v108 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v108-repeated-paren-width\formula-preview-ink-source-vs-v108-first30.json`
+- v108 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v108-repeated-paren-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
