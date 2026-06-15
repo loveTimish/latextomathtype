@@ -1373,6 +1373,56 @@ class MtefWriterTest {
     }
 
     @Test
+    void testFullwidthParenthesesUseFarEastTextRecords() {
+        LaTeXNode ast = parser.parseLaTeX("（n> m）");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) 0x8C, 0x08, (byte) 0xFF}));
+        assertTrue(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) 0x8C, 0x09, (byte) 0xFF}));
+        assertFalse(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) MtefRecord.FN_VARIABLE, 0x08, (byte) 0xFF}));
+    }
+
+    @Test
+    void testBoxedZeroWidthPlaceholderWritesEmptySlot() {
+        LaTeXNode ast = parser.parseLaTeX("\\boxed{\u200d\u200d\u200d \u200d}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertEquals(1, countOccurrences(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00
+        }));
+        assertFalse(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) MtefRecord.FN_VARIABLE, 0x0D, 0x20}));
+    }
+
+    @Test
+    void testAsciiFlatParensOverrideFlatParenTemplateHint() {
+        LaTeXNode ast = parser.parseLaTeX("=(110+126)\\times 17\\div 2=2006");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, true, false, false, false, null);
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        String chars = extractCharStream(mtef);
+        assertTrue(chars.contains("=(110+126)"),
+            "asciiFlatParens must preserve literal paren order even when flatParenTemplate is also present");
+        assertFalse(chars.contains("=110+126()"),
+            "asciiFlatParens must not move literal parens after the content");
+    }
+
+    @Test
+    void testAsciiFlatParensDoesNotFlattenExplicitFenceWithSourceMetrics() {
+        LaTeXNode ast = parser.parseLaTeX("\\left(110+126\\right)");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, true, false, false, false, new FormulaMetrics(80.0d, 20.0d));
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN}),
+            "explicit fences with source metrics still need a MathType fence template");
+    }
+
+    @Test
     void testShortMultiplicationEquationWithTallMetricsUsesBoxSegments() {
         LaTeXNode ast = parser.parseLaTeX("3\\times 4=12");
         FormulaStyleHints hints = FormulaStyleHints.empty().withSourceMetrics(new FormulaMetrics(60.0d, 18.0d));
@@ -1486,6 +1536,30 @@ class MtefWriterTest {
             i += ((options & MtefRecord.OPT_CHAR_ENC_CHAR_8) != 0) ? 5 : 4;
         }
         return digits.toString();
+    }
+
+    private String extractCharStream(byte[] bytes) {
+        StringBuilder chars = new StringBuilder();
+        for (int i = 0; i <= bytes.length - 5; i++) {
+            if ((bytes[i] & 0xFF) != MtefRecord.CHAR) {
+                continue;
+            }
+            int options = bytes[i + 1] & 0xFF;
+            if ((options & MtefRecord.OPT_CHAR_ENC_NO_MTCODE) != 0) {
+                continue;
+            }
+            int pos = i + 2;
+            if ((options & MtefRecord.OPT_NUDGE) != 0) {
+                pos += (pos < bytes.length && (bytes[pos] & 0xFF) == 0x80) ? 6 : 2;
+            }
+            if (pos + 2 >= bytes.length) {
+                continue;
+            }
+            int mtcode = (bytes[pos + 1] & 0xFF) | ((bytes[pos + 2] & 0xFF) << 8);
+            chars.append((char) mtcode);
+            i += ((options & MtefRecord.OPT_CHAR_ENC_CHAR_8) != 0) ? 5 : 4;
+        }
+        return chars.toString();
     }
 
     private int countOccurrences(byte[] bytes, byte[] needle) {

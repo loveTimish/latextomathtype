@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 
-ROOT = Path(r"D:\latextomathtype")
+ROOT = Path(__file__).resolve().parents[1]
 CURRENT_REPORT_DIR: Path | None = None
 CURRENT_DOC: int | None = None
 
@@ -21,6 +21,16 @@ def classify_failure(row: dict, tail: float, body: float, core_tail: float) -> s
     source_version = int(row.get("sourceMtefVersion") or 0)
     if source_version and source_version < 5:
         return "legacy_mtef_v3_source"
+    if is_accepted_fullwidth_fence_template_gap(row):
+        return "fullwidth_fence_template_gap"
+    if is_accepted_boxed_placeholder_template_gap(row):
+        return "boxed_placeholder_template_gap"
+    if is_source_report_latex_mismatch(row):
+        return "source_report_latex_mismatch"
+    if is_source_report_empty_char_mismatch(row):
+        return "source_report_empty_char_mismatch"
+    if is_accepted_plain_char_typeface_gap(row):
+        return "plain_char_typeface_gap"
     if is_accepted_char_stream_style_gap(row):
         return "char_stream_style_gap"
     if core_tail >= 0.99 and tail < 0.8:
@@ -66,6 +76,16 @@ def classify_suspect(row: dict) -> str:
     source_version = int(row.get("sourceMtefVersion") or 0)
     if source_version and source_version < 5:
         return "legacy_mtef_v3_source"
+    if is_accepted_fullwidth_fence_template_gap(row):
+        return "fullwidth_fence_template_gap"
+    if is_accepted_boxed_placeholder_template_gap(row):
+        return "boxed_placeholder_template_gap"
+    if is_source_report_latex_mismatch(row):
+        return "source_report_latex_mismatch"
+    if is_source_report_empty_char_mismatch(row):
+        return "source_report_empty_char_mismatch"
+    if is_accepted_plain_char_typeface_gap(row):
+        return "plain_char_typeface_gap"
     if is_accepted_char_stream_style_gap(row):
         return "char_stream_style_gap"
     if is_accepted_header_prefix_gap(row):
@@ -161,8 +181,38 @@ def is_accepted_nonstructural_gap(row: dict) -> bool:
         is_accepted_header_prefix_gap(row)
         or is_accepted_fraction_size_state_gap(row)
         or is_accepted_linear_size_state_gap(row)
+        or is_accepted_fullwidth_fence_template_gap(row)
+        or is_accepted_boxed_placeholder_template_gap(row)
         or is_accepted_char_stream_style_gap(row)
     )
+
+
+def is_accepted_fullwidth_fence_template_gap(row: dict) -> bool:
+    """Fullwidth CJK parens may be source template records or flat FE chars."""
+    latex = (row.get("latex") or "").strip()
+    if not re.fullmatch(r"（[^（）]{1,12}）", latex):
+        return False
+    inner = latex[1:-1]
+    if re.search(r"[\\^_{}\[\]]", inner):
+        return False
+    body_ratio = float(row.get("bodySizeRatio") or 0)
+    body = float(row.get("recordCosine") or 0)
+    tail = float(row.get("tailRecordCosine") or 0)
+    return 0.90 <= body_ratio <= 1.10 and body >= 0.25 and tail >= 0.25
+
+
+def is_accepted_boxed_placeholder_template_gap(row: dict) -> bool:
+    """MathType source blank boxes can contain invisible placeholder records."""
+    latex = (row.get("latex") or "").strip()
+    if not latex.startswith(r"\boxed{") or not latex.endswith("}"):
+        return False
+    inner = latex[len(r"\boxed{"):-1]
+    if not re.fullmatch(r"[\s\u200b\u200c\u200d\ufeff]*", inner):
+        return False
+    source_total = int(row.get("sourceRecordTotal") or 0)
+    generated_total = int(row.get("generatedRecordTotal") or 0)
+    body_ratio = float(row.get("bodySizeRatio") or 0)
+    return source_total >= generated_total and 0.50 <= body_ratio <= 1.10
 
 
 def is_accepted_char_stream_style_gap(row: dict) -> bool:
@@ -181,6 +231,129 @@ def is_accepted_char_stream_style_gap(row: dict) -> bool:
     if source["templates"] == generated["templates"]:
         return True
     return not has_extra_core_templates(source["templates"], generated["templates"])
+
+
+def is_source_report_latex_mismatch(row: dict) -> bool:
+    """Detect upstream report/source OLE mismatches before scoring writer quality."""
+    if has_structural_latex(row.get("latex") or ""):
+        return False
+    latex_chars = latex_to_plain_chars(row.get("latex") or "")
+    if not latex_chars:
+        return False
+    paths = pair_hex_paths(row)
+    if paths is None:
+        return False
+    source_path, generated_path = paths
+    try:
+        source = parse_mtef_semantic_stream(read_hex_dump(source_path))
+        generated = parse_mtef_semantic_stream(read_hex_dump(generated_path))
+    except (OSError, ValueError, IndexError):
+        return False
+    source_chars = semantic_chars(source)
+    generated_chars = semantic_chars(generated)
+    if not source_chars or not generated_chars:
+        return False
+    if has_extra_core_templates([], generated.get("templates", [])):
+        return False
+    if source_chars == latex_chars:
+        return False
+    return generated_chars == latex_chars
+
+
+def is_source_report_empty_char_mismatch(row: dict) -> bool:
+    if has_structural_latex(row.get("latex") or ""):
+        return False
+    latex_chars = latex_to_plain_chars(row.get("latex") or "")
+    if not latex_chars:
+        return False
+    paths = pair_hex_paths(row)
+    if paths is None:
+        return False
+    source_path, generated_path = paths
+    try:
+        source = parse_mtef_semantic_stream(read_hex_dump(source_path))
+        generated = parse_mtef_semantic_stream(read_hex_dump(generated_path))
+    except (OSError, ValueError, IndexError):
+        return False
+    if has_extra_core_templates([], generated.get("templates", [])):
+        return False
+    return not semantic_chars(source) and semantic_chars(generated) == latex_chars
+
+
+def is_accepted_plain_char_typeface_gap(row: dict) -> bool:
+    paths = pair_hex_paths(row)
+    if paths is None:
+        return False
+    try:
+        source = parse_mtef_semantic_stream(read_hex_dump(paths[0]))
+        generated = parse_mtef_semantic_stream(read_hex_dump(paths[1]))
+    except (OSError, ValueError, IndexError):
+        return False
+    source_chars = semantic_chars(source)
+    generated_chars = semantic_chars(generated)
+    if not source_chars or source_chars != generated_chars:
+        return False
+    body_ratio = float(row.get("bodySizeRatio") or 0)
+    body = float(row.get("recordCosine") or 0)
+    if not (0.95 <= body_ratio <= 1.05 and body >= 0.20):
+        return False
+    source_codes = [item[0] for item in source.get("chars", []) if len(item) > 1]
+    generated_codes = [item[0] for item in generated.get("chars", []) if len(item) > 1]
+    if len(source_codes) != len(generated_codes):
+        return False
+    return all(s == g or (s, g) in {(129, 136), (136, 129)} for s, g in zip(source_codes, generated_codes))
+
+
+def has_structural_latex(value: str) -> bool:
+    text = value or ""
+    return bool(re.search(
+        r"[\^_]|\\(?:frac|sqrt|left|right|begin|end|overline|underline|boxed|overbrace|underbrace|overset|underset)",
+        text,
+    ))
+
+
+def has_core_template_difference(source: dict[str, list[tuple[int, ...]]],
+                                 generated: dict[str, list[tuple[int, ...]]]) -> bool:
+    source_templates = source.get("templates", [])
+    generated_templates = generated.get("templates", [])
+    return has_extra_core_templates(source_templates, generated_templates) or has_extra_core_templates(generated_templates, source_templates)
+
+
+def semantic_chars(stream: dict[str, list[tuple[int, ...]]]) -> str:
+    return "".join(chr(item[1]) for item in stream.get("chars", []) if len(item) > 1 and item[1] > 0)
+
+
+def latex_to_plain_chars(value: str) -> str:
+    text = (value or "").strip()
+    if not text:
+        return ""
+    replacements = {
+        r"\times": "×",
+        r"\div": "÷",
+        r"\cdots": "⋯",
+        r"\ldots": "⋯",
+        r"\lt": "<",
+        r"\gt": ">",
+        r"\le": "≤",
+        r"\leq": "≤",
+        r"\ge": "≥",
+        r"\geq": "≥",
+        r"\neq": "≠",
+        r"\ne": "≠",
+        r"\circ": "°",
+    }
+    for key, replacement in replacements.items():
+        text = text.replace(key, replacement)
+    text = text.replace("-", "−")
+    text = re.sub(r"\\pwmetrics\{[^}]+}", "", text)
+    text = re.sub(r"\\pwstyle\{[^}]*}", "", text)
+    text = re.sub(r"\\(?:left|right|bigl|bigr|Bigl|Bigr|big|Big|,|;|:|!|quad|qquad|enspace)\b", "", text)
+    text = text.replace("{", "").replace("}", "")
+    text = text.replace("^", "").replace("_", "")
+    if "\\" in text:
+        return ""
+    text = re.sub(r"\s+", "", text)
+    return text
 
 
 def pair_hex_paths(row: dict) -> tuple[Path, Path] | None:
@@ -426,22 +599,42 @@ def summarize_size(stamp: str, size_dir: Path | None = None, start: int = 1, end
         size_dir = ROOT / "analysis" / "pair-metrics-latex" / f"{stamp}-target-direct"
     paired = target = tw = th = nonwmf = 0
     missing = []
-    for i in range(start, end + 1):
-        summary_path = size_dir / f"{i}_summary.json"
+    for doc_index in range(start, end + 1):
+        summary_path = size_dir / f"{doc_index}_summary.json"
+        doc_dir_summary = False
         if not summary_path.exists():
-            missing.append(str(summary_path))
+            pad_dir = size_dir / f"{doc_index:02d}"
+            matches = sorted(pad_dir.glob("*_summary.json")) if pad_dir.exists() else []
+            if len(matches) == 1:
+                summary_path = matches[0]
+                doc_dir_summary = True
+            elif len(matches) > 1:
+                missing.append(f"ambiguous size summary for doc {doc_index}: {pad_dir}")
+                continue
+        if not summary_path.exists():
+            missing.append(f"missing size summary for doc {doc_index}: {summary_path}")
             continue
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        if not doc_dir_summary:
+            source_stem = Path(summary.get("source") or "").stem
+            if not source_stem:
+                missing.append(f"missing source for doc {doc_index}: {summary_path}")
+                continue
+            try:
+                source_doc_index = int(source_stem)
+            except ValueError:
+                missing.append(f"unparseable source for doc {doc_index}: {summary_path} source={summary.get('source')}")
+                continue
+            if source_doc_index != doc_index:
+                missing.append(
+                    f"source mismatch for doc {doc_index}: {summary_path} source doc {source_doc_index}"
+                )
+                continue
         paired += summary["paired_objects"]
         target += summary["target_metric_objects"]
         nonwmf += summary["non_wmf_generated"]
-        csv_path = size_dir / f"{i}_vs_xsc测试集完整重建_{i:02d}.csv"
-        with csv_path.open(encoding="utf-8-sig") as f:
-            for row in csv.DictReader(f):
-                if row.get("target_wmf_w_pt_ratio"):
-                    tw += abs(float(row["target_wmf_w_pt_ratio"]) - 1) <= 0.01
-                if row.get("target_wmf_h_pt_ratio"):
-                    th += abs(float(row["target_wmf_h_pt_ratio"]) - 1) <= 0.01
+        tw += int((summary.get("target_wmf_width_ratio") or {}).get("within_1pct") or 0)
+        th += int((summary.get("target_wmf_height_ratio") or {}).get("within_1pct") or 0)
     return {
         "pairedObjects": paired,
         "targetMetricObjects": target,
@@ -467,7 +660,19 @@ def summarize_mtef(stamp: str, report_dir: Path | None = None, start: int = 1, e
     try:
         for i in range(start, end + 1):
             CURRENT_DOC = i
-            csv_path = report_dir / str(i) / f"{i}_mtef_pairs.csv"
+            candidates = sorted((report_dir / str(i)).glob("*_mtef_pairs.csv"))
+            if len(candidates) != 1:
+                failures.append({
+                "doc": i,
+                "sourceIndex": 0,
+                "tailRecordCosine": 0.0,
+                "tailCoreRecordCosine": 0.0,
+                "recordCosine": 0.0,
+                "class": f"missing_or_ambiguous_mtef_pairs:{len(candidates)}",
+                "latex": str(report_dir / str(i)),
+                })
+                continue
+            csv_path = candidates[0]
             rows = list(csv.DictReader(csv_path.open(encoding="utf-8")))
             clean_rows = [r for r in rows if r["alignmentSuspect"].lower() != "true"]
             suspect_rows = [r for r in rows if r["alignmentSuspect"].lower() == "true"]
@@ -554,14 +759,16 @@ def main() -> None:
     parser.add_argument("mtef_dir", nargs="?", type=Path)
     parser.add_argument("--start", type=int, default=1)
     parser.add_argument("--end", type=int, default=10)
+    parser.add_argument("--analysis-dir", type=Path, default=None)
     args = parser.parse_args()
+    analysis_dir = args.analysis_dir or (ROOT / "analysis")
     out = {
         "stamp": args.stamp,
         "range": {"start": args.start, "end": args.end},
         "size": summarize_size(args.stamp, args.size_dir, args.start, args.end),
         "mtef": summarize_mtef(args.stamp, args.mtef_dir, args.start, args.end),
     }
-    out_dir = ROOT / "analysis" / "acceptance-summary"
+    out_dir = analysis_dir / "acceptance-summary"
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / f"{args.stamp}.json"
     path.write_text(json.dumps(out, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

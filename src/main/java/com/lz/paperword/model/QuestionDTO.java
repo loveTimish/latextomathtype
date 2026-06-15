@@ -16,6 +16,8 @@ public class QuestionDTO {
     private String content;
     /** 题目配图的本地文件路径列表（按出现顺序渲染在题干之后、选项之前） */
     private List<String> images;
+    /** Image references found in source LaTeX but not resolved to renderable local files. */
+    private List<String> unresolvedImages;
     private List<OptionDTO> options;
     private String correct;
     private Integer score;

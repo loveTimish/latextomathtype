@@ -16,7 +16,11 @@ public class PaperExportRequest {
         private Integer stage;
         private Integer score;
         private Integer suggestTime;
+        /** Optional source document name used by compact reconstructed footers. */
+        private String sourceName;
         /** Optional compact handout layout for reference-style regenerated documents. */
         private Boolean compactLayout;
+        /** Optional: suppress generated question type labels in compact reconstructed handouts. */
+        private Boolean hideQuestionTypeMetadata;
     }
 }

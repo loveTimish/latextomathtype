@@ -71,7 +71,7 @@ public class MathTypeEmbedder {
             byte[] oleData = olePackager.packageOle(mtefData);
 
             LaTeXImageRenderer.PreviewImage preview = targetMetrics != null
-                ? imageRenderer.renderForOlePreview(rawLatex, targetMetrics.widthPt(), targetMetrics.heightPt())
+                ? imageRenderer.renderForOlePreview(rawLatex, targetMetrics.wmfWidthPt(), targetMetrics.wmfHeightPt())
                 : imageRenderer.renderForOlePreview(rawLatex);
             if (preview == null || preview.data() == null || preview.data().length == 0) {
                 throw new IllegalStateException("OLE preview rendering returned no image data");
@@ -80,11 +80,6 @@ public class MathTypeEmbedder {
                 ? new PreviewBox(preview.widthPx(), preview.heightPx())
                 : constrainPreviewBox(rawLatex, preview.widthPx(), preview.heightPx(),
                     displayScale, maxWidthPt);
-            double depthPt = preview.depthPt();
-            if (depthPt >= 0d && previewBox.heightPx() != preview.heightPx() && preview.heightPx() > 0) {
-                // 预览框被整体缩放时，基线深度按同比例缩放。
-                depthPt = depthPt * previewBox.heightPx() / preview.heightPx();
-            }
 
             OPCPackage pkg = paragraph.getDocument().getPackage();
             int idx = oleCounter.getAndIncrement();
@@ -112,9 +107,19 @@ public class MathTypeEmbedder {
                 imgPartName, TargetMode.INTERNAL,
                 "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
 
+            double previewWidthPt = resolvePreviewWidthPt(preview, previewBox, targetMetrics);
+            double previewHeightPt = resolvePreviewHeightPt(preview, previewBox, targetMetrics);
+            double shapeWidthPt = targetMetrics != null && targetMetrics.shapeWidthPt() > 0d
+                ? targetMetrics.shapeWidthPt()
+                : previewWidthPt;
+            double shapeHeightPt = targetMetrics != null && targetMetrics.shapeHeightPt() > 0d
+                ? targetMetrics.shapeHeightPt()
+                : previewHeightPt;
+            double depthPt = resolveDisplayDepthPt(preview, previewHeightPt, shapeHeightPt);
+
             insertOleObjectXml(paragraph, run, oleRel.getId(), imgRel.getId(), idx,
                 previewBox.widthPx(), previewBox.heightPx(),
-                resolvePreviewWidthPt(preview, previewBox), resolvePreviewHeightPt(preview, previewBox),
+                shapeWidthPt, shapeHeightPt,
                 rawLatex, depthPt);
 
         } catch (Exception e) {
@@ -123,7 +128,7 @@ public class MathTypeEmbedder {
     }
 
     private void insertOleObjectXml(XWPFParagraph paragraph, XWPFRun run, String oleRelId, String imgRelId,
-                                     int shapeIdx, int widthPx, int heightPx, double widthPt, double heightPt,
+                                     int shapeIdx, int widthPx, int heightPx, double shapeWidthPt, double shapeHeightPt,
                                      String rawLatex, double depthPt) {
         try {
             widthPx = Math.max(widthPx, 4);
@@ -131,15 +136,15 @@ public class MathTypeEmbedder {
 
             String shapeId = "_x0000_i" + (1024 + shapeIdx);
 
-            double targetWidthPt = widthPt > 0d ? widthPt : widthPx * PT_PER_PX;
-            double targetHeightPt = heightPt > 0d ? heightPt : heightPx * PT_PER_PX;
-            String styleWidth = String.format("%.1fpt", targetWidthPt);
-            String styleHeight = String.format("%.1fpt", targetHeightPt);
-            int dxaOrig = Math.max((int) Math.round(targetWidthPt * 20), 1);
-            int dyaOrig = Math.max((int) Math.round(targetHeightPt * 20), 1);
+            double targetShapeWidthPt = shapeWidthPt > 0d ? shapeWidthPt : widthPx * PT_PER_PX;
+            double targetShapeHeightPt = shapeHeightPt > 0d ? shapeHeightPt : heightPx * PT_PER_PX;
+            String styleWidth = String.format("%.3fpt", targetShapeWidthPt);
+            String styleHeight = String.format("%.3fpt", targetShapeHeightPt);
+            int dxaOrig = Math.max((int) Math.round(targetShapeWidthPt * 20), 1);
+            int dyaOrig = Math.max((int) Math.round(targetShapeHeightPt * 20), 1);
             int posHalfPt = depthPt >= 0d
                 ? Math.min(-(int) Math.round(depthPt * 2d), 0)
-                : resolveRunPositionHalfPoints(rawLatex, targetHeightPt);
+                : resolveRunPositionHalfPoints(rawLatex, targetShapeHeightPt);
 
             String objectId = "_" + Integer.toUnsignedString((shapeId + ":" + oleRelId).hashCode());
 
@@ -215,14 +220,34 @@ public class MathTypeEmbedder {
         return Math.min(halfPt, -2);
     }
 
-    private double resolvePreviewWidthPt(LaTeXImageRenderer.PreviewImage preview, PreviewBox previewBox) {
+    private double resolveDisplayDepthPt(LaTeXImageRenderer.PreviewImage preview, double previewHeightPt,
+                                         double shapeHeightPt) {
+        double depthPt = preview.depthPt();
+        if (depthPt < 0d) {
+            return depthPt;
+        }
+        if (previewHeightPt > 0d && shapeHeightPt > 0d && Math.abs(previewHeightPt - shapeHeightPt) > 0.01d) {
+            return depthPt * shapeHeightPt / previewHeightPt;
+        }
+        return depthPt;
+    }
+
+    private double resolvePreviewWidthPt(LaTeXImageRenderer.PreviewImage preview, PreviewBox previewBox,
+                                         FormulaMetrics targetMetrics) {
+        if (targetMetrics != null && targetMetrics.wmfWidthPt() > 0d) {
+            return targetMetrics.wmfWidthPt();
+        }
         if (preview.widthPt() > 0d && preview.widthPx() == previewBox.widthPx()) {
             return preview.widthPt();
         }
         return previewBox.widthPx() * PT_PER_PX;
     }
 
-    private double resolvePreviewHeightPt(LaTeXImageRenderer.PreviewImage preview, PreviewBox previewBox) {
+    private double resolvePreviewHeightPt(LaTeXImageRenderer.PreviewImage preview, PreviewBox previewBox,
+                                          FormulaMetrics targetMetrics) {
+        if (targetMetrics != null && targetMetrics.wmfHeightPt() > 0d) {
+            return targetMetrics.wmfHeightPt();
+        }
         if (preview.heightPt() > 0d && preview.heightPx() == previewBox.heightPx()) {
             return preview.heightPt();
         }

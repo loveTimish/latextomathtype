@@ -2,8 +2,8 @@ param(
     [int]$Start = 1,
     [int]$End = 155,
     [string]$DatasetDir = "F:\资料\xsc资料\word_files",
-    [string]$AnalysisDir = "D:\latextomathtype\analysis",
-    [string]$DocxToLatexDir = "D:\docxtolatex\docxtolatex"
+    [string]$AnalysisDir = "J:\latextomathtype\analysis",
+    [string]$DocxToLatexDir = "J:\docxtolatex\docxtolatex-main"
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,6 +11,9 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $outDir = Join-Path $AnalysisDir "mtef-style-hints"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+if (-not (Test-Path -LiteralPath $DocxToLatexDir)) {
+    throw "missing docxtolatex dir: $DocxToLatexDir"
+}
 
 Push-Location $DocxToLatexDir
 try {

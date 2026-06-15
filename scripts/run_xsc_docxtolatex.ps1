@@ -2,8 +2,8 @@ param(
     [int]$Start = 1,
     [int]$End = 155,
     [string]$DatasetDir = "F:\资料\xsc资料\word_files",
-    [string]$OutRoot = "D:\latextomathtype\analysis\xsc-latex",
-    [string]$DocxToLatexDir = "D:\docxtolatex\docxtolatex"
+    [string]$OutRoot = "J:\latextomathtype\analysis\xsc-latex-fixed",
+    [string]$DocxToLatexDir = "J:\docxtolatex\docxtolatex-main"
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,6 +20,9 @@ function Invoke-Checked {
 }
 
 New-Item -ItemType Directory -Force -Path $OutRoot | Out-Null
+if (-not (Test-Path -LiteralPath $DocxToLatexDir)) {
+    throw "missing docxtolatex dir: $DocxToLatexDir"
+}
 
 Push-Location $DocxToLatexDir
 try {

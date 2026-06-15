@@ -78,8 +78,8 @@ def expected_docs(start: int, end: int) -> list[int]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Aggregate xsc acceptance summaries and enforce full-corpus gates.")
-    parser.add_argument("--summary-dir", type=Path, default=Path(r"D:\latextomathtype\analysis\acceptance-summary"))
-    parser.add_argument("--out", type=Path, default=Path(r"D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json"))
+    parser.add_argument("--summary-dir", type=Path, default=Path(r"J:\latextomathtype\analysis\acceptance-summary"))
+    parser.add_argument("--out", type=Path, default=Path(r"J:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json"))
     parser.add_argument("--manifest", type=Path, help="Optional JSON list of {stamp,start,end}.")
     parser.add_argument("--start", type=int, default=1)
     parser.add_argument("--end", type=int, default=155)

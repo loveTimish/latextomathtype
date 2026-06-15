@@ -27,6 +27,17 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testParseMathIrIgnoresFormulaMetricsAndStylePrefixes() {
+        String dump = parser.dumpMathIR("\\pwmetrics{7.990,12.983}\\pwstyle{explicitFractionFullSize=true}2004");
+
+        assertFalse(dump.contains("pwmetrics"));
+        assertFalse(dump.contains("pwstyle"));
+        assertTrue(dump.contains("2"));
+        assertTrue(dump.contains("0"));
+        assertTrue(dump.contains("4"));
+    }
+
+    @Test
     void testParseMathIrNormalizesBigOperatorLimits() {
         MathIRNode ir = parser.parseMathIR("\\sum_{i=1}^{n} a_i");
 
@@ -88,6 +99,34 @@ class MathIRConverterTest {
     }
 
     @Test
+    void testArrowCommandsAreNotMisclassifiedAsLeftFence() {
+        MathIRNode ir = parser.parseMathIR("{\\leftarrow}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).getType());
+        assertEquals(MathIRNode.Type.OPERATOR, ir.child(0).child(0).getType());
+        assertEquals("\\leftarrow", ir.child(0).child(0).getMetadata("latexCommand"));
+    }
+
+    @Test
+    void testSpotAliasIsMappedAsOperator() {
+        MathIRNode ir = parser.parseMathIR("P_{3}^{1}\\spot P_{5}^{1}");
+
+        assertTrue(ir.getChildren().stream()
+            .noneMatch(node -> node.getType() == MathIRNode.Type.UNSUPPORTED));
+        assertTrue(parser.dumpMathIR("P_{3}^{1}\\spot P_{5}^{1}").contains("latexCommand=\\spot"));
+    }
+
+    @Test
+    void testBacksimAliasIsMappedAsOperator() {
+        MathIRNode ir = parser.parseMathIR("{\\backsim}");
+
+        assertTrue(ir.getChildren().stream()
+            .noneMatch(node -> node.getType() == MathIRNode.Type.UNSUPPORTED));
+        assertTrue(parser.dumpMathIR("{\\backsim}").contains("latexCommand=\\backsim"));
+    }
+
+    @Test
     void testParseMathIrNormalizesIntopLimitsToIntegralStyleGenericBigOperator() {
         MathIRNode ir = parser.parseMathIR("\\intop_{a}^{b} f(x)");
 
@@ -107,6 +146,48 @@ class MathIRConverterTest {
         assertEquals(MathIRNode.Type.OVER, ir.child(0).getType());
         assertEquals("\\jointstatus", ir.child(0).getMetadata("accentCommand"));
         assertEquals(MathIRNode.Type.SEQUENCE, ir.child(0).child(0).getType());
+    }
+
+    @Test
+    void testParseMathIrNormalizesTensorScriptsFromDocx2tex() {
+        assertEquals("V_{顺}=820", LaTeXParser.preNormalizeLatex("V\\tensor*[_{顺}^{}]{=}{}820"));
+        assertEquals("^{\\circ }C", LaTeXParser.preNormalizeLatex("\\tensor*[_{}^{\\circ }]{C}{}"));
+        assertEquals("S_{ABCD}", LaTeXParser.preNormalizeLatex("S_{\\euro{}ABCD}"));
+        assertEquals("\\overarc{\\mathrm{AEB}}",
+            LaTeXParser.preNormalizeLatex("\\overset{\\frown }{\\mathrm{AEB}}"));
+        assertEquals("\\text{A}\\rightarrow\\begin{cases} 6\\\\ 14\\\\ 4 \\end{cases}",
+            LaTeXParser.preNormalizeLatex("\\underrightarrow{\\text{A}}\\begin{cases} 6\\\\ 14\\\\ 4 \\end{cases}"));
+        assertEquals("212", LaTeXParser.preNormalizeLatex("2\\bottom left{12}"));
+        assertEquals("218 12", LaTeXParser.preNormalizeLatex("2\\bottom left{\\begin{array}{ll} 18 & 12 \\end{array}}"));
+        MathIRNode ir = parser.parseMathIR("V\\tensor*[_{顺}^{}]{=}{}820");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertNotEquals(MathIRNode.Type.UNSUPPORTED, ir.child(0).getType());
+        assertTrue(ir.getChildren().stream().noneMatch(node -> node.getType() == MathIRNode.Type.UNSUPPORTED));
+        assertTrue(ir.getChildren().stream()
+            .anyMatch(node -> node.getType() == MathIRNode.Type.OPERATOR && "=".equals(node.getValue())));
+    }
+
+    @Test
+    void testParseMathIrSupportsGeometrySymbolAliases() {
+        MathIRNode ir = parser.parseMathIR("BO\\bot AE+{\\llcorner}+{\\Diamond}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertTrue(ir.getChildren().stream().noneMatch(node -> node.getType() == MathIRNode.Type.UNSUPPORTED));
+        assertTrue(ir.getChildren().stream()
+            .anyMatch(node -> node.getType() == MathIRNode.Type.OPERATOR && "\\bot".equals(node.getMetadata("latexCommand"))));
+        assertTrue(ir.getChildren().stream()
+            .anyMatch(node -> node.getType() == MathIRNode.Type.SEQUENCE && node.child(0).getType() == MathIRNode.Type.OPERATOR
+                && "\\llcorner".equals(node.child(0).getMetadata("latexCommand"))));
+    }
+
+    @Test
+    void testParseMathIrTreatsBoldsymbolAsTextWrapper() {
+        MathIRNode ir = parser.parseMathIR("\\boldsymbol{\\pi}");
+
+        assertEquals(MathIRNode.Type.MATH, ir.getType());
+        assertTrue(ir.getChildren().stream().noneMatch(node -> node.getType() == MathIRNode.Type.UNSUPPORTED));
+        assertEquals(MathIRNode.Type.TEXT, ir.child(0).getType());
     }
 
     @Test

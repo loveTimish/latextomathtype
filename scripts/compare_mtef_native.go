@@ -24,52 +24,52 @@ import (
 const oleCbHdr = uint16(28)
 
 type OleObject struct {
-	Index      int            `json:"index"`
-	Entry      string         `json:"entry"`
-	NativeSize int            `json:"nativeSize"`
-	BodySize   int            `json:"bodySize"`
-	BodySHA256 string         `json:"bodySha256"`
-	HeaderHex  string         `json:"headerHex"`
-	PrefixHex  string         `json:"prefixHex"`
-	MtefVersion int           `json:"mtefVersion,omitempty"`
-	MtefProduct int           `json:"mtefProduct,omitempty"`
-	Records    map[string]int `json:"records"`
-	TailSize   int            `json:"tailSize"`
-	TailSHA256 string         `json:"tailSha256"`
-	TailRecords map[string]int `json:"tailRecords"`
-	Error      string         `json:"error,omitempty"`
-	body       []byte
-	content    []byte
-	tail       []byte
+	Index             int            `json:"index"`
+	Entry             string         `json:"entry"`
+	NativeSize        int            `json:"nativeSize"`
+	BodySize          int            `json:"bodySize"`
+	BodySHA256        string         `json:"bodySha256"`
+	HeaderHex         string         `json:"headerHex"`
+	PrefixHex         string         `json:"prefixHex"`
+	MtefVersion       int            `json:"mtefVersion,omitempty"`
+	MtefProduct       int            `json:"mtefProduct,omitempty"`
+	Records           map[string]int `json:"records"`
+	TailSize          int            `json:"tailSize"`
+	TailSHA256        string         `json:"tailSha256"`
+	TailRecords       map[string]int `json:"tailRecords"`
+	Error             string         `json:"error,omitempty"`
+	body              []byte
+	content           []byte
+	tail              []byte
 	contentCandidates [][]byte
 	tailCandidates    [][]byte
 }
 
 type PairRow struct {
-	Index              int     `json:"index"`
-	SourceIndex        int     `json:"sourceIndex"`
-	GeneratedIndex     int     `json:"generatedIndex"`
-	SourceEntry        string  `json:"sourceEntry"`
-	GeneratedEntry     string  `json:"generatedEntry"`
-	Latex              string  `json:"latex,omitempty"`
-	SourceBodySize     int     `json:"sourceBodySize"`
-	GeneratedBodySize  int     `json:"generatedBodySize"`
-	BodySizeRatio      float64 `json:"bodySizeRatio,omitempty"`
-	BodyHashEqual      bool    `json:"bodyHashEqual"`
-	RecordCosine       float64 `json:"recordCosine"`
-	TailSizeRatio      float64 `json:"tailSizeRatio,omitempty"`
-	TailHashEqual      bool    `json:"tailHashEqual"`
-	TailRecordCosine   float64 `json:"tailRecordCosine"`
+	Index                int     `json:"index"`
+	SourceIndex          int     `json:"sourceIndex"`
+	GeneratedIndex       int     `json:"generatedIndex"`
+	SourceEntry          string  `json:"sourceEntry"`
+	GeneratedEntry       string  `json:"generatedEntry"`
+	Latex                string  `json:"latex,omitempty"`
+	SourceBodySize       int     `json:"sourceBodySize"`
+	GeneratedBodySize    int     `json:"generatedBodySize"`
+	BodySizeRatio        float64 `json:"bodySizeRatio,omitempty"`
+	BodyHashEqual        bool    `json:"bodyHashEqual"`
+	RecordCosine         float64 `json:"recordCosine"`
+	TailSizeRatio        float64 `json:"tailSizeRatio,omitempty"`
+	TailHashEqual        bool    `json:"tailHashEqual"`
+	TailRecordCosine     float64 `json:"tailRecordCosine"`
 	TailCoreRecordCosine float64 `json:"tailCoreRecordCosine"`
-	CommonSuffixBytes  int     `json:"commonSuffixBytes"`
-	CommonSuffixRatio  float64 `json:"commonSuffixRatio,omitempty"`
-	AlignmentSuspect   bool    `json:"alignmentSuspect"`
-	SourceError        string  `json:"sourceError,omitempty"`
-	GeneratedError     string  `json:"generatedError,omitempty"`
-	SourceRecordTotal  int     `json:"sourceRecordTotal"`
-	GeneratedRecordTotal int   `json:"generatedRecordTotal"`
-	SourceMtefVersion  int     `json:"sourceMtefVersion,omitempty"`
-	SourceMtefProduct  int     `json:"sourceMtefProduct,omitempty"`
+	CommonSuffixBytes    int     `json:"commonSuffixBytes"`
+	CommonSuffixRatio    float64 `json:"commonSuffixRatio,omitempty"`
+	AlignmentSuspect     bool    `json:"alignmentSuspect"`
+	SourceError          string  `json:"sourceError,omitempty"`
+	GeneratedError       string  `json:"generatedError,omitempty"`
+	SourceRecordTotal    int     `json:"sourceRecordTotal"`
+	GeneratedRecordTotal int     `json:"generatedRecordTotal"`
+	SourceMtefVersion    int     `json:"sourceMtefVersion,omitempty"`
+	SourceMtefProduct    int     `json:"sourceMtefProduct,omitempty"`
 }
 
 type Summary struct {
@@ -159,26 +159,26 @@ func compare(sourcePath, generatedPath, sourceReportPath, generatedRequestPath s
 		s := source[sourceIndex]
 		g := generated[generatedIndex]
 		row := PairRow{
-			Index: pairIndex + 1,
-			SourceIndex: sourceIndex + 1,
-			GeneratedIndex: generatedIndex + 1,
-			SourceEntry: s.Entry,
-			GeneratedEntry: g.Entry,
-			Latex: latexBySource[sourceIndex],
-			SourceBodySize: s.BodySize,
-			GeneratedBodySize: g.BodySize,
-			BodyHashEqual: s.BodySHA256 != "" && s.BodySHA256 == g.BodySHA256,
-			RecordCosine: bestCandidateCosine(s.contentCandidates, g.contentCandidates),
-			TailHashEqual: s.TailSHA256 != "" && s.TailSHA256 == g.TailSHA256,
-			TailRecordCosine: bestCandidateCosine(s.tailCandidates, g.tailCandidates),
+			Index:                pairIndex + 1,
+			SourceIndex:          sourceIndex + 1,
+			GeneratedIndex:       generatedIndex + 1,
+			SourceEntry:          s.Entry,
+			GeneratedEntry:       g.Entry,
+			Latex:                latexBySource[sourceIndex],
+			SourceBodySize:       s.BodySize,
+			GeneratedBodySize:    g.BodySize,
+			BodyHashEqual:        s.BodySHA256 != "" && s.BodySHA256 == g.BodySHA256,
+			RecordCosine:         bestCandidateCosine(s.contentCandidates, g.contentCandidates),
+			TailHashEqual:        s.TailSHA256 != "" && s.TailSHA256 == g.TailSHA256,
+			TailRecordCosine:     bestCandidateCosine(s.tailCandidates, g.tailCandidates),
 			TailCoreRecordCosine: bestCandidateCoreCosine(s.tailCandidates, g.tailCandidates),
-			CommonSuffixBytes: commonSuffixBytes(s.body, g.body),
-			SourceError: s.Error,
-			GeneratedError: g.Error,
-			SourceRecordTotal: recordTotal(s.Records),
+			CommonSuffixBytes:    commonSuffixBytes(s.body, g.body),
+			SourceError:          s.Error,
+			GeneratedError:       g.Error,
+			SourceRecordTotal:    recordTotal(s.Records),
 			GeneratedRecordTotal: recordTotal(g.Records),
-			SourceMtefVersion: s.MtefVersion,
-			SourceMtefProduct: s.MtefProduct,
+			SourceMtefVersion:    s.MtefVersion,
+			SourceMtefProduct:    s.MtefProduct,
 		}
 		if s.BodySize > 0 && g.BodySize > 0 {
 			row.BodySizeRatio = float64(g.BodySize) / float64(s.BodySize)
@@ -201,17 +201,17 @@ func compare(sourcePath, generatedPath, sourceReportPath, generatedRequestPath s
 		pairs = append(pairs, row)
 	}
 	return &Summary{
-		Source: sourcePath,
-		Generated: generatedPath,
-		SourceObjects: len(source),
-		GeneratedObjects: len(generated),
-		PairedObjects: n,
-		ReadableSource: countReadable(source),
-		ReadableGenerated: countReadable(generated),
-		BodyHashEqual: hashEqual,
+		Source:              sourcePath,
+		Generated:           generatedPath,
+		SourceObjects:       len(source),
+		GeneratedObjects:    len(generated),
+		PairedObjects:       n,
+		ReadableSource:      countReadable(source),
+		ReadableGenerated:   countReadable(generated),
+		BodyHashEqual:       hashEqual,
 		MedianBodySizeRatio: median(ratios),
-		MedianRecordCosine: median(cosines),
-		Pairs: pairs,
+		MedianRecordCosine:  median(cosines),
+		Pairs:               pairs,
 	}, nil
 }
 
@@ -466,8 +466,21 @@ func writeWorstDumps(outDir, stem, sourcePath, generatedPath string, pairs []Pai
 	})
 	selected := make([]PairRow, 0, min(10, len(worst)))
 	seen := map[int]bool{}
+	suspectLimit := dumpSuspectLimit()
+	for _, pair := range pairs {
+		if pair.AlignmentSuspect {
+			if suspectLimit >= 0 && len(selected) >= suspectLimit {
+				continue
+			}
+			selected = append(selected, pair)
+			seen[pair.SourceIndex] = true
+		}
+	}
 	limit := min(10, len(worst))
 	for i := 0; i < limit; i++ {
+		if seen[worst[i].SourceIndex] {
+			continue
+		}
 		selected = append(selected, worst[i])
 		seen[worst[i].SourceIndex] = true
 	}
@@ -503,22 +516,22 @@ func writeWorstDumps(outDir, stem, sourcePath, generatedPath string, pairs []Pai
 			return err
 		}
 		diff := map[string]any{
-			"index": pair.Index,
-			"sourceIndex": pair.SourceIndex,
-			"generatedIndex": pair.GeneratedIndex,
-			"latex": pair.Latex,
-			"sourceEntry": source[sourceIdx].Entry,
-			"generatedEntry": generated[generatedIdx].Entry,
-			"sourceRecords": source[sourceIdx].Records,
-			"generatedRecords": generated[generatedIdx].Records,
-			"sourceTailRecords": source[sourceIdx].TailRecords,
+			"index":                pair.Index,
+			"sourceIndex":          pair.SourceIndex,
+			"generatedIndex":       pair.GeneratedIndex,
+			"latex":                pair.Latex,
+			"sourceEntry":          source[sourceIdx].Entry,
+			"generatedEntry":       generated[generatedIdx].Entry,
+			"sourceRecords":        source[sourceIdx].Records,
+			"generatedRecords":     generated[generatedIdx].Records,
+			"sourceTailRecords":    source[sourceIdx].TailRecords,
 			"generatedTailRecords": generated[generatedIdx].TailRecords,
-			"sourcePrefixHex": source[sourceIdx].PrefixHex,
-			"generatedPrefixHex": generated[generatedIdx].PrefixHex,
-			"recordCosine": pair.RecordCosine,
-			"tailRecordCosine": pair.TailRecordCosine,
-			"bodySizeRatio": pair.BodySizeRatio,
-			"tailSizeRatio": pair.TailSizeRatio,
+			"sourcePrefixHex":      source[sourceIdx].PrefixHex,
+			"generatedPrefixHex":   generated[generatedIdx].PrefixHex,
+			"recordCosine":         pair.RecordCosine,
+			"tailRecordCosine":     pair.TailRecordCosine,
+			"bodySizeRatio":        pair.BodySizeRatio,
+			"tailSizeRatio":        pair.TailSizeRatio,
 		}
 		data, _ := json.MarshalIndent(diff, "", "  ")
 		if err := os.WriteFile(base+"_diff.json", append(data, '\n'), 0644); err != nil {
@@ -544,6 +557,20 @@ func dumpSourceIndexes() []int {
 	return indexes
 }
 
+func dumpSuspectLimit() int {
+	raw := strings.TrimSpace(os.Getenv("MTEF_DUMP_ALL_SUSPECTS"))
+	if raw == "1" || strings.EqualFold(raw, "true") || strings.EqualFold(raw, "yes") {
+		return -1
+	}
+	if raw := strings.TrimSpace(os.Getenv("MTEF_DUMP_SUSPECT_LIMIT")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err == nil && value >= 0 {
+			return value
+		}
+	}
+	return 500
+}
+
 type reportFile struct {
 	Equations []struct {
 		Status string `json:"status"`
@@ -558,9 +585,18 @@ type latexObject struct {
 }
 
 type requestFile struct {
+	Paper struct {
+		CompactLayout bool `json:"compactLayout"`
+	} `json:"paper"`
 	Sections []struct {
 		Questions []struct {
-			Content string `json:"content"`
+			Content        string   `json:"content"`
+			KnowledgePoint string   `json:"knowledgePoint"`
+			Difficulty     string   `json:"difficulty"`
+			Tags           []string `json:"tags"`
+			Analyze        string   `json:"analyze"`
+			Solution       string   `json:"solution"`
+			Correct        string   `json:"correct"`
 		} `json:"questions"`
 	} `json:"sections"`
 }
@@ -578,7 +614,7 @@ func reportLatexSequence(path string) ([]latexObject, error) {
 	for _, eq := range report.Equations {
 		if eq.Status == "converted" && strings.TrimSpace(eq.Output) != "" {
 			out = append(out, latexObject{
-				Latex: normalizeLatexKey(eq.Output),
+				Latex:       normalizeLatexKey(eq.Output),
 				ObjectIndex: objectIndexFromSource(eq.Source),
 			})
 		}
@@ -612,6 +648,29 @@ func requestLatexSequence(path string) ([]string, error) {
 		for _, question := range section.Questions {
 			text.WriteString(question.Content)
 			text.WriteByte('\n')
+			text.WriteString(question.KnowledgePoint)
+			text.WriteByte('\n')
+			if request.Paper.CompactLayout {
+				text.WriteString(question.Difficulty)
+				text.WriteByte('\n')
+				for _, tag := range question.Tags {
+					text.WriteString(tag)
+					text.WriteByte('\n')
+				}
+			} else {
+				for _, tag := range question.Tags {
+					text.WriteString(tag)
+					text.WriteByte('\n')
+				}
+				text.WriteString(question.Difficulty)
+				text.WriteByte('\n')
+			}
+			text.WriteString(question.Analyze)
+			text.WriteByte('\n')
+			text.WriteString(question.Solution)
+			text.WriteByte('\n')
+			text.WriteString(question.Correct)
+			text.WriteByte('\n')
 		}
 	}
 	re := regexp.MustCompile(`(?s)\$\$(.+?)\$\$|\$(.+?)\$`)
@@ -632,6 +691,7 @@ func normalizeLatexKey(value string) string {
 	value = regexp.MustCompile(`^\\pwmetrics\{[^}]+}\s*`).ReplaceAllString(value, "")
 	value = regexp.MustCompile(`^\\pwstyle\{[^}]*}\s*`).ReplaceAllString(value, "")
 	value = repairEmptyFractionDenominators(value)
+	value = regexp.MustCompile(`\\(?:hline|hdashline)(?:\[[^\]]*])?`).ReplaceAllString(value, "")
 	value = strings.ReplaceAll(value, `\lt `, "<")
 	value = strings.ReplaceAll(value, `\gt `, ">")
 	value = strings.Join(strings.Fields(value), " ")

@@ -72,7 +72,7 @@ public class LaTeXParser {
      */
     private static final Pattern LATEX_PATTERN = Pattern.compile("\\$\\$(.+?)\\$\\$|\\$(.+?)\\$", Pattern.DOTALL);
     private static final Pattern METRICS_PATTERN = Pattern.compile(
-        "^\\\\pwmetrics\\{([0-9]+(?:\\.[0-9]+)?)\\s*,\\s*([0-9]+(?:\\.[0-9]+)?)\\}\\s*",
+        "^\\\\pwmetrics\\{([0-9]+(?:\\.[0-9]+)?)\\s*,\\s*([0-9]+(?:\\.[0-9]+)?)(?:\\s*,\\s*([0-9]+(?:\\.[0-9]+)?)\\s*,\\s*([0-9]+(?:\\.[0-9]+)?))?\\}\\s*",
         Pattern.DOTALL);
     private static final Pattern STYLE_HINT_PATTERN = Pattern.compile(
         "^\\\\pwstyle\\{([^}]*)\\}\\s*",
@@ -110,7 +110,20 @@ public class LaTeXParser {
         }
     }
 
-    public record FormulaMetrics(double widthPt, double heightPt) {}
+    public record FormulaMetrics(double wmfWidthPt, double wmfHeightPt,
+                                 double shapeWidthPt, double shapeHeightPt) {
+        public FormulaMetrics(double widthPt, double heightPt) {
+            this(widthPt, heightPt, widthPt, heightPt);
+        }
+
+        public double widthPt() {
+            return wmfWidthPt;
+        }
+
+        public double heightPt() {
+            return wmfHeightPt;
+        }
+    }
     public record FormulaStyleHints(boolean asciiFlatParens, boolean explicitScriptFullSize,
                                     boolean explicitFractionFullSize, boolean explicitTopFullSize,
                                     boolean forceExplicitFenceTemplate, boolean explicitBlackColor,
@@ -220,7 +233,9 @@ public class LaTeXParser {
         try {
             FormulaMetrics metrics = new FormulaMetrics(
                 Double.parseDouble(matcher.group(1)),
-                Double.parseDouble(matcher.group(2))
+                Double.parseDouble(matcher.group(2)),
+                matcher.group(3) != null ? Double.parseDouble(matcher.group(3)) : Double.parseDouble(matcher.group(1)),
+                matcher.group(4) != null ? Double.parseDouble(matcher.group(4)) : Double.parseDouble(matcher.group(2))
             );
             return new ParsedFormulaMetrics(latex.substring(matcher.end()).trim(), metrics);
         } catch (NumberFormatException e) {
@@ -354,7 +369,12 @@ public class LaTeXParser {
             .replaceAll("\\\\(?:rm|bf|it|cal)\\b", "")
             .replaceAll("\\\\lt\\b", "<")
             .replaceAll("\\\\gt\\b", ">")
+            .replaceAll("\\\\euro\\s*\\{\\s*}", "")
             .replaceAll("\\\\left\\s+(?=\\\\begin\\b)", "\\\\left. ");
+        normalized = normalizeTensorScripts(normalized);
+        normalized = normalizeFrownOverset(normalized);
+        normalized = normalizeBottomLeftArtifacts(normalized);
+        normalized = normalizeUnderRightArrow(normalized);
         normalized = normalizeControlSpaces(normalized);
         normalized = normalizeVisualUnderbraceCounters(normalized);
         normalized = normalizeArrayLineBreakSpacing(normalized);
@@ -362,6 +382,233 @@ public class LaTeXParser {
             normalized = "\\begin{array}{l} " + normalized + " \\end{array}";
         }
         return normalized;
+    }
+
+    private static String normalizeTensorScripts(String latex) {
+        String marker = "\\tensor*";
+        if (latex == null || latex.indexOf(marker) < 0) {
+            return latex;
+        }
+        StringBuilder out = new StringBuilder(latex.length());
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int start = latex.indexOf(marker, cursor);
+            if (start < 0) {
+                out.append(latex.substring(cursor));
+                break;
+            }
+            out.append(latex, cursor, start);
+            int firstStart = skipWhitespace(latex, start + marker.length());
+            if (firstStart >= latex.length() || latex.charAt(firstStart) != '[') {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            int firstEnd = findMatching(latex, firstStart, '[', ']');
+            int secondStart = firstEnd < 0 ? -1 : skipWhitespace(latex, firstEnd + 1);
+            int secondEnd = secondStart >= 0 && secondStart < latex.length() && latex.charAt(secondStart) == '{'
+                ? findMatching(latex, secondStart, '{', '}') : -1;
+            int thirdStart = secondEnd < 0 ? -1 : skipWhitespace(latex, secondEnd + 1);
+            int thirdEnd = thirdStart >= 0 && thirdStart < latex.length() && latex.charAt(thirdStart) == '{'
+                ? findMatching(latex, thirdStart, '{', '}') : -1;
+            int fourthStart = thirdEnd < 0 ? -1 : skipWhitespace(latex, thirdEnd + 1);
+            boolean fourthIsGroup = fourthStart >= 0 && fourthStart < latex.length() && latex.charAt(fourthStart) == '{';
+            int fourthEnd = fourthIsGroup ? findMatching(latex, fourthStart, '{', '}') : findTensorTrailingEnd(latex, fourthStart);
+            if (firstEnd < 0 || secondEnd < 0 || thirdEnd < 0) {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            out.append(normalizeTensorScriptSpec(latex.substring(firstStart + 1, firstEnd)));
+            out.append(latex, secondStart + 1, secondEnd);
+            out.append(latex, thirdStart + 1, thirdEnd);
+            if (fourthEnd < 0) {
+                cursor = thirdEnd + 1;
+                continue;
+            }
+            if (fourthIsGroup) {
+                out.append(latex, fourthStart + 1, fourthEnd);
+                cursor = fourthEnd + 1;
+            } else {
+                out.append(latex, fourthStart, fourthEnd);
+                cursor = fourthEnd;
+            }
+        }
+        return out.toString();
+    }
+
+    private static String normalizeUnderRightArrow(String latex) {
+        String marker = "\\underrightarrow";
+        if (latex == null || latex.indexOf(marker) < 0) {
+            return latex;
+        }
+        StringBuilder out = new StringBuilder(latex.length());
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int start = latex.indexOf(marker, cursor);
+            if (start < 0) {
+                out.append(latex.substring(cursor));
+                break;
+            }
+            out.append(latex, cursor, start);
+            int groupStart = skipWhitespace(latex, start + marker.length());
+            if (groupStart >= latex.length() || latex.charAt(groupStart) != '{') {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            int groupEnd = findMatching(latex, groupStart, '{', '}');
+            if (groupEnd < 0) {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            out.append(latex, groupStart + 1, groupEnd).append("\\rightarrow");
+            cursor = groupEnd + 1;
+        }
+        return out.toString();
+    }
+
+    private static int findTensorTrailingEnd(String text, int start) {
+        if (start < 0 || start >= text.length()) {
+            return -1;
+        }
+        int cursor = start;
+        while (cursor < text.length()) {
+            char ch = text.charAt(cursor);
+            if (Character.isWhitespace(ch) || ch == ',' || ch == ';' || ch == ')' || ch == ']' || ch == '}') {
+                break;
+            }
+            if (ch == '\\') {
+                break;
+            }
+            cursor++;
+        }
+        return cursor > start ? cursor : -1;
+    }
+
+    private static String normalizeFrownOverset(String latex) {
+        String marker = "\\overset";
+        if (latex == null || latex.indexOf(marker) < 0 || latex.indexOf("\\frown") < 0) {
+            return latex;
+        }
+        StringBuilder out = new StringBuilder(latex.length());
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int start = latex.indexOf(marker, cursor);
+            if (start < 0) {
+                out.append(latex.substring(cursor));
+                break;
+            }
+            out.append(latex, cursor, start);
+            int firstStart = skipWhitespace(latex, start + marker.length());
+            if (firstStart >= latex.length() || latex.charAt(firstStart) != '{') {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            int firstEnd = findMatching(latex, firstStart, '{', '}');
+            int secondStart = firstEnd < 0 ? -1 : skipWhitespace(latex, firstEnd + 1);
+            int secondEnd = secondStart >= 0 && secondStart < latex.length() && latex.charAt(secondStart) == '{'
+                ? findMatching(latex, secondStart, '{', '}') : -1;
+            if (firstEnd < 0 || secondEnd < 0 || !"\\frown".equals(latex.substring(firstStart + 1, firstEnd).trim())) {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            out.append("\\overarc{");
+            out.append(latex, secondStart + 1, secondEnd);
+            out.append('}');
+            cursor = secondEnd + 1;
+        }
+        return out.toString();
+    }
+
+    private static String normalizeBottomLeftArtifacts(String latex) {
+        String marker = "\\bottom";
+        if (latex == null || latex.indexOf(marker) < 0) {
+            return latex;
+        }
+        StringBuilder out = new StringBuilder(latex.length());
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int start = latex.indexOf(marker, cursor);
+            if (start < 0) {
+                out.append(latex.substring(cursor));
+                break;
+            }
+            out.append(latex, cursor, start);
+            int afterBottom = skipWhitespace(latex, start + marker.length());
+            if (!latex.startsWith("left", afterBottom)) {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            int groupStart = skipWhitespace(latex, afterBottom + "left".length());
+            if (groupStart >= latex.length() || latex.charAt(groupStart) != '{') {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            int groupEnd = findMatching(latex, groupStart, '{', '}');
+            if (groupEnd < 0) {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            String body = latex.substring(groupStart + 1, groupEnd);
+            out.append(flattenInlineArrayArtifact(body));
+            cursor = groupEnd + 1;
+        }
+        return out.toString();
+    }
+
+    private static String flattenInlineArrayArtifact(String text) {
+        if (text == null || !text.contains("\\begin{array}")) {
+            return text;
+        }
+        return text
+            .replaceAll("\\\\begin\\{array}\\{[^}]*}", "")
+            .replaceAll("\\\\end\\{array}", "")
+            .replace('&', ' ')
+            .replaceAll("\\s+", " ")
+            .trim();
+    }
+
+    private static String normalizeTensorScriptSpec(String spec) {
+        if (spec == null || spec.isBlank()) {
+            return "";
+        }
+        return spec.replaceAll("\\^\\s*\\{\\s*}", "")
+            .replaceAll("_\\s*\\{\\s*}", "");
+    }
+
+    private static int skipWhitespace(String text, int index) {
+        int cursor = index;
+        while (cursor < text.length() && Character.isWhitespace(text.charAt(cursor))) {
+            cursor++;
+        }
+        return cursor;
+    }
+
+    private static int findMatching(String text, int open, char openChar, char closeChar) {
+        int depth = 0;
+        for (int i = open; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '\\') {
+                i++;
+                continue;
+            }
+            if (ch == openChar) {
+                depth++;
+            } else if (ch == closeChar) {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     private static String normalizeControlSpaces(String latex) {
@@ -586,7 +833,9 @@ public class LaTeXParser {
      * 将 LaTeX 直接解析为 MathML-aligned IR，供 Phase 3 之后的语义层和诊断使用。
      */
     public MathIRNode parseMathIR(String latex) {
-        return mathIRConverter.convert(parseLaTeX(latex));
+        ParsedFormulaMetrics parsedMetrics = stripFormulaMetrics(latex);
+        ParsedFormulaStyle parsedStyle = stripFormulaStyle(parsedMetrics.latex());
+        return mathIRConverter.convert(parseLaTeX(parsedStyle.latex()));
     }
 
     /**
@@ -698,8 +947,9 @@ public class LaTeXParser {
                  "\\overbrace", "\\underbrace", "\\overbracket", "\\underbracket",
                  "\\boxed", "\\cancel", "\\bcancel", "\\xcancel" -> parseUnaryCommand(stream, cmd);
             case "\\xrightarrow", "\\xleftarrow" -> parseExtensibleArrowCommand(stream, cmd);
+            case "\\overset", "\\underset" -> parseBinaryCommand(stream, cmd);
             case "\\braket" -> parseBraketCommand(stream, cmd);
-            case "\\text", "\\mathrm", "\\mathbf", "\\mathit",
+            case "\\text", "\\mathrm", "\\mathbf", "\\mathit", "\\textit", "\\textbf", "\\emph", "\\boldsymbol",
                  "\\mathcal", "\\mathbb" -> parseTextCommand(stream, cmd);
             case "\\sum", "\\sumop", "\\int", "\\intop", "\\iint", "\\iiint", "\\oint",
                  "\\prod", "\\coprod", "\\bigcup", "\\bigcap", "\\bigvee", "\\bigwedge",
@@ -733,6 +983,13 @@ public class LaTeXParser {
             return parseArrayEnvironment(stream, envName, null);
         }
         return new LaTeXNode(LaTeXNode.Type.COMMAND, "\\begin{" + envName + "}");
+    }
+
+    private LaTeXNode parseBinaryCommand(TokenStream stream, String cmd) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.COMMAND, cmd);
+        node.addChild(parseRequiredGroup(stream));
+        node.addChild(parseRequiredGroup(stream));
+        return node;
     }
 
     private boolean isMatrixLikeEnvironment(String envName) {

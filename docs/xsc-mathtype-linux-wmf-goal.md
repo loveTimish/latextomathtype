@@ -98,6 +98,26 @@ The current safe stopping point is:
 
 When resuming, start with verification before more tuning.
 
+For this checkout, the current dataset source is:
+
+```text
+E:\新加卷\新建文件夹\xsc资料
+```
+
+This directory is title-named source material, not the old `1.docx..155.docx`
+acceptance layout. Build a numbered mirror first, then run the existing XSC
+pipeline against that mirror:
+
+```powershell
+.\scripts\prepare_xsc_numbered_dataset.ps1 `
+  -SourceDir 'E:\新加卷\新建文件夹\xsc资料' `
+  -OutDir 'J:\latextomathtype\analysis\xsc-numbered-dataset' `
+  -Limit 10
+```
+
+Use `J:\latextomathtype\analysis` as the local analysis root unless a different
+machine-specific root is explicitly passed.
+
 1. Kill any stale Maven/Surefire Java process if a previous run was interrupted.
 
 ```powershell

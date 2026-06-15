@@ -7,6 +7,7 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -88,11 +89,61 @@ class LaTeXImageRendererTest {
         }
     }
 
+    @Test
+    void cacheKeyIncludesWmfRenderProperties() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("cacheKey", String.class, String.class, float.class);
+        method.setAccessible(true);
+        LaTeXImageRenderer renderer = new LaTeXImageRenderer();
+        String oldScale = System.getProperty("paperword.wmf.textWidth.scale");
+        try {
+            System.setProperty("paperword.wmf.textWidth.scale", "1.00");
+            String defaultKey = (String) method.invoke(renderer, "ole-target-10.00x10.00", "x+1", 12f);
+            System.setProperty("paperword.wmf.textWidth.scale", "1.25");
+            String tunedKey = (String) method.invoke(renderer, "ole-target-10.00x10.00", "x+1", 12f);
+
+            assertFalse(defaultKey.equals(tunedKey), "WMF render tuning must invalidate preview cache keys");
+        } finally {
+            restoreProperty("paperword.wmf.textWidth.scale", oldScale);
+        }
+    }
+
+    @Test
+    void runCommandTimesOutWithoutWaitingForStreamClose(@TempDir Path tempDir) throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("runCommand", List.class, Path.class, int.class);
+        method.setAccessible(true);
+        String java = Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java").toString();
+        long start = System.nanoTime();
+        Object result = method.invoke(
+            new LaTeXImageRenderer(),
+            List.of(java, "-cp", System.getProperty("java.class.path"), HangingProcess.class.getName()),
+            tempDir,
+            1
+        );
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
+        Method exitCode = result.getClass().getDeclaredMethod("exitCode");
+        exitCode.setAccessible(true);
+
+        assertEquals(-1, exitCode.invoke(result));
+        assertTrue(elapsedMs < 5000, "runCommand timeout must not wait for the child stream to close");
+    }
+
+    public static class HangingProcess {
+        public static void main(String[] args) throws Exception {
+            System.out.print("started");
+            System.out.flush();
+            Thread.sleep(60_000L);
+        }
+    }
+
     private void restoreProperty(String name, String value) {
         if (value == null) {
             System.clearProperty(name);
         } else {
             System.setProperty(name, value);
         }
+    }
+
+    private boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
     }
 }

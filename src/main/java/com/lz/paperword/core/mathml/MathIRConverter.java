@@ -55,7 +55,7 @@ public class MathIRConverter {
     );
 
     private static final Set<String> SPACING_COMMANDS = Set.of(
-        "\\ ", "\\,", "\\;", "\\:", "\\!", "\\quad", "\\qquad", "\\hspace", "\\hskip"
+        "\\ ", "\\,", "\\;", "\\:", "\\!", "\\enspace", "\\quad", "\\qquad", "\\hspace", "\\hskip"
     );
 
     public MathIRNode convert(LaTeXNode root) {
@@ -144,11 +144,18 @@ public class MathIRConverter {
         if (SPACING_COMMANDS.contains(command)) {
             return null;
         }
-        if (command.startsWith("\\left")) {
+        if (isLeftFenceCommand(command)) {
             return convertFenceNode(node);
         }
         if (isHorizontalFenceCommand(command)) {
             return convertHorizontalFenceNode(node, null);
+        }
+        if ("\\overset".equals(command) || "\\underset".equals(command)) {
+            MathIRNode horizontal = convertOverUnderSetHorizontalFence(node, command);
+            if (horizontal != null) {
+                return horizontal;
+            }
+            return convertOverUnderSetNode(node, command);
         }
         if ("\\xrightarrow".equals(command) || "\\xleftarrow".equals(command)) {
             return convertArrowNode(node, command);
@@ -205,6 +212,42 @@ public class MathIRConverter {
         }
 
         return unsupported(command, node, node.getChildren());
+    }
+
+    private boolean isLeftFenceCommand(String command) {
+        return "\\left".equals(command) || (command.startsWith("\\left") && !"\\leftarrow".equals(command)
+            && !"\\leftrightarrow".equals(command));
+    }
+
+    private MathIRNode convertOverUnderSetHorizontalFence(LaTeXNode node, String command) {
+        LaTeXNode annotation = childAt(node, 0);
+        LaTeXNode base = unwrapSingleChildGroup(childAt(node, 1));
+        if (base == null || base.getType() != LaTeXNode.Type.COMMAND || !isHorizontalFenceCommand(base.getValue())) {
+            return null;
+        }
+        boolean top = "\\overset".equals(command);
+        if (top && !"\\overbrace".equals(base.getValue()) && !"\\overbracket".equals(base.getValue())) {
+            return null;
+        }
+        if (!top && !"\\underbrace".equals(base.getValue()) && !"\\underbracket".equals(base.getValue())) {
+            return null;
+        }
+        return convertHorizontalFenceNode(base, annotation);
+    }
+
+    private MathIRNode convertOverUnderSetNode(LaTeXNode node, String command) {
+        MathIRNode ir = new MathIRNode("\\overset".equals(command) ? MathIRNode.Type.OVER : MathIRNode.Type.UNDER);
+        copyMetadata(node, ir);
+        ir.addChild(convertArgument(childAt(node, 1)));
+        ir.addChild(convertArgument(childAt(node, 0)));
+        return ir;
+    }
+
+    private LaTeXNode unwrapSingleChildGroup(LaTeXNode node) {
+        if (node == null || node.getType() != LaTeXNode.Type.GROUP || node.getChildren().size() != 1) {
+            return node;
+        }
+        return node.getChildren().get(0);
     }
 
     private MathIRNode convertFenceNode(LaTeXNode node) {

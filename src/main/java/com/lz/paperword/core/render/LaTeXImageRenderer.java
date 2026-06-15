@@ -18,17 +18,21 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -71,8 +75,12 @@ public class LaTeXImageRenderer {
     private static final String CACHE_ENABLED_PROP = "paperword.render.cache.enabled";
     /** 系统属性：渲染磁盘缓存目录。 */
     private static final String CACHE_DIR_PROP = "paperword.render.cache.dir";
+    /** 系统属性：是否允许 OLE WMF 预览退化为纯文本矢量图。 */
+    private static final String ALLOW_TEXT_FALLBACK_PROP = "paperword.wmf.allowTextFallback";
+    /** 系统属性：WMF 文本宽度校准。 */
+    private static final String WMF_TEXT_WIDTH_SCALE_PROP = "paperword.wmf.textWidth.scale";
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v42-xsc-vector-wmf-array-compression";
+    private static final String CACHE_VERSION = "v87-xsc-short-script-equation";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     /** 像素到磅的换算比例。 */
@@ -260,7 +268,17 @@ public class LaTeXImageRenderer {
     }
 
     private String cacheKey(String mode, String latex, float size) {
-        return CACHE_VERSION + "|" + mode + "|" + size + "|" + normalizeLatexForLocalRender(latex == null ? "" : latex);
+        return CACHE_VERSION + "|" + renderConfigKey() + "|" + mode + "|" + size + "|"
+            + normalizeLatexForLocalRender(latex == null ? "" : latex);
+    }
+
+    private String renderConfigKey() {
+        return "latex=" + System.getProperty(LATEX_CMD_PROP, "")
+            + "|xelatex=" + System.getProperty(XELATEX_CMD_PROP, "")
+            + "|dvisvgm=" + System.getProperty(DVISVGM_CMD_PROP, "")
+            + "|timeout=" + System.getProperty(RENDER_TIMEOUT_PROP, String.valueOf(DEFAULT_TIMEOUT_SECONDS))
+            + "|allowTextFallback=" + System.getProperty(ALLOW_TEXT_FALLBACK_PROP, "false")
+            + "|wmfTextWidthScale=" + System.getProperty(WMF_TEXT_WIDTH_SCALE_PROP, "");
     }
 
     private PreviewImage readPreviewFromDisk(String cacheKey) {
@@ -312,7 +330,6 @@ public class LaTeXImageRenderer {
         Path metaPath = base.resolveSibling(base.getFileName() + ".properties");
         try {
             Files.createDirectories(base.getParent());
-            Files.write(imagePath, preview.data());
             Properties props = new Properties();
             props.setProperty("widthPx", Integer.toString(preview.widthPx()));
             props.setProperty("heightPx", Integer.toString(preview.heightPx()));
@@ -322,9 +339,12 @@ public class LaTeXImageRenderer {
             props.setProperty("depthPt", Double.toString(preview.depthPt()));
             props.setProperty("widthPt", Double.toString(preview.widthPt()));
             props.setProperty("heightPt", Double.toString(preview.heightPt()));
-            try (var out = Files.newOutputStream(metaPath)) {
+            writeAtomically(imagePath, preview.data());
+            Path tempMeta = tempSibling(metaPath);
+            try (var out = Files.newOutputStream(tempMeta)) {
                 props.store(out, "paperword formula preview cache");
             }
+            moveAtomically(tempMeta, metaPath);
         } catch (Exception e) {
             log.debug("Formula preview disk cache write failed: {}", cacheKey, e);
         }
@@ -350,9 +370,27 @@ public class LaTeXImageRenderer {
         Path pngPath = cacheBasePath(cacheKey).resolveSibling(cacheBasePath(cacheKey).getFileName() + ".png");
         try {
             Files.createDirectories(pngPath.getParent());
-            Files.write(pngPath, png);
+            writeAtomically(pngPath, png);
         } catch (IOException e) {
             log.debug("Formula PNG disk cache write failed: {}", cacheKey, e);
+        }
+    }
+
+    private void writeAtomically(Path target, byte[] data) throws IOException {
+        Path temp = tempSibling(target);
+        Files.write(temp, data);
+        moveAtomically(temp, target);
+    }
+
+    private Path tempSibling(Path target) {
+        return target.resolveSibling(target.getFileName() + "." + UUID.randomUUID() + ".tmp");
+    }
+
+    private void moveAtomically(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
@@ -420,29 +458,17 @@ public class LaTeXImageRenderer {
     }
 
     private PreviewImage renderWmfPreviewViaTeX(String latex, float size, Double targetWidthPt, Double targetHeightPt) {
-        String localRenderLatex = normalizeLatexForLocalRender(latex);
-        Path tempDir = null;
         try {
-            tempDir = Files.createTempDirectory("paperword-latex-");
-            byte[] svg = renderSvgViaDvisvgm(localRenderLatex, size, tempDir);
-            if (svg == null || svg.length == 0) {
-                return null;
-            }
-            TexBoxMetrics metrics = readTexBoxMetrics(tempDir.resolve("eq.size"));
-            SvgDimensions dimensions = extractSvgDisplayDimensions(svg);
-            double widthPt = metrics != null ? metrics.widthPt() : dimensions.widthPt();
-            double heightPt = metrics != null ? metrics.heightPt() + metrics.depthPt() : dimensions.heightPt();
-            double depthPt = metrics != null ? metrics.depthPt() : -1d;
-            PreviewMetrics calibrated = calibratePreviewMetrics(latex, widthPt, heightPt, depthPt);
-            widthPt = calibrated.widthPt();
-            heightPt = calibrated.heightPt();
-            depthPt = calibrated.depthPt();
-            if (targetWidthPt != null && targetHeightPt != null && targetWidthPt > 0d && targetHeightPt > 0d) {
-                if (depthPt >= 0d && heightPt > 0d) {
-                    depthPt = depthPt * targetHeightPt / heightPt;
-                }
-                widthPt = targetWidthPt;
-                heightPt = targetHeightPt;
+            boolean hasTargetMetrics = targetWidthPt != null && targetHeightPt != null
+                && targetWidthPt > 0d && targetHeightPt > 0d;
+            double widthPt = hasTargetMetrics ? targetWidthPt : estimateVectorWidthPt(latex);
+            double heightPt = hasTargetMetrics ? targetHeightPt : estimateVectorHeightPt(latex);
+            double depthPt = hasTargetMetrics ? targetDepthPt(latex, heightPt) : -1d;
+            if (!hasTargetMetrics) {
+                PreviewMetrics calibrated = calibratePreviewMetrics(latex, widthPt, heightPt, depthPt);
+                widthPt = Math.min(calibrated.widthPt(), genericVectorWidthCapPt(latex));
+                heightPt = calibrated.heightPt();
+                depthPt = calibrated.depthPt();
             }
 
             int widthPx = Math.max((int) Math.round(widthPt * PX_PER_PT), 4);
@@ -454,24 +480,72 @@ public class LaTeXImageRenderer {
                         depthPt, widthPt, heightPt);
                 }
             }
-            int renderWidthPx = Math.max((int) Math.ceil(widthPx * PNG_OUTPUT_SCALE), widthPx);
-            int renderHeightPx = Math.max((int) Math.ceil(heightPx * PNG_OUTPUT_SCALE), heightPx);
-            byte[] pngData = svgToPng(svg, renderWidthPx, renderHeightPx);
-            BufferedImage image = ImageIO.read(new ByteArrayInputStream(pngData));
-            if (image == null) {
-                return null;
+            if (allowTextFallbackWmf()) {
+                byte[] fallbackWmf = VectorWmfFormulaRenderer.renderFallbackText(latex, widthPt, heightPt);
+                if (fallbackWmf != null && fallbackWmf.length > 0) {
+                    log.warn("Using text-only self-vector WMF fallback: {}", latex);
+                    return new PreviewImage(fallbackWmf, widthPx, heightPx, "wmf", "image/x-wmf", false,
+                        depthPt, widthPt, heightPt);
+                }
             }
-            byte[] wmfData = bufferedImageToPlaceableWmf(image, widthPt, heightPt);
-            return new PreviewImage(wmfData, widthPx, heightPx, "wmf", "image/x-wmf", false,
-                depthPt, widthPt, heightPt);
+            throw new IllegalStateException("Unsupported self-vector WMF formula: " + latex);
         } catch (Exception e) {
-            log.error("Native TeX/WMF preview render failed: {}", latex, e);
+            log.error("Self-vector WMF preview render failed: {}", latex, e);
             return null;
-        } finally {
-            if (tempDir != null) {
-                deleteQuietly(tempDir);
-            }
         }
+    }
+
+    private boolean allowTextFallbackWmf() {
+        return Boolean.parseBoolean(System.getProperty(ALLOW_TEXT_FALLBACK_PROP, "false"));
+    }
+
+    private double estimateVectorWidthPt(String latex) {
+        String text = latex == null ? "" : latex.replaceAll("\\\\pwmetrics\\{[^}]+}\\s*", "");
+        text = text.replaceAll("\\\\pwstyle\\{[^}]*}\\s*", "");
+        int visible = Math.max(text.replaceAll("\\\\[A-Za-z]+", "x").replaceAll("[{}\\s]", "").length(), 1);
+        return Math.max(12.0d, visible * 6.0d);
+    }
+
+    private double genericVectorWidthCapPt(String latex) {
+        if (latex == null || !latex.contains("\\begin{array}")) {
+            return 430.0d;
+        }
+        if (latex.contains("\\searrow") || latex.contains("\\nearrow")) {
+            return 140.0d;
+        }
+        if (latex.contains("\\frac") || latex.contains("\\cdots")) {
+            return 420.0d;
+        }
+        return 300.0d;
+    }
+
+    private double estimateVectorHeightPt(String latex) {
+        String text = latex == null ? "" : latex;
+        if (text.contains("\\begin{array}")) {
+            long rows = text.split("\\\\\\\\", -1).length;
+            return Math.max(18.0d, rows * 15.0d);
+        }
+        if (text.contains("\\frac")) {
+            return 28.0d;
+        }
+        return 13.0d;
+    }
+
+    private double targetDepthPt(String latex, double heightPt) {
+        if (latex == null || heightPt <= 0d) {
+            return -1d;
+        }
+        String text = latex.replaceAll("\\\\pwmetrics\\{[^}]+}\\s*", "");
+        if (text.contains("\\frac")) {
+            return Math.max(0.0d, heightPt * 0.40d);
+        }
+        if (text.contains("\\begin{array}") || text.contains("\\sqrt")) {
+            return Math.max(0.0d, heightPt * 0.32d);
+        }
+        if (hasScript(text)) {
+            return Math.max(0.0d, heightPt * 0.24d);
+        }
+        return Math.max(0.0d, heightPt * 0.22d);
     }
 
     /** TeX 盒子度量（磅）。 */
@@ -1243,12 +1317,20 @@ public class LaTeXImageRenderer {
         pb.redirectErrorStream(true);
 
         Process process = pb.start();
-        byte[] output = process.getInputStream().readAllBytes();
+        CompletableFuture<byte[]> outputFuture = CompletableFuture.supplyAsync(() -> {
+            try {
+                return process.getInputStream().readAllBytes();
+            } catch (IOException e) {
+                return new byte[0];
+            }
+        });
         boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
         if (!finished) {
             process.destroyForcibly();
+            byte[] output = outputFuture.completeOnTimeout(new byte[0], 2, TimeUnit.SECONDS).join();
             return new CommandResult(-1, output);
         }
+        byte[] output = outputFuture.join();
         return new CommandResult(process.exitValue(), output);
     }
 

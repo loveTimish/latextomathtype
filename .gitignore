@@ -23,6 +23,8 @@ desktop.ini
 
 # Test/debug output
 output/
+analysis/
+scripts/__pycache__/
 
 # Example/template files
 eg/

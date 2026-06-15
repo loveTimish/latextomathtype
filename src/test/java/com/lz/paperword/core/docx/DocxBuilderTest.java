@@ -63,6 +63,60 @@ class DocxBuilderTest {
     }
 
     @Test
+    void shouldConvertNaturalAnswerBlanksToVisibleAnswerLines() throws IOException {
+        PaperExportRequest request = new PaperExportRequest();
+        PaperExportRequest.PaperInfo paper = new PaperExportRequest.PaperInfo();
+        paper.setName("答案线测试");
+        paper.setCompactLayout(true);
+        request.setPaper(paper);
+
+        SectionDTO section = new SectionDTO();
+        section.setHeadline("一、计算题");
+        QuestionDTO q1 = q(1, "【巩固】 计算：$1+1$＝ ．");
+        QuestionDTO q2 = q(2, "【巩固】 计算：1+2=_____。");
+        QuestionDTO q3 = q(3, "【巩固】 计算：3+4=_____");
+        section.setQuestions(List.of(q1, q2, q3));
+        request.setSections(List.of(section));
+
+        String documentXml = unzipTextEntries(builder.build(request)).get("word/document.xml");
+
+        assertNotNull(documentXml);
+        assertFalse(documentXml.contains("=_____"), "raw underscore answer blanks should not leak as plain text");
+        assertFalse(documentXml.contains("＝ ．"), "source dot answer blanks should not leak as plain text");
+        assertFalse(documentXml.contains("[[ANSWER_LINE]]"), "internal answer marker should not leak");
+        assertFalse(documentXml.contains("。。"), "answer blank normalization should not duplicate punctuation");
+        assertFalse(documentXml.contains("3+4=。"), "answer blank normalization should not invent punctuation");
+        assertTrue(documentXml.contains("<w:u w:val=\"single\""), "natural answer blanks should become underlined answer runs");
+        assertTrue(documentXml.contains("<w:color w:val=\"C00000\""), "consolidation prompt should use red emphasis like compact examples");
+    }
+
+    @Test
+    void shouldNotTreatLiteralEllipsisOrUnderscoresAsAnswerLines() throws IOException {
+        PaperExportRequest request = new PaperExportRequest();
+        PaperExportRequest.PaperInfo paper = new PaperExportRequest.PaperInfo();
+        paper.setName("答案线误替换测试");
+        paper.setCompactLayout(true);
+        request.setPaper(paper);
+
+        SectionDTO section = new SectionDTO();
+        section.setHeadline("一、说明题");
+        QuestionDTO q1 = q(1, "说明：变量 a___b 不应改写。");
+        QuestionDTO q2 = q(2, "观察：1=... 这里是省略号。");
+        QuestionDTO q3 = q(3, "观察：x=.5 是小数写法。");
+        section.setQuestions(List.of(q1, q2, q3));
+        request.setSections(List.of(section));
+
+        String documentXml = unzipTextEntries(builder.build(request)).get("word/document.xml");
+
+        assertNotNull(documentXml);
+        assertTrue(documentXml.contains("a___b"), "literal underscores should remain text");
+        assertTrue(documentXml.contains("1=..."), "literal equals ellipsis should remain text");
+        assertTrue(documentXml.contains("x=.5"), "literal decimal shorthand should remain text");
+        assertFalse(documentXml.contains("[[ANSWER_LINE]]"), "internal answer marker should not leak");
+        assertFalse(documentXml.contains("<w:u w:val=\"single\""), "literal content should not become answer lines");
+    }
+
+    @Test
     void shouldResolveWindowsProjectImagePathOnLinuxUserDir(@TempDir Path tempDir) throws IOException {
         String oldUserDir = System.getProperty("user.dir");
         Path imageDir = tempDir.resolve("target/reference-roundtrip/generated-media");
@@ -123,7 +177,7 @@ class DocxBuilderTest {
         section.setQuestions(List.of(q1, q2, q3));
         request.setSections(List.of(section));
 
-        byte[] docx = builder.build(request);
+        byte[] docx = withTextFallbackEnabled(() -> builder.build(request));
 
         assertNotNull(docx);
         assertTrue(docx.length > 100);
@@ -247,7 +301,7 @@ class DocxBuilderTest {
         section.setQuestions(List.of(q1, q2, q3, q4, q5));
         request.setSections(List.of(section));
 
-        byte[] docx = builder.build(request);
+        byte[] docx = withTextFallbackEnabled(() -> builder.build(request));
         assertNotNull(docx);
 
         Path outputDir = Path.of("E:/lingzhi/extensions/paper-to-word/output");
@@ -321,7 +375,7 @@ class DocxBuilderTest {
 
         request.setSections(List.of(sec1, sec2, sec3));
 
-        byte[] docx = builder.build(request);
+        byte[] docx = withTextFallbackEnabled(() -> builder.build(request));
         assertNotNull(docx);
 
         Path outputDir = Path.of("E:/lingzhi/extensions/paper-to-word/output");
@@ -421,5 +475,24 @@ class DocxBuilderTest {
             }
         }
         return entries;
+    }
+
+    private byte[] withTextFallbackEnabled(ThrowingDocxSupplier supplier) throws IOException {
+        String previous = System.getProperty("paperword.wmf.allowTextFallback");
+        System.setProperty("paperword.wmf.allowTextFallback", "true");
+        try {
+            return supplier.get();
+        } finally {
+            if (previous == null) {
+                System.clearProperty("paperword.wmf.allowTextFallback");
+            } else {
+                System.setProperty("paperword.wmf.allowTextFallback", previous);
+            }
+        }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingDocxSupplier {
+        byte[] get() throws IOException;
     }
 }

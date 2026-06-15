@@ -92,6 +92,7 @@ public final class MtefCharMap {
         putGreekLower("\\nu",         0x03BD);  // ν
         putGreekLower("\\xi",         0x03BE);  // ξ
         putGreekLower("\\pi",         0x03C0);  // π
+        putGreekLower("\\uppi",       0x03C0);  // π（upright pi alias）
         putGreekLower("\\varpi",      0x03D6);  // ϖ（pi 的变体形式）
         putGreekLower("\\rho",        0x03C1);  // ρ
         putGreekLower("\\varrho",     0x03F1);  // ϱ（rho 的变体形式）
@@ -110,7 +111,9 @@ public final class MtefCharMap {
         // （如 A=Alpha, B=Beta 等与拉丁字母相同的已由 ASCII 映射覆盖）
         putGreekUpper("\\Gamma",   0x0393);  // Γ
         putGreekUpper("\\Delta",   0x0394);  // Δ
+        putGreekUpper("\\Updelta", 0x0394);  // Δ
         putGreekUpper("\\Theta",   0x0398);  // Θ
+        putGreekUpper("\\Uptheta", 0x0398);  // Θ
         putGreekUpper("\\Lambda",  0x039B);  // Λ
         putGreekUpper("\\Xi",      0x039E);  // Ξ
         putGreekUpper("\\Pi",      0x03A0);  // Π
@@ -129,6 +132,7 @@ public final class MtefCharMap {
         putSymbol("\\pm",        0x00B1);  // ± 正负号
         putSymbol("\\mp",        0x2213);  // ∓ 负正号
         putSymbol("\\cdot",      0x22C5);  // ⋅ 点乘
+        putSymbol("\\spot",      0x22C5);  // ⋅ docx2tex 点乘别名
         putSymbol("\\bullet",    0x2022);  // • 实心圆点
         putMtExtra("\\circ",     0x2218);  // ∘ MathType 原生常用 MT Extra 编码
         putSymbol("\\ast",       0x2217);  // ∗ 星号运算符
@@ -147,6 +151,7 @@ public final class MtefCharMap {
         putSymbol("\\approx",    0x2248);  // ≈ 约等于
         putSymbol("\\equiv",     0x2261);  // ≡ 恒等于
         putSymbol("\\sim",       0x223C);  // ∼ 相似
+        putSymbol("\\backsim",   0x223D);  // ∽ 反向相似
         putSymbol("\\simeq",     0x2243);  // ≃ 渐近相等
         putSymbol("\\cong",      0x2245);  // ≅ 全等/同余
         putSymbol("\\propto",    0x221D);  // ∝ 正比于
@@ -155,7 +160,10 @@ public final class MtefCharMap {
         putSymbol("\\preceq",    0x2AAF);  // ⪯ 先于或等于
         putSymbol("\\succeq",    0x2AB0);  // ⪰ 后于或等于
         putSymbol("\\perp",      0x22A5);  // ⊥ 垂直
+        putSymbol("\\bot",       0x22A5);  // ⊥ 垂直别名
         putSymbol("\\parallel",  0x2225);  // ∥ 平行
+        putSymbol("\\mid",       0x2223);  // ∣ 整除/条件分隔
+        putSymbol("\\nmid",      0x2224);  // ∤ 不整除
         putSymbol("\\|",         0x2225);  // ∥ 双竖线
         putSymbol("\\colon",     0x2236);  // ∶ 比例号
 
@@ -192,15 +200,27 @@ public final class MtefCharMap {
         putSymbol("\\partial",   0x2202);  // ∂ 偏导数
         putSymbol("\\nabla",     0x2207);  // ∇ 梯度算子（nabla）
         putSymbol("\\angle",     0x2220);  // ∠ 角
+        putSymbol("\\ulcorner",  0x231C);  // ⌜ 左上角
+        putSymbol("\\urcorner",  0x231D);  // ⌝ 右上角
+        putSymbol("\\llcorner",  0x231E);  // ⌞ 左下角
+        putSymbol("\\lrcorner",  0x231F);  // ⌟ 右下角
         putText("\\triangle",     0x25B3);  // △ 几何三角形标记
         putText("\\vartriangle",  0x25B3);  // △ 三角形变体
         putText("\\bigtriangleup",0x25B3);  // △ Pandoc 常输出该写法
+        putText("\\bigtriangledown",0x25BD);  // ▽ 倒三角
         putText("\\square",       0x25A1);  // □ 填空占位方框
         putText("\\Box",          0x25A1);  // □ 方框别名
         putText("\\blacksquare",  0x25A0);  // ■ 实心占位方块
         putText("\\whitediamond", 0x25C7);  // ◇ 空心菱形占位符
+        putText("\\Diamond",      0x25C7);  // ◇ 空心菱形别名
+        putText("\\Diamondblack", 0x25C6);  // ◆ Pandoc/test-set filled diamond alias
         putText("\\bigcirc",      0x25CB);  // ○ 填空占位圆圈
+        putText("\\Circle",       0x25CB);  // ○ Pandoc/test-set circle alias
+        putText("\\CIRCLE",       0x25CF);  // ● Pandoc/test-set filled circle alias
+        putText("\\bigstar",      0x2605);  // ★ Pandoc/test-set star alias
+        putText("\\Sun",          0x2609);  // ☉ Pandoc/test-set sun alias
         putText("\\underbracechar",0xFE38);  // ︸ 下花括号展示符
+        putText("\\euro",          0x20AC);  // € docx2tex 偶发占位命令
         putSymbol("\\therefore", 0x2234);  // ∴ 所以
         putSymbol("\\because",   0x2235);  // ∵ 因为
 

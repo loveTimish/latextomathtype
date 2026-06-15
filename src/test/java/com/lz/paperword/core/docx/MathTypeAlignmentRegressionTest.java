@@ -55,6 +55,18 @@ class MathTypeAlignmentRegressionTest {
     }
 
     @Test
+    void shouldHonorExplicitShapeMetricsWhenPresent() throws IOException {
+        byte[] docx = buildDocxWithContent("<p>$\\pwmetrics{12,8,20,14}a^2+b^2=25$</p>");
+        ObjectMetrics generated = extractFirstObjectMetrics(docx);
+
+        assertEquals("wmf", generated.previewExtension);
+        assertWithin(generated.styleWidthPt, 20.0d, 0.6d, "shape width should come from explicit shape metrics");
+        assertWithin(generated.styleHeightPt, 14.0d, 0.6d, "shape height should come from explicit shape metrics");
+        assertTrue(generated.dxaOrig >= 395 && generated.dxaOrig <= 405, "dxaOrig should track explicit shape width");
+        assertTrue(generated.dyaOrig >= 275 && generated.dyaOrig <= 285, "dyaOrig should track explicit shape height");
+    }
+
+    @Test
     void shouldStayCloseToReferenceFractionMetrics() throws IOException {
         assumeTrue(Files.exists(REFERENCE_DOCX), "reference docx should exist");
 
@@ -73,8 +85,9 @@ class MathTypeAlignmentRegressionTest {
 
     @Test
     void shouldEmbedConcentrationCrossAsOleObject() throws IOException {
-        byte[] docx = buildDocxWithContent(
+        byte[] docx = withTextFallbackEnabled(() -> buildDocxWithContent(
             "浓度十字交叉：<br/>$$\\begin{array}{ccccc}{50\\%} & {} & {} & {} & {20\\%} \\\\ {} & {\\searrow} & {} & {\\nearrow} & {} \\\\ {} & {} & {30\\%} & {} & {} \\\\ {} & {\\nearrow} & {} & {\\searrow} & {} \\\\ {10\\%} & {} & {} & {} & {20\\%}\\end{array}$$"
+        )
         );
         Map<String, String> entries = unzipTextEntries(docx);
         String documentXml = entries.get("word/document.xml");
@@ -100,7 +113,8 @@ class MathTypeAlignmentRegressionTest {
 
     @Test
     void shouldKeepCurrentLongDivisionAsOleObject() throws IOException {
-        byte[] docx = buildDocxWithContent("长除法：<br/>$\\longdiv[246]{5}{1234}$");
+        byte[] docx = withTextFallbackEnabled(
+            () -> buildDocxWithContent("长除法：<br/>$\\longdiv[246]{5}{1234}$"));
         Map<String, String> entries = unzipTextEntries(docx);
         String documentXml = entries.get("word/document.xml");
         String relsXml = entries.get("word/_rels/document.xml.rels");
@@ -217,6 +231,25 @@ class MathTypeAlignmentRegressionTest {
         section.setQuestions(List.of(question));
         request.setSections(List.of(section));
         return builder.build(request);
+    }
+
+    private byte[] withTextFallbackEnabled(ThrowingDocxSupplier supplier) throws IOException {
+        String previous = System.getProperty("paperword.wmf.allowTextFallback");
+        System.setProperty("paperword.wmf.allowTextFallback", "true");
+        try {
+            return supplier.get();
+        } finally {
+            if (previous == null) {
+                System.clearProperty("paperword.wmf.allowTextFallback");
+            } else {
+                System.setProperty("paperword.wmf.allowTextFallback", previous);
+            }
+        }
+    }
+
+    @FunctionalInterface
+    private interface ThrowingDocxSupplier {
+        byte[] get() throws IOException;
     }
 
     private ObjectMetrics extractFirstObjectMetrics(byte[] docxBytes) throws IOException {

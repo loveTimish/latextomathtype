@@ -132,11 +132,23 @@ def compute_ink_bounds(png_path: Path, white_threshold: int, alpha_threshold: in
         }
 
 
-def measure_docx(docx: Path, magick: Path, white_threshold: int, alpha_threshold: int) -> list[dict[str, Any]]:
+def measure_docx(
+    docx: Path,
+    magick: Path,
+    white_threshold: int,
+    alpha_threshold: int,
+    indexes: set[int] | None = None,
+    max_items: int | None = None,
+) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
+    boxes = extract_boxes(docx)
+    if indexes:
+        boxes = [box for box in boxes if box.index in indexes]
+    if max_items is not None:
+        boxes = boxes[:max_items]
     with tempfile.TemporaryDirectory(prefix="formula-ink-") as tmp:
         temp_root = Path(tmp)
-        for box in extract_boxes(docx):
+        for box in boxes:
             row = asdict(box)
             media = resolve_media(docx, box.image_target)
             suffix = Path(box.image_target or "").suffix or ".bin"
@@ -176,12 +188,24 @@ def measure_docx(docx: Path, magick: Path, white_threshold: int, alpha_threshold
     return rows
 
 
+def parse_index_list(value: str) -> set[int]:
+    indexes: set[int] = set()
+    for part in value.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        indexes.add(int(part))
+    return indexes
+
+
 def compare_rows(reference: list[dict[str, Any]], generated: list[dict[str, Any]]) -> dict[str, Any]:
-    count = min(len(reference), len(generated))
+    reference_by_index = {int(row["index"]): row for row in reference}
+    generated_by_index = {int(row["index"]): row for row in generated}
+    paired_indexes = sorted(set(reference_by_index) & set(generated_by_index))
     rows: list[dict[str, Any]] = []
-    for index in range(count):
-        ref = reference[index]
-        gen = generated[index]
+    for index in paired_indexes:
+        ref = reference_by_index[index]
+        gen = generated_by_index[index]
         if ref.get("ink_width_pt") is None or gen.get("ink_width_pt") is None:
             continue
         width_delta = float(gen["ink_width_pt"]) - float(ref["ink_width_pt"])
@@ -191,6 +215,7 @@ def compare_rows(reference: list[dict[str, Any]], generated: list[dict[str, Any]
         rows.append(
             {
                 "index": index,
+                "sourceIndex": index + 1,
                 "reference_ink_width_pt": ref["ink_width_pt"],
                 "generated_ink_width_pt": gen["ink_width_pt"],
                 "reference_ink_height_pt": ref["ink_height_pt"],
@@ -211,8 +236,13 @@ def compare_rows(reference: list[dict[str, Any]], generated: list[dict[str, Any]
         )
     return {
         "paired_count": len(rows),
-        "unpaired_reference": max(len(reference) - count, 0),
-        "unpaired_generated": max(len(generated) - count, 0),
+        "unpaired_reference": sorted(set(reference_by_index) - set(generated_by_index)),
+        "unpaired_generated": sorted(set(generated_by_index) - set(reference_by_index)),
+        "pairing_warning": (
+            "DOCX-local indexes are only safe when object counts and order already match in strict acceptance."
+            if set(reference_by_index) != set(generated_by_index)
+            else ""
+        ),
         "ink_width_abs_delta_pt": stats([row["ink_width_abs_delta_pt"] for row in rows]),
         "ink_height_abs_delta_pt": stats([row["ink_height_abs_delta_pt"] for row in rows]),
         "required_width_scale": stats([row["required_width_scale"] for row in rows if math.isfinite(row["required_width_scale"])]),
@@ -241,13 +271,13 @@ def render_text(report: dict[str, Any]) -> str:
     ]
     for row in comparison["worst_width"][:12]:
         lines.append(
-            "  #{index}: ref={reference_ink_width_pt}pt gen={generated_ink_width_pt}pt "
+            "  #{index}/sourceIndex={sourceIndex}: ref={reference_ink_width_pt}pt gen={generated_ink_width_pt}pt "
             "delta={ink_width_delta_pt}pt scale={required_width_scale} text={generated_context}".format(**row)
         )
     lines.extend(["", "Worst visible height deltas"])
     for row in comparison["worst_height"][:12]:
         lines.append(
-            "  #{index}: ref={reference_ink_height_pt}pt gen={generated_ink_height_pt}pt "
+            "  #{index}/sourceIndex={sourceIndex}: ref={reference_ink_height_pt}pt gen={generated_ink_height_pt}pt "
             "delta={ink_height_delta_pt}pt scale={required_height_scale} text={generated_context}".format(**row)
         )
     return "\n".join(lines) + "\n"
@@ -262,17 +292,41 @@ def main() -> int:
     parser.add_argument("--magick", type=Path, default=DEFAULT_MAGICK)
     parser.add_argument("--white-threshold", type=int, default=245)
     parser.add_argument("--alpha-threshold", type=int, default=8)
+    parser.add_argument("--indices", default="", help="Comma-separated zero-based formula indexes to compare; sourceIndex is index + 1.")
+    parser.add_argument("--source-indices", default="", help="Comma-separated one-based sourceIndex values to compare.")
+    parser.add_argument("--max-items", type=int, help="Compare only the first N formulas after index filtering.")
     args = parser.parse_args()
 
     if not args.magick.exists() and not shutil.which("magick"):
         raise SystemExit(f"ImageMagick magick.exe not found: {args.magick}")
     magick = args.magick if args.magick.exists() else Path(shutil.which("magick"))
 
-    reference_rows = measure_docx(args.reference, magick, args.white_threshold, args.alpha_threshold)
-    generated_rows = measure_docx(args.generated, magick, args.white_threshold, args.alpha_threshold)
+    selected_indexes = parse_index_list(args.indices)
+    selected_source_indexes = parse_index_list(args.source_indices)
+    if selected_source_indexes:
+        selected_indexes.update(index - 1 for index in selected_source_indexes)
+    reference_rows = measure_docx(
+        args.reference,
+        magick,
+        args.white_threshold,
+        args.alpha_threshold,
+        selected_indexes,
+        args.max_items,
+    )
+    generated_rows = measure_docx(
+        args.generated,
+        magick,
+        args.white_threshold,
+        args.alpha_threshold,
+        selected_indexes,
+        args.max_items,
+    )
     report = {
         "reference": str(args.reference.resolve()),
         "generated": str(args.generated.resolve()),
+        "indices": sorted(selected_indexes),
+        "source_indices": sorted(index + 1 for index in selected_indexes),
+        "max_items": args.max_items,
         "comparison": compare_rows(reference_rows, generated_rows),
         "reference_rows": reference_rows,
         "generated_rows": generated_rows,

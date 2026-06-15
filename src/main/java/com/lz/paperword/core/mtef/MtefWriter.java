@@ -919,6 +919,7 @@ public class MtefWriter {
 
     private boolean shouldWriteFlatParenTemplate(int openCh, int closeCh, List<LaTeXNode> content) {
         return currentStyleHints.flatParenTemplate()
+            && !currentStyleHints.asciiFlatParens()
             && openCh == '('
             && closeCh == ')'
             && isLinearFenceContent(content)
@@ -1678,6 +1679,14 @@ public class MtefWriter {
             writeCharRecord(out, MtefRecord.FN_TEXT_FE, 0xFF09);
             return;
         }
+        if ("（".equals(ch)) {
+            writeCharRecord(out, MtefRecord.FN_TEXT_FE, 0xFF08);
+            return;
+        }
+        if ("）".equals(ch)) {
+            writeCharRecord(out, MtefRecord.FN_TEXT_FE, 0xFF09);
+            return;
+        }
         if (ch.length() == 1 && isFarEastTextChar(ch.charAt(0))) {
             writeCharRecord(out, MtefRecord.FN_TEXT_FE, ch.charAt(0));
             return;
@@ -1715,7 +1724,7 @@ public class MtefWriter {
 
     /** LaTeX 间距命令集合 — 这些命令在 MathType 中被忽略，因为 MathType 有自己的间距算法 */
     private static final Set<String> LATEX_SPACING_COMMANDS = Set.of(
-        "\\,", "\\;", "\\:", "\\!", "\\quad", "\\qquad", "\\hspace", "\\hskip"
+        "\\,", "\\;", "\\:", "\\!", "\\enspace", "\\quad", "\\qquad", "\\hspace", "\\hskip"
     );
 
     private void writeCommandNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
@@ -1824,8 +1833,38 @@ public class MtefWriter {
 
     private void writeBoxNode(ByteArrayOutputStream out, LaTeXNode content) throws IOException {
         MtefTemplateBuilder.writeBoxHeader(out);
-        writeSlot(out, content);
+        writeSlot(out, isVisuallyEmptyBoxContent(content) ? null : content);
         out.write(MtefRecord.END);
+    }
+
+    private boolean isVisuallyEmptyBoxContent(LaTeXNode node) {
+        if (node == null) {
+            return true;
+        }
+        return switch (node.getType()) {
+            case ROOT, GROUP, ROW, CELL, TEXT -> node.getChildren().stream().allMatch(this::isVisuallyEmptyBoxContent)
+                && isBlankOrInvisible(node.getValue());
+            case CHAR -> isBlankOrInvisible(node.getValue());
+            case COMMAND -> LATEX_SPACING_COMMANDS.contains(node.getValue())
+                || ("\\text".equals(node.getValue()) && node.getChildren().stream().allMatch(this::isVisuallyEmptyBoxContent));
+            default -> false;
+        };
+    }
+
+    private boolean isBlankOrInvisible(String value) {
+        if (value == null || value.isBlank()) {
+            return true;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            int cp = value.codePointAt(i);
+            if (!Character.isWhitespace(cp) && cp != 0x200B && cp != 0x200C && cp != 0x200D && cp != 0xFEFF) {
+                return false;
+            }
+            if (Character.isSupplementaryCodePoint(cp)) {
+                i++;
+            }
+        }
+        return true;
     }
 
     private void writeArrowNode(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
