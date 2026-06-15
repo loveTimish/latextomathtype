@@ -1375,3 +1375,29 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v124-repeated-paren-equation-width\formula-preview-ink-source-vs-v124-first30.json`
 - v124 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v124-repeated-paren-equation-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v125 retunes only standalone two-digit objects by changing
+  `STANDALONE_TWO_DIGIT_WIDTH_SCALE` from `0.81` to `0.79`, with cache version
+  `v125-standalone-two-digit-width`. Keep this scoped to formulas whose entire
+  normalized text is exactly two digits; long formulas containing numbers such
+  as `S=25+35` must not inherit the standalone digit scale.
+- v125 on doc 61 first-30 ink versus v124: width average improved from
+  `0.115pt` to `0.105pt`, p90 improved from `0.244pt` to `0.232pt`, and max
+  stayed `0.264pt`. Height average, p90, and max stayed `0.075pt`, `0.112pt`,
+  and `0.127pt`. The two standalone digit targets improved from v124
+  sourceIndex `27/28` width residuals `+0.242pt/+0.260pt` to
+  `+0.089pt/+0.108pt`.
+- v125 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal
+  target shape width/height `520/520` within 1%.
+- v125 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v125-standalone-two-digit-width\xsc测试集完整重建_61.docx`
+- v125 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v125-standalone-two-digit-width\leak-scan-61.json`
+- v125 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v125-standalone-two-digit-width\wmf-report-61.json`
+- v125 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v125-standalone-two-digit-width\formula-preview-ink-source-vs-v125-first30.json`
+- v125 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v125-standalone-two-digit-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`

@@ -583,13 +583,21 @@ class VectorWmfFormulaRendererTest {
     @Test
     void standaloneTwoDigitObjectsUseCompactHorizontalAdvance() throws IOException {
         byte[] twoDigits = VectorWmfFormulaRenderer.render("25", 14.25d, 12.75d);
+        byte[] anotherTwoDigits = VectorWmfFormulaRenderer.render("35", 14.25d, 12.75d);
         byte[] threeDigits = VectorWmfFormulaRenderer.render("250", 22.0d, 12.75d);
+        byte[] embeddedDigits = VectorWmfFormulaRenderer.render("S=25+35", 64.0d, 12.75d);
 
         assertTrue(VectorWmfFormulaRenderer.canRender("25"));
+        assertTrue(VectorWmfFormulaRenderer.canRender("35"));
         assertTrue(VectorWmfFormulaRenderer.canRender("250"));
+        assertTrue(VectorWmfFormulaRenderer.canRender("S=25+35"));
+        assertEquals(firstTextAverageDx(twoDigits), firstTextAverageDx(anotherTwoDigits));
         assertTrue(firstTextAverageDx(twoDigits) < firstTextAverageDx(threeDigits));
+        assertTrue(firstTextAverageDx(embeddedDigits) > firstTextAverageDx(twoDigits));
         assertTrue(maxRecordCoordinate(twoDigits) <= 14.25d * 20.0d);
+        assertTrue(maxRecordCoordinate(anotherTwoDigits) <= 14.25d * 20.0d);
         assertTrue(maxRecordCoordinate(threeDigits) <= 22.0d * 20.0d);
+        assertTrue(maxRecordCoordinate(embeddedDigits) <= 64.0d * 20.0d);
     }
 
     @Test
