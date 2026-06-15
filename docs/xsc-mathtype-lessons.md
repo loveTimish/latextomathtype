@@ -609,3 +609,31 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v97-ab-bd-label-y-scoped\formula-preview-ink-source-vs-v97-first30.json`
 - v97 geometry-label targeted ink report:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v97-ab-bd-label-y-scoped\formula-preview-ink-source-vs-v97-geometry-labels.json`
+- v98 script-relation height experiment is a mixed result: lowering
+  `SCRIPT_RELATION_FONT_Y_SCALE` from `0.965` to `0.945` improved first-30
+  height average from v97 `0.187pt` to `0.171pt` and max from `0.482pt` to
+  `0.449pt`, but short equation source index 15 widened in the wrong direction
+  after insufficient compensation, with width max worsening from `0.565pt` to
+  `0.616pt`. Do not submit a relation-height change without rebalancing the
+  affected width compensation constants.
+- v99 keeps the v98 relation height reduction and rebalance compensation:
+  `SCRIPT_RELATION_SHORT_EQUATION_WIDTH_COMPENSATION=1.038` and
+  `SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION=1.015`. On doc 61 first-30,
+  width average improved from v97 `0.198pt` to `0.191pt`, width max from
+  `0.565pt` to `0.551pt`, height average from `0.187pt` to `0.171pt`, and
+  height max from `0.482pt` to `0.449pt`. Structural checks still showed `520`
+  valid MathType OLE, `520` vector WMF, zero visible LaTeX leaks, and zero
+  bitmap WMF.
+- v99 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v99-relation-y-width-balanced\xsc测试集完整重建_61.docx`
+- v99 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v99-relation-y-width-balanced\leak-scan-61.json`
+- v99 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v99-relation-y-width-balanced\wmf-report-61.json`
+- v99 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v99-relation-y-width-balanced\formula-preview-ink-source-vs-v99-first30.json`
+- v99 no-context review found no P0/P1 high-risk issue. Residual risk is
+  coverage: doc 61 first-30 does not prove every formula matched by
+  `scriptRelationFontYEligible`, so the next broad run should include more
+  relation chains and visual spot checks for short equations, triangle chains,
+  and long ratio chains.
