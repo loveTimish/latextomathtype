@@ -510,13 +510,15 @@ class VectorWmfFormulaRendererTest {
             "S_{1}\\colon S_{3}\\colon S_{2}\\colon S_{4}=a^{2}\\colon b^{2}\\colon ab\\colon ab"));
         assertEquals(0.975d, VectorWmfFormulaRenderer.scriptRelationWidthScale(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}=a^{2}\\colon ab=25\\colon 35"));
-        assertEquals(0.945d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
+        assertEquals(0.93d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
             "S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{2}=2"));
+        assertEquals(0.93d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{3}=4=b^{2}"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{-1}b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{2}+b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{2}-b"));
-        assertEquals(1.038d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{1}=a^{2}=1"));
-        assertEquals(1.015d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
+        assertEquals(1.048d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{1}=a^{2}=1"));
+        assertEquals(1.025d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}=a^{2}\\colon ab=25\\colon 35"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
             "S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
@@ -656,7 +658,7 @@ class VectorWmfFormulaRendererTest {
 
         assertTrue(createFontHeights(simple).get(0) > -240);
         assertTrue(createFontHeights(simple).get(0) > createFontHeights(shortScript).get(0));
-        assertTrue(createFontHeights(shortEquation).get(0) > createFontHeights(simple).get(0));
+        assertTrue(createFontHeights(shortEquation).get(0) < createFontHeights(simple).get(0));
         assertTrue(createFontHeights(geometryLabel).get(0) < createFontHeights(mixedGeometryText).get(0));
         assertTrue(VectorWmfFormulaRenderer.isStandaloneTallGeometryLabel(
             "\\pwmetrics{17.992,11.995,18.000,12.000}AB"));
@@ -667,6 +669,7 @@ class VectorWmfFormulaRendererTest {
         assertFalse(VectorWmfFormulaRenderer.isStandaloneTallGeometryLabel("ABCD"));
         assertFalse(VectorWmfFormulaRenderer.isStandaloneTallGeometryLabel("A1"));
         assertEquals(createFontHeights(shortEquation).get(0), createFontHeights(shortSuperscriptEquation).get(0));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{2}=2"));
         assertTrue(VectorWmfFormulaRenderer.shortScriptEquationWidthScale("S_{2}=2") < 1.0d);
         assertTrue(VectorWmfFormulaRenderer.shortScriptEquationWidthScale("a^{2}=1") < 1.0d);
         assertTrue(VectorWmfFormulaRenderer.shortExactEquationWidthScale("b=2") < 1.0d);

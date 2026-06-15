@@ -703,3 +703,40 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v101-upper-subscript-font-y\formula-preview-ink-source-vs-v101-short-scripts.json`
 - v101 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v101-upper-subscript-font-y\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v102 relation-height experiment with `SCRIPT_RELATION_FONT_Y_SCALE=0.912`,
+  `SCRIPT_RELATION_SHORT_EQUATION_WIDTH_COMPENSATION=1.058`, and
+  `SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION=1.035` was over-aggressive.
+  It improved targeted relation-chain height deltas for source indices `15`
+  and `30` from about `0.425/0.431pt` to about `0.222/0.228pt`, but widened
+  the worst first-30 width max from v101 `0.551pt` to `0.601pt` and pushed
+  single short equations source indices `5`/`6` too short vertically. Do not
+  reapply a global relation Y reduction without excluding single-relation
+  formulas or rechecking short equations.
+- v102b is a cache-version caution: changing relation constants while keeping
+  `LaTeXImageRenderer.CACHE_VERSION` at the previous value reused stale WMF
+  previews, so the generated ink metrics were identical to the older attempt.
+  Any WMF/font/metric tuning must bump cache version, even if the output
+  directory changes.
+- v104 keeps the relation adjustment narrower: `SCRIPT_RELATION_FONT_Y_SCALE`
+  is `0.93`, width compensations are `1.048` for `S_{1}=a^{2}=1` and `1.025`
+  for bigtriangle relation chains, and `scriptRelationFontYEligible` now
+  requires at least two top-level relation operators. This preserves chain
+  formulas such as `S_{3}=4=b^{2}` while excluding single-relation short
+  formulas such as `S_{2}=2`.
+- v104 on doc 61 is a positive height step but not final: first-30 height avg
+  improved from v101 `0.142pt` to `0.119pt`, and height max from `0.431pt` to
+  `0.330pt`. Structural and physical gates still passed with `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero bitmap WMF,
+  target WMF width/height `520/520` within 1%, and shape width/height `520/520`
+  within 1%. Width remains the next issue: first-30 width avg moved from v101
+  `0.188pt` to `0.191pt`, and width max worsened from `0.551pt` to `0.601pt`.
+- v104 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v104-relation-chain-height\xsc测试集完整重建_61.docx`
+- v104 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v104-relation-chain-height\leak-scan-61.json`
+- v104 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v104-relation-chain-height\wmf-report-61.json`
+- v104 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v104-relation-chain-height\formula-preview-ink-source-vs-v104-first30.json`
+- v104 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v104-relation-chain-height\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`

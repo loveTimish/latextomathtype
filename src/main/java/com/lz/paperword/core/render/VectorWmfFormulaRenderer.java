@@ -61,9 +61,9 @@ final class VectorWmfFormulaRenderer {
     private static final double SHORT_SCRIPT_EQUATION_FONT_Y_SCALE = 0.955d;
     private static final double SCRIPT_RELATION_WIDTH_SCALE = 0.975d;
     private static final double SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE = 0.987d;
-    private static final double SCRIPT_RELATION_FONT_Y_SCALE = 0.945d;
-    private static final double SCRIPT_RELATION_SHORT_EQUATION_WIDTH_COMPENSATION = 1.038d;
-    private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION = 1.015d;
+    private static final double SCRIPT_RELATION_FONT_Y_SCALE = 0.93d;
+    private static final double SCRIPT_RELATION_SHORT_EQUATION_WIDTH_COMPENSATION = 1.048d;
+    private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION = 1.025d;
     private static final Pattern LEFT_RIGHT_PAREN = Pattern.compile(
         "\\\\left\\s*\\(\\s*(?:\\{\\s*)?(.*?)(?:\\s*})?\\s*\\\\right\\s*\\)"
     );
@@ -429,6 +429,11 @@ final class VectorWmfFormulaRenderer {
         String raw = stripMetricsAndStyles(latex == null ? "" : latex);
         String text = normalizeFlatLatex(normalizeTextCommands(raw)).replaceAll("\\s+", "");
         if (scriptRelationWidthScale(latex) >= 0.999d) {
+            return false;
+        }
+        int relationOperators = Math.max(topLevelRelationOperatorCount(normalizeFlatLatex(normalizeTextCommands(raw))),
+            topLevelRelationOperatorCount(normalizeFlatLatex(raw)));
+        if (relationOperators < 2) {
             return false;
         }
         return hasTopLevelEqualsOrColon(text) || hasTopLevelEqualsOrColon(normalizeFlatLatex(raw));
