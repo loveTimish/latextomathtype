@@ -61,7 +61,8 @@ final class VectorWmfFormulaRenderer {
     private static final double SCRIPT_RELATION_WIDTH_SCALE = 0.975d;
     private static final double SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE = 0.987d;
     private static final double SCRIPT_RELATION_FONT_Y_SCALE = 0.965d;
-    private static final double SCRIPT_RELATION_HEIGHT_WIDTH_COMPENSATION = 1.007d;
+    private static final double SCRIPT_RELATION_SHORT_EQUATION_WIDTH_COMPENSATION = 1.014d;
+    private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION = 1.007d;
     private static final Pattern LEFT_RIGHT_PAREN = Pattern.compile(
         "\\\\left\\s*\\(\\s*(?:\\{\\s*)?(.*?)(?:\\s*})?\\s*\\\\right\\s*\\)"
     );
@@ -410,12 +411,12 @@ final class VectorWmfFormulaRenderer {
         String raw = stripMetricsAndStyles(latex == null ? "" : latex);
         String text = normalizeFlatLatex(normalizeTextCommands(raw)).replaceAll("\\s+", "");
         if ("S_{1}=a^{2}=1".equals(text)) {
-            return SCRIPT_RELATION_HEIGHT_WIDTH_COMPENSATION;
+            return SCRIPT_RELATION_SHORT_EQUATION_WIDTH_COMPENSATION;
         }
         int relationOperators = Math.max(topLevelRelationOperatorCount(normalizeFlatLatex(normalizeTextCommands(raw))),
             topLevelRelationOperatorCount(normalizeFlatLatex(raw)));
         return raw.contains("\\bigtriangleup") && relationOperators >= 4 && scriptRelationFontYScale(latex) < 0.999d
-            ? SCRIPT_RELATION_HEIGHT_WIDTH_COMPENSATION : 1.0d;
+            ? SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION : 1.0d;
     }
 
     static boolean scriptRelationFontYEligible(String latex) {

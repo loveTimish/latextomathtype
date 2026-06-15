@@ -512,11 +512,13 @@ class VectorWmfFormulaRendererTest {
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{-1}b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{2}+b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{2}-b"));
-        assertEquals(1.007d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{1}=a^{2}=1"));
+        assertEquals(1.014d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{1}=a^{2}=1"));
         assertEquals(1.007d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}=a^{2}\\colon ab=25\\colon 35"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
             "S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{3}=4=b^{2}"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{2}=2=a\\times b"));
         assertFalse(VectorWmfFormulaRenderer.repeatedEquationParenPower("S=\\left(a+b\\right)^2=9"));
         assertTrue(VectorWmfFormulaRenderer.repeatedEquationParenPower(
             "S=\\left(a+b\\right)^2=\\left(1+2\\right)^2=9"));

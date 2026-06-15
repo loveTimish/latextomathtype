@@ -361,6 +361,17 @@ batch, then append any useful lesson or pitfall found in that round.
   width work should start at exact sourceIndex `15` (`S_{1}=a^{2}=1`) and
   `30` (`S_{\bigtriangleup AOB}\colon S_{\bigtriangleup BOC}=...`) rather than
   broadening a global relation scale.
+- v95 splits the relation-height width compensation instead of using one
+  constant for both known classes: exact `S_{1}=a^{2}=1` uses `1.014`, while
+  triangle relation chains keep `1.007`. This reduced doc 61 first-30 width
+  max from v94 `0.666pt` to `0.565pt` and width average from `0.222pt` to
+  `0.218pt`, while height average stayed `0.217pt`. OLE/WMF safety stayed at
+  `520` valid MathType OLE, `520` vector WMFs, `0` leaks, and `0` bitmap WMFs.
+- The v95 no-context review found no P0/P1 issue. It confirmed the `1.014`
+  path is exact-normalized-form scoped and the `\bigtriangleup` path still
+  requires relation density plus relation-font-y eligibility. Residual risk is
+  the usual visual-calibration gap: helper assertions prove classification, but
+  ink comparison remains the real evidence.
 
 ### Ink Comparison
 
@@ -561,3 +572,13 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v94-script-relation-height-scoped\wmf-report-61.json`
 - v94 first-30 ink report:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v94-script-relation-height-scoped\formula-preview-ink-source-vs-v94-first30.json`
+- v95 relation-width compensation split sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v95-relation-width-comp-split\xsc测试集完整重建_61.docx`
+- v95 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v95-relation-width-comp-split\leak-scan-61.json`
+- v95 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v95-relation-width-comp-split\wmf-report-61.json`
+- v95 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v95-relation-width-comp-split\formula-preview-ink-source-vs-v95-first30.json`
+- v95 sourceIndex 15/30 targeted ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v95-relation-width-comp-split\formula-preview-ink-source-vs-v95-targets.json`
