@@ -991,3 +991,45 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v112-s1-area-width\formula-preview-ink-source-vs-v112-first30.json`
 - v112 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v112-s1-area-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v113b narrows only standalone uppercase subscript formulas by changing
+  `STANDALONE_UPPER_SUBSCRIPT_WIDTH_SCALE` from `0.82` to `0.814`, with cache
+  version `v113b-xsc-upper-subscript-balanced`. The scope remains limited by
+  `standaloneShortScriptWidthScale(...)` and `isStandaloneUpperSubscript(...)`:
+  formulas containing `=`, `\colon`, `+`, `-`, `\times`, `\div`,
+  `\left`/`\right`, fractions, roots, or arrays do not take this path.
+- The first v113 trial used `0.805` and improved sourceIndex `7`
+  (`S_{1}`) from `+0.275pt` to `+0.175pt`, but it over-shrank the same
+  standalone-uppercase-subscript class at sourceIndex `9` from about
+  `-0.194pt` to `-0.294pt`. The final `0.814` is the balanced value: sourceIndex
+  `7` improves to `+0.225pt`, while sourceIndex `9` lands at `-0.244pt`, so the
+  two visible class representatives are both closer than the over-tightened
+  trial.
+- A same-round retune must still bump `LaTeXImageRenderer.CACHE_VERSION`.
+  Reusing `v113-xsc-upper-subscript-width` after changing `0.805` to `0.814`
+  produced identical ink numbers because cached previews were reused. Treat
+  unchanged ink output after a renderer constant edit as a cache-version smell
+  before trusting the measurement.
+- v113b first-30 ink on doc 61 keeps first-30 width average at `0.141pt`,
+  improves p90 from v112 `0.263pt` to `0.260pt`, and keeps height average/max at
+  `0.114pt` / `0.330pt`. The remaining top residuals are still relation-chain
+  and exact/short-number cases rather than this standalone `S_{1}` class.
+- v113b structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal target
+  shape width/height `520/520` within 1%.
+- v113b no-context review found no P0/P1/P2 issues. It confirmed that the
+  standalone upper-subscript scale is excluded from `S_{1}\colon S_{3}=...`,
+  `S_{1}=a^{2}=1`, `a^{2}`, and `S=\left(a+b\right)^2=9`, and suggested a
+  future harder test that directly asserts the scale path or a narrow
+  `S_{1}` golden width.
+- v113b sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v113b-upper-subscript-balanced\xsc测试集完整重建_61.docx`
+- v113b leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v113b-upper-subscript-balanced\leak-scan-61.json`
+- v113b WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v113b-upper-subscript-balanced\wmf-report-61.json`
+- v113b first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v113b-upper-subscript-balanced\formula-preview-ink-source-vs-v113b-first30.json`
+- v113b aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v113b-upper-subscript-balanced\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`

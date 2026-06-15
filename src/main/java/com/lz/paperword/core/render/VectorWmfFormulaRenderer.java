@@ -53,7 +53,7 @@ final class VectorWmfFormulaRenderer {
     private static final double STANDALONE_PAREN_POWER_WIDTH_SCALE = 0.93d;
     private static final double EQUATION_PAREN_POWER_WIDTH_SCALE = 0.920d;
     private static final double STANDALONE_UPPER_SUBSCRIPT_FONT_Y_SCALE = 0.956d;
-    private static final double STANDALONE_UPPER_SUBSCRIPT_WIDTH_SCALE = 0.82d;
+    private static final double STANDALONE_UPPER_SUBSCRIPT_WIDTH_SCALE = 0.814d;
     private static final double STANDALONE_LOWER_SUPERSCRIPT_WIDTH_SCALE = 0.86d;
     private static final double STANDALONE_B_SUPERSCRIPT_WIDTH_SCALE = 0.795d;
     private static final double SHORT_SCRIPT_EQUATION_WIDTH_SCALE = 0.97d;
