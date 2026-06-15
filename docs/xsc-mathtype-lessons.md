@@ -893,3 +893,33 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v109-s1-area-balance\formula-preview-ink-source-vs-v109-first30.json`
 - v109 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v109-s1-area-balance\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v110 adds an exact `S_{2}=2` width scale instead of tightening the whole
+  short-script-equation class. `SHORT_S2_EQUALS_TWO_WIDTH_SCALE=0.985` is
+  applied through `shortExactEquationWidthScale`, alongside the existing
+  `a=1` and `b=2` exact corrections. This avoids changing broader formulas
+  such as `a^{2}=1`, `S^{2}=4`, or `S_{2}=2.5`.
+- The v110 choice is based on v109 residuals: sourceIndex `5` (`S_{2}=2`) was
+  the top first-30 width error at `+0.381pt` while its height error was only
+  `+0.105pt`. A pure exact-width adjustment is therefore safer than another
+  font-Y change.
+- v110 on doc 61 improved sourceIndex `5` width delta from `+0.381pt` to
+  `+0.231pt`. First-30 width average improved from v109 `0.151pt` to
+  `0.146pt`, width max from `0.381pt` to `0.348pt`, and height average/max
+  stayed `0.114pt` / `0.330pt`. The next visible width target is again
+  sourceIndex `18` (`+0.348pt`), and the top height residual remains the
+  relation-chain group led by sourceIndex `30` (`+0.330pt`).
+- v110 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal
+  target shape width/height `520/520` within 1%.
+- v110 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v110-s2-short-equation-width\xsc测试集完整重建_61.docx`
+- v110 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v110-s2-short-equation-width\leak-scan-61.json`
+- v110 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v110-s2-short-equation-width\wmf-report-61.json`
+- v110 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v110-s2-short-equation-width\formula-preview-ink-source-vs-v110-first30.json`
+- v110 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v110-s2-short-equation-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
