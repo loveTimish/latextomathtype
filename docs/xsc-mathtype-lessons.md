@@ -1349,3 +1349,29 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v123b-long-chain-relation-height-xscale\formula-preview-ink-source-vs-v123b-first30.json`
 - v123b aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v123b-long-chain-relation-height-xscale\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v124 targets repeated parenthesized-power equations such as
+  `S=\left(a+b\right)^2=\left(1+2\right)^2=9`, which is doc 61 formula
+  object/sourceIndex `18`. Do not treat this object as an `AB`/geometry label;
+  mapping through `61.tex` and `oleObject18` shows it is the repeated
+  parenthesized-power equation. Lowering `EQUATION_PAREN_POWER_WIDTH_SCALE`
+  from `0.916` to `0.913` reduced its visible ink width residual from
+  `+0.298pt` to `+0.248pt`.
+- v124 on doc 61 first-30 ink versus v123b: width average improved from
+  `0.117pt` to `0.115pt`, p90 improved from `0.246pt` to `0.244pt`, and max
+  improved from `0.298pt` to `0.264pt`. Height average, p90, and max stayed
+  `0.075pt`, `0.112pt`, and `0.127pt`.
+- v124 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal
+  target shape width/height `520/520` within 1%.
+- v124 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v124-repeated-paren-equation-width\xsc测试集完整重建_61.docx`
+- v124 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v124-repeated-paren-equation-width\leak-scan-61.json`
+- v124 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v124-repeated-paren-equation-width\wmf-report-61.json`
+- v124 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v124-repeated-paren-equation-width\formula-preview-ink-source-vs-v124-first30.json`
+- v124 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v124-repeated-paren-equation-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
