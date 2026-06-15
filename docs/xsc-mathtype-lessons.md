@@ -769,3 +769,33 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v105-triangle-chain-width\formula-preview-ink-source-vs-v105-first30.json`
 - v105 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v105-triangle-chain-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v106 adds an exact `S_{1}=a^{2}=1` relation-equation balance instead of
+  changing the whole script-relation class. The formula now uses
+  `SCRIPT_RELATION_EXACT_S1_EQUATION_FONT_Y_SCALE=0.905` and
+  `SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION=1.075`; neighboring
+  formulas such as `S_{3}=4=b^{2}` and `S_{2}=2=a\times b` keep their previous
+  behavior. This is deliberately narrow because v102 already showed that broad
+  relation Y reductions damage short equations.
+- v106 is a small positive step, not a final solve for doc 61. First-30 width
+  average changed from v105 `0.172pt` to `0.171pt`, width max from `0.465pt`
+  to `0.455pt`, height average from `0.119pt` to `0.116pt`, and height max
+  stayed `0.330pt`. SourceIndex `15` improved from width/height deltas
+  `-0.465pt/+0.323pt` to `-0.414pt/+0.222pt`. Do not keep increasing this
+  exact compensation blindly; the next top width target is sourceIndex `14`
+  (`a=1`, `-0.455pt`), while the next top height target is still sourceIndex
+  `30` (`+0.330pt`).
+- v106 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, target WMF width/height `520/520` within 1%, and target shape
+  width/height `520/520` within 1%.
+- v106 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v106-s1-area-equation-balance\xsc测试集完整重建_61.docx`
+- v106 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v106-s1-area-equation-balance\leak-scan-61.json`
+- v106 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v106-s1-area-equation-balance\wmf-report-61.json`
+- v106 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v106-s1-area-equation-balance\formula-preview-ink-source-vs-v106-first30.json`
+- v106 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v106-s1-area-equation-balance\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
