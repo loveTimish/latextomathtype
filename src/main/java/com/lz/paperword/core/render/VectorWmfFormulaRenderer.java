@@ -69,7 +69,7 @@ final class VectorWmfFormulaRenderer {
     private static final double SCRIPT_RELATION_FONT_Y_SCALE = 0.93d;
     private static final double SCRIPT_RELATION_COMPACT_FONT_Y_SCALE = 0.906d;
     private static final double SCRIPT_RELATION_LONG_CHAIN_FONT_Y_SCALE = 0.906d;
-    private static final double SCRIPT_RELATION_TRIANGLE_FONT_Y_SCALE = 0.905d;
+    private static final double SCRIPT_RELATION_TRIANGLE_FONT_Y_SCALE = 0.887d;
     private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_FONT_Y_SCALE = 0.90d;
     private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION = 1.093d;
     private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION = 1.025d;

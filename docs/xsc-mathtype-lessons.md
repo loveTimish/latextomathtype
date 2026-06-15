@@ -1229,3 +1229,30 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v119c-long-chain-relation-height-width\formula-preview-ink-source-vs-v119c-first30.json`
 - v119c aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v119c-long-chain-relation-height-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v120 targets the triangle-ratio relation height only. Lowering
+  `SCRIPT_RELATION_TRIANGLE_FONT_Y_SCALE` from `0.905` to `0.887` improved
+  sourceIndex `30` height residual from about `+0.228pt` to `+0.127pt`.
+  Do not compensate this case by widening the triangle relation branch:
+  `SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION = 1.045` and `1.030` both
+  overextended the test formula boundary, so keep the prior `1.025`.
+- v120 is a scoped height tradeoff, not a full convergence. On doc 61 first-30
+  ink versus v119c, height average improved from `0.091pt` to `0.087pt`, p90
+  improved from `0.210pt` to `0.175pt`, and max improved from `0.228pt` to
+  `0.210pt`. Width max stayed `0.298pt`, but width average moved from
+  `0.130pt` to `0.132pt` and median from `0.094pt` to `0.110pt`; record this
+  honestly when comparing future rounds.
+- v120 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal target
+  shape width/height `520/520` within 1%.
+- v120 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v120-triangle-relation-height\xsc测试集完整重建_61.docx`
+- v120 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v120-triangle-relation-height\leak-scan-61.json`
+- v120 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v120-triangle-relation-height\wmf-report-61.json`
+- v120 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v120-triangle-relation-height\formula-preview-ink-source-vs-v120-first30.json`
+- v120 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v120-triangle-relation-height\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
