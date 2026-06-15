@@ -1256,3 +1256,35 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v120-triangle-relation-height\formula-preview-ink-source-vs-v120-first30.json`
 - v120 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v120-triangle-relation-height\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v121 targets compact script relations only. Lowering
+  `SCRIPT_RELATION_COMPACT_FONT_Y_SCALE` from `0.906` to `0.890` improves the
+  repeated compact relation cases such as `S_{1}\colon S_{3}=a^{2}\colon b^{2}`
+  and `S_{3}=4=b^{2}` without touching long-chain, triangle, exact `S_{1}`,
+  additive-total, or standalone script formulas.
+- v121 on doc 61 first-30 ink versus v120: height average improved from
+  `0.087pt` to `0.080pt`, p90 improved from `0.175pt` to `0.114pt`, and max
+  stayed `0.210pt`. SourceIndex `1` and `11` improved from about `+0.210pt`
+  height residual to about `+0.108pt`. Width max stayed `0.298pt`, while width
+  average moved slightly from `0.132pt` to `0.133pt` and median from `0.110pt`
+  to `0.126pt`; keep recording this small width cost.
+- Do not keep the v121b long-chain height experiment as-is. Lowering
+  `SCRIPT_RELATION_LONG_CHAIN_FONT_Y_SCALE` from `0.906` to `0.890` improved
+  first-30 height max from `0.210pt` to `0.171pt`, but worsened sourceIndex `2`
+  width residual from about `-0.263pt` to about `-0.313pt`, making width max
+  worse than the v120/v121 baseline. Any future long-chain height work needs
+  separate width compensation, not just lowering the Y scale.
+- v121 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal target
+  shape width/height `520/520` within 1%.
+- v121 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v121-compact-relation-height\xsc测试集完整重建_61.docx`
+- v121 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v121-compact-relation-height\leak-scan-61.json`
+- v121 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v121-compact-relation-height\wmf-report-61.json`
+- v121 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v121-compact-relation-height\formula-preview-ink-source-vs-v121-first30.json`
+- v121 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v121-compact-relation-height\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
