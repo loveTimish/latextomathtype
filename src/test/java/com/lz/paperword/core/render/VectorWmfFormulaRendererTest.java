@@ -442,7 +442,7 @@ class VectorWmfFormulaRendererTest {
         byte[] widerScript = VectorWmfFormulaRenderer.render("\\left(a+b\\right)^2", 36.0d, 18.75d);
 
         assertTrue(createFontHeights(shortScript).get(1) > -160);
-        assertEquals(-160, createFontHeights(widerScript).get(1));
+        assertEquals(-163, createFontHeights(widerScript).get(1));
         assertTrue(maxRecordCoordinate(shortScript) <= 13.0d * 20.0d);
         assertTrue(maxRecordCoordinate(widerScript) <= 36.0d * 20.0d);
     }
@@ -612,6 +612,11 @@ class VectorWmfFormulaRendererTest {
         assertFalse(VectorWmfFormulaRenderer.repeatedEquationParenPower("S=\\left(a+b\\right)^2=9"));
         assertTrue(VectorWmfFormulaRenderer.repeatedEquationParenPower(
             "S=\\left(a+b\\right)^2=\\left(1+2\\right)^2=9"));
+        assertTrue(VectorWmfFormulaRenderer.hasClosingFenceSuperscript("\\left(a+b\\right)^2"));
+        assertTrue(VectorWmfFormulaRenderer.hasClosingFenceSuperscript("S=\\left(a+b\\right)^2=9"));
+        assertTrue(VectorWmfFormulaRenderer.hasClosingFenceSuperscript("(a+b)^2"));
+        assertFalse(VectorWmfFormulaRenderer.hasClosingFenceSuperscript("S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
+        assertFalse(VectorWmfFormulaRenderer.hasClosingFenceSuperscript("a^{2}+b"));
         assertTrue(maxTextRightCoordinate(repeatedEquation) < 2200);
         assertTrue(totalTextDx(repeatedEquation) < 2200);
         assertTrue(totalTextDx(standalone) < firstTextDxTotal(longEquation) * 0.8d);
@@ -697,7 +702,7 @@ class VectorWmfFormulaRendererTest {
         assertTrue(maxTextRightCoordinate(shortSuperscriptEquation) < 30.0d * 20.0d);
         assertEquals(1.0d, VectorWmfFormulaRenderer.shortScriptEquationWidthScale("S_{2}"));
         assertTrue(createFontHeights(simple).get(0) > createFontHeights(shortScript).get(0));
-        assertEquals(-240, createFontHeights(leftRight).get(0));
+        assertEquals(-245, createFontHeights(leftRight).get(0));
         assertTrue(VectorWmfFormulaRenderer.isShortScriptEquation("S_{2}=2"));
         assertTrue(VectorWmfFormulaRenderer.isShortScriptEquation("S^{2}=4"));
         assertTrue(VectorWmfFormulaRenderer.isShortScriptEquation("a^{2}=1"));

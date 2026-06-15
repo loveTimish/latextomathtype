@@ -1152,3 +1152,40 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v117-compact-relation-height\formula-preview-ink-source-vs-v117-first30.json`
 - v117 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v117-compact-relation-height\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v118d fixes a cache/process pitfall before keeping the result: a previous
+  v118 paren-power experiment reused a cache version and produced stale,
+  byte-identical WMF for the target formulas. After any renderer metric or WMF
+  logic change, use a new `LaTeXImageRenderer.CACHE_VERSION`; do not judge a
+  failed trial unless the cache key proves the new renderer actually ran.
+- v118d adds a narrow closing-fence-superscript height branch for paren-power
+  formulas. `PAREN_POWER_FONT_Y_SCALE = 1.019` applies only when a superscript
+  is attached to a closing fence such as `\right)` or `)`, and still excludes
+  fractions, sqrt, `\begin`, `\over`, `\under`, and boxed formulas. Width is
+  compensated with `STANDALONE_PAREN_POWER_WIDTH_SCALE = 0.924` and
+  `EQUATION_PAREN_POWER_WIDTH_SCALE = 0.916`.
+- v118d on doc 61 improved the first-30 ink height average from v117 `0.104pt`
+  to `0.094pt` and p90 from `0.231pt` to `0.210pt`. The target paren-power
+  cases sourceIndex `4` and `18` improved from about `-0.259pt` height residual
+  to about `-0.111pt`. This is a real visual improvement but not final
+  convergence: sourceIndex `2` remains the max height residual at about
+  `+0.311pt`.
+- v118d has a recorded width tradeoff. Width average and median stayed at
+  v117 levels (`0.130pt` and `0.094pt`), but p90 moved from `0.249pt` to
+  `0.260pt` and max from `0.264pt` to `0.298pt`, mainly from sourceIndex `18`.
+  Keep this branch only as a scoped height improvement; do not hide the width
+  cost when planning the next round.
+- v118d structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal target
+  shape width/height `520/520` within 1%.
+- v118d sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v118d-paren-power-height-width\xsc测试集完整重建_61.docx`
+- v118d leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v118d-paren-power-height-width\leak-scan-61.json`
+- v118d WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v118d-paren-power-height-width\wmf-report-61.json`
+- v118d first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v118d-paren-power-height-width\formula-preview-ink-source-vs-v118d-first30.json`
+- v118d aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v118d-paren-power-height-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`

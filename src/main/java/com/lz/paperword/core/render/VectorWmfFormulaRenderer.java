@@ -50,8 +50,8 @@ final class VectorWmfFormulaRenderer {
     private static final double STANDALONE_TWO_DIGIT_WIDTH_SCALE = 0.81d;
     private static final double STANDALONE_SINGLE_S_WIDTH_SCALE = 1.10d;
     private static final double STANDALONE_BD_WIDTH_SCALE = 1.135d;
-    private static final double STANDALONE_PAREN_POWER_WIDTH_SCALE = 0.93d;
-    private static final double EQUATION_PAREN_POWER_WIDTH_SCALE = 0.920d;
+    private static final double STANDALONE_PAREN_POWER_WIDTH_SCALE = 0.924d;
+    private static final double EQUATION_PAREN_POWER_WIDTH_SCALE = 0.916d;
     private static final double STANDALONE_UPPER_SUBSCRIPT_FONT_Y_SCALE = 0.956d;
     private static final double STANDALONE_UPPER_SUBSCRIPT_WIDTH_SCALE = 0.814d;
     private static final double STANDALONE_LOWER_SUPERSCRIPT_WIDTH_SCALE = 0.86d;
@@ -60,6 +60,7 @@ final class VectorWmfFormulaRenderer {
     private static final double SHORT_S2_EQUALS_TWO_WIDTH_SCALE = 0.985d;
     private static final double SHORT_A_EQUALS_ONE_WIDTH_SCALE = 1.025d;
     private static final double SHORT_B_EQUALS_TWO_WIDTH_SCALE = 0.965d;
+    private static final double PAREN_POWER_FONT_Y_SCALE = 1.019d;
     private static final double SHORT_SCRIPT_EQUATION_FONT_Y_SCALE = 0.955d;
     private static final double SCRIPT_RELATION_WIDTH_SCALE = 0.975d;
     private static final double SCRIPT_RELATION_SIMPLE_RATIO_WIDTH_SCALE = 0.970d;
@@ -557,6 +558,11 @@ final class VectorWmfFormulaRenderer {
 
     private static double fontYScale(String latex) {
         String text = stripMetricsAndStyles(latex == null ? "" : latex);
+        if (hasClosingFenceSuperscript(latex) && !hasFractionCommand(text) && !text.contains("\\sqrt")
+            && !text.contains("\\begin") && !text.contains("\\over") && !text.contains("\\under")
+            && !text.contains("\\boxed")) {
+            return PAREN_POWER_FONT_Y_SCALE;
+        }
         if (text.contains("\\left") || text.contains("\\right") || hasFractionCommand(text)
             || text.contains("\\sqrt") || text.contains("\\begin") || text.contains("\\over")
             || text.contains("\\under") || text.contains("\\boxed") || isStandaloneTallGeometryLabel(latex)) {
@@ -567,6 +573,27 @@ final class VectorWmfFormulaRenderer {
         }
         return isShortScriptEquation(latex) ? SIMPLE_LINEAR_FONT_Y_SCALE * SHORT_SCRIPT_EQUATION_FONT_Y_SCALE
             : SIMPLE_LINEAR_FONT_Y_SCALE;
+    }
+
+    static boolean hasClosingFenceSuperscript(String latex) {
+        String text = normalizeFlatLatex(normalizeTextCommands(stripMetricsAndStyles(latex == null ? "" : latex)))
+            .replaceAll("\\s+", "");
+        int cursor = 0;
+        while (cursor < text.length()) {
+            int op = nextScriptOperator(text, cursor);
+            if (op < 0) {
+                return false;
+            }
+            int atomEnd = skipWhitespaceBackward(text, op);
+            int atomStart = findAtomStart(text, atomEnd);
+            ScriptGroup group = readScriptGroup(text, op);
+            if (atomStart >= 0 && atomStart < atomEnd && group != null && group.operator() == '^'
+                && isClosingFenceScriptBase(text.substring(atomStart, atomEnd))) {
+                return true;
+            }
+            cursor = group == null ? op + 1 : group.end();
+        }
+        return false;
     }
 
     static boolean isStandaloneUpperSubscript(String latex) {
