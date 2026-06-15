@@ -66,6 +66,7 @@ final class VectorWmfFormulaRenderer {
     private static final double SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE = 0.987d;
     private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_SCALE = 0.98d;
     private static final double SCRIPT_RELATION_FONT_Y_SCALE = 0.93d;
+    private static final double SCRIPT_RELATION_TRIANGLE_FONT_Y_SCALE = 0.905d;
     private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_FONT_Y_SCALE = 0.90d;
     private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION = 1.093d;
     private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION = 1.025d;
@@ -434,7 +435,17 @@ final class VectorWmfFormulaRenderer {
         if (isExactS1AreaEquation(latex)) {
             return SCRIPT_RELATION_EXACT_S1_EQUATION_FONT_Y_SCALE;
         }
+        if (isTriangleScriptRelation(latex)) {
+            return SCRIPT_RELATION_TRIANGLE_FONT_Y_SCALE;
+        }
         return scriptRelationFontYEligible(latex) ? SCRIPT_RELATION_FONT_Y_SCALE : 1.0d;
+    }
+
+    private static boolean isTriangleScriptRelation(String latex) {
+        String raw = stripMetricsAndStyles(latex == null ? "" : latex);
+        int relationOperators = Math.max(topLevelRelationOperatorCount(normalizeFlatLatex(normalizeTextCommands(raw))),
+            topLevelRelationOperatorCount(normalizeFlatLatex(raw)));
+        return raw.contains("\\bigtriangleup") && relationOperators >= 4 && scriptRelationFontYEligible(latex);
     }
 
     static double scriptRelationHeightWidthCompensation(String latex) {

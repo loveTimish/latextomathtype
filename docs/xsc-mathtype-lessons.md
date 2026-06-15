@@ -1071,3 +1071,47 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v114-simple-ratio-width\formula-preview-ink-source-vs-v114-first30.json`
 - v114 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v114-simple-ratio-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v115 adds a triangle-relation-only font Y branch instead of lowering the
+  broad `SCRIPT_RELATION_FONT_Y_SCALE` again. Triangle relation chains that
+  contain `\bigtriangleup`, have at least four top-level relation operators,
+  and already satisfy the script-relation font-Y eligibility now use
+  `SCRIPT_RELATION_TRIANGLE_FONT_Y_SCALE = 0.905`; exact `S_{1}=a^{2}=1`
+  remains on its existing `0.90` branch, while ordinary relation chains keep
+  `0.93`.
+- The value is intentionally class-specific. The v112 broad trial at `0.925`
+  worsened height average and did not move the worst `0.330pt` case, so v115
+  targets the triangle residual directly: previous triangle behavior was
+  effectively `0.93`, and `0.93 * 0.9728` is about `0.905`.
+- v115 keeps the existing triangle height-width compensation active because
+  `scriptRelationHeightWidthCompensation(...)` still sees
+  `scriptRelationFontYScale(latex) < 0.999` for triangle chains. The helper
+  `isTriangleScriptRelation(...)` calls `scriptRelationFontYEligible(...)`,
+  which depends on `scriptRelationWidthScale(...)`; it does not recurse back
+  into `scriptRelationFontYScale(...)`.
+- v115 on doc 61 improved first-30 ink height average from v114 `0.114pt` to
+  `0.111pt`, p90 from `0.311pt` to `0.264pt`, and max from `0.330pt` to
+  `0.311pt`. The sourceIndex `30` triangle relation height residual improved
+  from `+0.330pt` to `+0.228pt`.
+- v115 has a small width tradeoff: first-30 ink width average moved from
+  v114 `0.131pt` to `0.132pt`, median from `0.110pt` to `0.116pt`, and max
+  stayed `0.264pt`. Do not present this as final convergence; it is a net
+  height improvement with an acceptable but measurable width cost.
+- Remaining visible height work after v115 is mainly ordinary relation groups,
+  especially sourceIndex `1`, `2`, and `11` at about `+0.311pt`, plus paren-power
+  cases such as sourceIndex `4` and `18` around `-0.259pt`. Avoid another broad
+  relation-Y retune without splitting these classes and rechecking width.
+- v115 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal target
+  shape width/height `520/520` within 1%.
+- v115 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v115-triangle-relation-height\xsc测试集完整重建_61.docx`
+- v115 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v115-triangle-relation-height\leak-scan-61.json`
+- v115 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v115-triangle-relation-height\wmf-report-61.json`
+- v115 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v115-triangle-relation-height\formula-preview-ink-source-vs-v115-first30.json`
+- v115 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v115-triangle-relation-height\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
