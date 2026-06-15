@@ -517,7 +517,7 @@ class VectorWmfFormulaRendererTest {
                 + "\\colon S_{\\bigtriangleup DOA}=a^{2}\\colon ab\\colon b^{2}\\colon ac"));
         assertEquals(0.906d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
             "S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
-        assertEquals(0.93d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
+        assertEquals(0.906d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
             "S_{1}\\colon S_{3}\\colon S_{2}\\colon S_{4}=a^{2}\\colon b^{2}\\colon ab\\colon ab"));
         assertEquals(0.905d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}=a^{2}\\colon ab=25\\colon 35"));
@@ -527,12 +527,18 @@ class VectorWmfFormulaRendererTest {
         assertEquals(0.90d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{1}=a^{2}=1"));
         assertEquals(0.906d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{3}=4=b^{2}"));
         assertEquals(0.93d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{2}=2=a\\times b"));
+        assertEquals(0.93d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
+            "S=S_{1}+S_{2}+S_{3}+S_{4}=1+2+4+2=9"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{-1}b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{2}+b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{2}-b"));
         assertEquals(1.093d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{1}=a^{2}=1"));
         assertEquals(1.025d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}=a^{2}\\colon ab=25\\colon 35"));
+        assertEquals(1.022d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
+            "S_{1}\\colon S_{3}\\colon S_{2}\\colon S_{4}=a^{2}\\colon b^{2}\\colon ab\\colon ab"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
+            "S=S_{1}+S_{2}+S_{3}+S_{4}=1+2+4+2=9"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
             "S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{3}=4=b^{2}"));

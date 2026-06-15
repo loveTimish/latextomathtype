@@ -1189,3 +1189,43 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v118d-paren-power-height-width\formula-preview-ink-source-vs-v118d-first30.json`
 - v118d aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v118d-paren-power-height-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v119c targets the remaining long pure ratio-chain height residual instead of
+  broad relation-Y retuning. Long non-triangle script relations with at least
+  six top-level relation operators, and without `+`, `-`, `\times`, or `\div`,
+  use `SCRIPT_RELATION_LONG_CHAIN_FONT_Y_SCALE = 0.906`. This intentionally
+  covers `S_{1}\colon S_{3}\colon S_{2}\colon S_{4}=...` and protects additive
+  totals such as `S=S_{1}+S_{2}+S_{3}+S_{4}=...`.
+- v119 first lowered long-chain Y without enough width compensation. It reduced
+  first-30 height max from v118d `0.311pt` to `0.228pt`, but widened the worst
+  width residual to `0.413pt`; do not keep that form. v119c adds
+  `SCRIPT_RELATION_LONG_CHAIN_WIDTH_COMPENSATION = 1.022`, bringing first-30
+  width max back to v118d's `0.298pt` while preserving the height gain.
+- v119c on doc 61 first-30 ink versus v118d: width average stayed `0.130pt`,
+  median stayed `0.094pt`, p90 stayed `0.260pt`, and max stayed `0.298pt`.
+  Height average improved from `0.094pt` to `0.091pt`, median stayed `0.080pt`,
+  p90 stayed `0.210pt`, and max improved from `0.311pt` to `0.228pt`.
+  SourceIndex `2` height moved from `+0.311pt` to `+0.210pt`; its width stayed
+  about `-0.263pt`.
+- v119c structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal target
+  shape width/height `520/520` within 1%.
+- v119c repeated the cache-version lesson: after changing only width
+  compensation, regenerating into a new output directory was not enough; the
+  old `v119b` cache key reused stale WMF and made v119b look unchanged. Bump
+  `LaTeXImageRenderer.CACHE_VERSION` for every renderer metric change before
+  comparing visual output.
+- `rebuild\compare_formula_preview_ink.py` needs Pillow. If plain `python`
+  reports `ModuleNotFoundError: No module named 'PIL'`, use the bundled runtime
+  `C:\Users\11703\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe`.
+- v119c sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v119c-long-chain-relation-height-width\xsc测试集完整重建_61.docx`
+- v119c leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v119c-long-chain-relation-height-width\leak-scan-61.json`
+- v119c WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v119c-long-chain-relation-height-width\wmf-report-61.json`
+- v119c first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v119c-long-chain-relation-height-width\formula-preview-ink-source-vs-v119c-first30.json`
+- v119c aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v119c-long-chain-relation-height-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
