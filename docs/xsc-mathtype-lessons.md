@@ -740,3 +740,32 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v104-relation-chain-height\formula-preview-ink-source-vs-v104-first30.json`
 - v104 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v104-relation-chain-height\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v105 fixes the v104 triangle-chain width regression by adding a separate
+  `SCRIPT_RELATION_TRIANGLE_WIDTH_SCALE=0.98`. The key lesson is that
+  `scriptRelationHeightWidthCompensation` changes WMF `ExtTextOut` `dx`
+  advances but does not change the layout width used by `previewScale`; for
+  long formulas near the display box edge, dx-only widening can be clipped.
+  Use `scriptRelationWidthScale` when the correction must happen in layout
+  space.
+- v105 on doc 61 improved first-30 ink width average from v104 `0.191pt` to
+  `0.172pt` and width max from `0.601pt` to `0.465pt`, while preserving v104
+  height results: height average `0.119pt`, height max `0.330pt`. It is also
+  better than v101 on width avg/max. The previous triangle worst sourceIndex
+  `30` dropped out of the worst-width list; remaining width targets are
+  sourceIndex `15` (`S_{1}=a^{2}=1`, `-0.465pt`), sourceIndex `14` (`a=1`,
+  `-0.455pt`), and sourceIndex `18` repeated paren equation (`+0.448pt`).
+- v105 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, target WMF width/height `520/520` within 1%, and shape width/height
+  `520/520` within 1%.
+- v105 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v105-triangle-chain-width\xsc测试集完整重建_61.docx`
+- v105 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v105-triangle-chain-width\leak-scan-61.json`
+- v105 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v105-triangle-chain-width\wmf-report-61.json`
+- v105 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v105-triangle-chain-width\formula-preview-ink-source-vs-v105-first30.json`
+- v105 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v105-triangle-chain-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`

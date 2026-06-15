@@ -61,6 +61,7 @@ final class VectorWmfFormulaRenderer {
     private static final double SHORT_SCRIPT_EQUATION_FONT_Y_SCALE = 0.955d;
     private static final double SCRIPT_RELATION_WIDTH_SCALE = 0.975d;
     private static final double SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE = 0.987d;
+    private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_SCALE = 0.98d;
     private static final double SCRIPT_RELATION_FONT_Y_SCALE = 0.93d;
     private static final double SCRIPT_RELATION_SHORT_EQUATION_WIDTH_COMPENSATION = 1.048d;
     private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION = 1.025d;
@@ -405,8 +406,10 @@ final class VectorWmfFormulaRenderer {
         if (relationOperators == 0 || standaloneShortScriptWidthScale(latex) < 0.999d) {
             return 1.0d;
         }
-        return relationOperators >= 6 && !raw.contains("\\bigtriangleup")
-            ? SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE : SCRIPT_RELATION_WIDTH_SCALE;
+        if (raw.contains("\\bigtriangleup") && relationOperators >= 4) {
+            return SCRIPT_RELATION_TRIANGLE_WIDTH_SCALE;
+        }
+        return relationOperators >= 6 ? SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE : SCRIPT_RELATION_WIDTH_SCALE;
     }
 
     static double scriptRelationFontYScale(String latex) {
