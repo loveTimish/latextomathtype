@@ -1401,3 +1401,32 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v125-standalone-two-digit-width\formula-preview-ink-source-vs-v125-first30.json`
 - v125 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v125-standalone-two-digit-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v126 targets only exact `S_{1}=a^{2}=1` width after the v122c height tuning.
+  Raising `SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION` from `1.100`
+  to `1.107` moves sourceIndex `15` visible ink width residual from v125
+  `-0.264pt` to `-0.213pt` without changing height. This is the opposite
+  direction from the failed v122b/v122c-side experiment that lowered the
+  compensation to `1.093` and made width worse.
+- v126 on doc 61 first-30 ink versus v125: width average improved from
+  `0.105pt` to `0.103pt`, p90 improved from `0.232pt` to `0.226pt`, and max
+  improved from `0.264pt` to `0.248pt`. Height average, p90, and max stayed
+  `0.075pt`, `0.112pt`, and `0.127pt`.
+- Keep the exact-S1 width compensation scoped through
+  `isExactS1AreaEquation(...)`. Broad relation compensation still risks
+  damaging compact relations such as `S_{3}=4=b^{2}` and additive totals; do
+  not merge this path with generic script-relation width scaling.
+- v126 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal
+  target shape width/height `520/520` within 1%.
+- v126 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v126-exact-s1-relation-width\xsc测试集完整重建_61.docx`
+- v126 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v126-exact-s1-relation-width\leak-scan-61.json`
+- v126 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v126-exact-s1-relation-width\wmf-report-61.json`
+- v126 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v126-exact-s1-relation-width\formula-preview-ink-source-vs-v126-first30.json`
+- v126 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v126-exact-s1-relation-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
