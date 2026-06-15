@@ -923,3 +923,37 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v110-s2-short-equation-width\formula-preview-ink-source-vs-v110-first30.json`
 - v110 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v110-s2-short-equation-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v111 continues the repeated parenthesized-power equation branch by moving
+  `EQUATION_PAREN_POWER_WIDTH_SCALE` from `0.925` to `0.920` and bumping the
+  cache to `v111-xsc-repeated-paren-width`. This is still scoped by
+  `repeatedEquationParenPower(...)`, so the single formula
+  `S=\left(a+b\right)^2=9` remains outside this correction; the intent is not
+  to use spacing, but to shrink the closing-fence superscript segments inside
+  repeated equation forms.
+- v111 on doc 61 improved sourceIndex `18`
+  (`S=\left(a+b\right)^{2}=\left(1+2\right)^{2}=9`) width delta from
+  `+0.348pt` to `+0.248pt`. First-30 width average improved from v110
+  `0.146pt` to `0.142pt`, and width max improved from `0.348pt` to
+  `0.327pt`. Height average/max stayed `0.114pt` / `0.330pt`. The next top
+  visible width residuals are sourceIndex `1` (`+0.327pt`), sourceIndex `15`
+  (`-0.314pt`), and sourceIndex `7` (`+0.275pt`); the top height residual is
+  still the relation-chain group led by sourceIndex `30` (`+0.330pt`).
+- v111 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal
+  target shape width/height `520/520` within 1%.
+- v111 no-context review found no P0/P1/P2 issues. The review specifically
+  checked that the scale is only applied when `equationParenPower` is true,
+  that `S=\left(a+b\right)^2=9` is covered as a false boundary case, and that
+  `CACHE_VERSION` participates in the cache key.
+- v111 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v111-repeated-paren-width\xsc测试集完整重建_61.docx`
+- v111 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v111-repeated-paren-width\leak-scan-61.json`
+- v111 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v111-repeated-paren-width\wmf-report-61.json`
+- v111 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v111-repeated-paren-width\formula-preview-ink-source-vs-v111-first30.json`
+- v111 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v111-repeated-paren-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
