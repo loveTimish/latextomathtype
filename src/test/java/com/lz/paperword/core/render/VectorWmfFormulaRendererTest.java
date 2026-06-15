@@ -647,10 +647,22 @@ class VectorWmfFormulaRendererTest {
         byte[] shortSuperscriptEquation = VectorWmfFormulaRenderer.render("a^{2}=1", 30.0d, 15.75d);
         byte[] shortScript = VectorWmfFormulaRenderer.render("S_{2}", 12.0d, 15.75d);
         byte[] leftRight = VectorWmfFormulaRenderer.render("\\left(a+b\\right)^2", 36.0d, 18.75d);
+        byte[] geometryLabel = VectorWmfFormulaRenderer.render("\\pwmetrics{17.992,11.995,18.000,12.000}AB", 18.0d,
+            12.0d);
+        byte[] mixedGeometryText = VectorWmfFormulaRenderer.render("AB1", 18.0d, 12.0d);
 
         assertTrue(createFontHeights(simple).get(0) > -240);
         assertTrue(createFontHeights(simple).get(0) > createFontHeights(shortScript).get(0));
         assertTrue(createFontHeights(shortEquation).get(0) > createFontHeights(simple).get(0));
+        assertTrue(createFontHeights(geometryLabel).get(0) < createFontHeights(mixedGeometryText).get(0));
+        assertTrue(VectorWmfFormulaRenderer.isStandaloneTallGeometryLabel(
+            "\\pwmetrics{17.992,11.995,18.000,12.000}AB"));
+        assertTrue(VectorWmfFormulaRenderer.isStandaloneTallGeometryLabel(
+            "\\pwmetrics{17.992,11.995,18.000,12.000}BD"));
+        assertFalse(VectorWmfFormulaRenderer.isStandaloneTallGeometryLabel("AC"));
+        assertFalse(VectorWmfFormulaRenderer.isStandaloneTallGeometryLabel("CD"));
+        assertFalse(VectorWmfFormulaRenderer.isStandaloneTallGeometryLabel("ABCD"));
+        assertFalse(VectorWmfFormulaRenderer.isStandaloneTallGeometryLabel("A1"));
         assertEquals(createFontHeights(shortEquation).get(0), createFontHeights(shortSuperscriptEquation).get(0));
         assertTrue(VectorWmfFormulaRenderer.shortScriptEquationWidthScale("S_{2}=2") < 1.0d);
         assertTrue(VectorWmfFormulaRenderer.shortScriptEquationWidthScale("a^{2}=1") < 1.0d);

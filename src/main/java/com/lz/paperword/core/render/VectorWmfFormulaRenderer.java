@@ -49,7 +49,7 @@ final class VectorWmfFormulaRenderer {
     private static final double SCRIPT_GLYPH_WIDTH_SCALE = 0.84d;
     private static final double STANDALONE_TWO_DIGIT_WIDTH_SCALE = 0.81d;
     private static final double STANDALONE_SINGLE_S_WIDTH_SCALE = 1.10d;
-    private static final double STANDALONE_BD_WIDTH_SCALE = 1.155d;
+    private static final double STANDALONE_BD_WIDTH_SCALE = 1.135d;
     private static final double STANDALONE_PAREN_POWER_WIDTH_SCALE = 0.93d;
     private static final double EQUATION_PAREN_POWER_WIDTH_SCALE = 0.93d;
     private static final double STANDALONE_UPPER_SUBSCRIPT_WIDTH_SCALE = 0.82d;
@@ -328,6 +328,11 @@ final class VectorWmfFormulaRenderer {
         return "BD".equals(text) ? STANDALONE_BD_WIDTH_SCALE : 1.0d;
     }
 
+    static boolean isStandaloneTallGeometryLabel(String latex) {
+        String text = normalizeFlatLatex(normalizeTextCommands(stripMetricsAndStyles(latex == null ? "" : latex))).trim();
+        return "AB".equals(text) || "BD".equals(text);
+    }
+
     private static double standaloneParenPowerWidthScale(String latex) {
         String text = normalizeTextCommands(stripMetricsAndStyles(latex == null ? " " : latex))
             .replaceAll("\\s+", "");
@@ -493,7 +498,7 @@ final class VectorWmfFormulaRenderer {
         String text = stripMetricsAndStyles(latex == null ? "" : latex);
         if (text.contains("\\left") || text.contains("\\right") || hasFractionCommand(text)
             || text.contains("\\sqrt") || text.contains("\\begin") || text.contains("\\over")
-            || text.contains("\\under") || text.contains("\\boxed")) {
+            || text.contains("\\under") || text.contains("\\boxed") || isStandaloneTallGeometryLabel(latex)) {
             return 1.0d;
         }
         return isShortScriptEquation(latex) ? SIMPLE_LINEAR_FONT_Y_SCALE * SHORT_SCRIPT_EQUATION_FONT_Y_SCALE

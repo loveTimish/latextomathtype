@@ -372,6 +372,21 @@ batch, then append any useful lesson or pitfall found in that round.
   requires relation density plus relation-font-y eligibility. Residual risk is
   the usual visual-calibration gap: helper assertions prove classification, but
   ink comparison remains the real evidence.
+- v96 was a useful failed generalization: exempting every standalone two-letter
+  geometry label from `SIMPLE_LINEAR_FONT_Y_SCALE` fixed `AB`/`BD` height, but
+  it also made `AC`/`CD` too large. On doc 61 first-30, width average regressed
+  from v95 `0.218pt` to `0.234pt` and height average regressed from `0.217pt`
+  to `0.233pt`. Do not treat all two-letter labels as the same height class.
+- v97 scopes the tall-label exception to exact standalone `AB` and `BD`, and
+  lowers the standalone `BD` width boost from `1.155` to `1.135` after the
+  height change. This improved doc 61 first-30 from v95 width avg `0.218pt` /
+  height avg `0.217pt` to width avg `0.198pt` / height avg `0.187pt`, with the
+  same max width `0.565pt` and max height `0.482pt`. Targeted source indices
+  `20,21,22,23` now average width error `0.086pt` and height error `0.024pt`.
+- The v97 no-context review found no P0/P1 issue. It confirmed the AB/BD helper
+  checks the whole normalized formula and `fontYScale` is the only consumer.
+  Residual risk is that the `BD` width constant still relies more on doc 61 ink
+  evidence than on a tight unit-level expected-dx assertion.
 
 ### Ink Comparison
 
@@ -582,3 +597,15 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v95-relation-width-comp-split\formula-preview-ink-source-vs-v95-first30.json`
 - v95 sourceIndex 15/30 targeted ink report:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v95-relation-width-comp-split\formula-preview-ink-source-vs-v95-targets.json`
+- v96 standalone-two-letter height experiment, useful as a negative result:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v96-standalone-geometry-label-y\formula-preview-ink-source-vs-v96-first30.json`
+- v97 AB/BD scoped label-y sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v97-ab-bd-label-y-scoped\xsc测试集完整重建_61.docx`
+- v97 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v97-ab-bd-label-y-scoped\leak-scan-61.json`
+- v97 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v97-ab-bd-label-y-scoped\wmf-report-61.json`
+- v97 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v97-ab-bd-label-y-scoped\formula-preview-ink-source-vs-v97-first30.json`
+- v97 geometry-label targeted ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v97-ab-bd-label-y-scoped\formula-preview-ink-source-vs-v97-geometry-labels.json`
