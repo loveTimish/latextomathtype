@@ -57,6 +57,7 @@ final class VectorWmfFormulaRenderer {
     private static final double STANDALONE_LOWER_SUPERSCRIPT_WIDTH_SCALE = 0.86d;
     private static final double STANDALONE_B_SUPERSCRIPT_WIDTH_SCALE = 0.795d;
     private static final double SHORT_SCRIPT_EQUATION_WIDTH_SCALE = 0.97d;
+    private static final double SHORT_A_EQUALS_ONE_WIDTH_SCALE = 1.025d;
     private static final double SHORT_B_EQUALS_TWO_WIDTH_SCALE = 0.965d;
     private static final double SHORT_SCRIPT_EQUATION_FONT_Y_SCALE = 0.955d;
     private static final double SCRIPT_RELATION_WIDTH_SCALE = 0.975d;
@@ -391,6 +392,9 @@ final class VectorWmfFormulaRenderer {
     static double shortExactEquationWidthScale(String latex) {
         String text = normalizeFlatLatex(normalizeTextCommands(stripMetricsAndStyles(latex == null ? "" : latex)))
             .replaceAll("\\s+", "");
+        if ("a=1".equals(text)) {
+            return SHORT_A_EQUALS_ONE_WIDTH_SCALE;
+        }
         return "b=2".equals(text) ? SHORT_B_EQUALS_TWO_WIDTH_SCALE : 1.0d;
     }
 

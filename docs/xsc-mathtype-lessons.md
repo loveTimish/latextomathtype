@@ -799,3 +799,30 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v106-s1-area-equation-balance\formula-preview-ink-source-vs-v106-first30.json`
 - v106 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v106-s1-area-equation-balance\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v107 targets the short exact equation `a=1` through
+  `shortExactEquationWidthScale`, not through relation-chain logic. It adds
+  `SHORT_A_EQUALS_ONE_WIDTH_SCALE=1.025` while preserving `b=2` at `0.965`
+  and leaving ratio/proportion formulas such as `a\colon b=5\colon 7` at
+  `1.0`. This is the right entry point for short ordinary equations because
+  `a=1` has a width problem but almost no height problem.
+- v107 on doc 61 moved sourceIndex `14` (`a=1`) out of the worst-width list.
+  First-30 width average improved from v106 `0.171pt` to `0.157pt`, width max
+  from `0.455pt` to `0.448pt`, and height average/max stayed `0.116pt` /
+  `0.330pt`. The new top width residuals are sourceIndex `18` (`+0.448pt`)
+  and sourceIndex `15` (`-0.414pt`); the top height residual remains
+  sourceIndex `30` (`+0.330pt`).
+- v107 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, target WMF width/height `520/520` within 1%, and target shape
+  width/height `520/520` within 1%.
+- v107 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v107-a-equals-one-width\xsc测试集完整重建_61.docx`
+- v107 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v107-a-equals-one-width\leak-scan-61.json`
+- v107 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v107-a-equals-one-width\wmf-report-61.json`
+- v107 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v107-a-equals-one-width\formula-preview-ink-source-vs-v107-first30.json`
+- v107 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v107-a-equals-one-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`

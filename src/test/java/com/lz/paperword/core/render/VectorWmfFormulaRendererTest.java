@@ -676,8 +676,10 @@ class VectorWmfFormulaRendererTest {
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{2}=2"));
         assertTrue(VectorWmfFormulaRenderer.shortScriptEquationWidthScale("S_{2}=2") < 1.0d);
         assertTrue(VectorWmfFormulaRenderer.shortScriptEquationWidthScale("a^{2}=1") < 1.0d);
-        assertTrue(VectorWmfFormulaRenderer.shortExactEquationWidthScale("b=2") < 1.0d);
-        assertEquals(1.0d, VectorWmfFormulaRenderer.shortExactEquationWidthScale("a=1"));
+        assertEquals(0.965d, VectorWmfFormulaRenderer.shortExactEquationWidthScale("b=2"));
+        assertEquals(1.025d, VectorWmfFormulaRenderer.shortExactEquationWidthScale("a=1"));
+        assertEquals(1.025d, VectorWmfFormulaRenderer.shortExactEquationWidthScale(
+            "\\pwmetrics{22.980,12.989,23.250,12.750}a=1"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.shortExactEquationWidthScale("a\\colon b=5\\colon 7"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.shortScriptEquationWidthScale(
             "S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
