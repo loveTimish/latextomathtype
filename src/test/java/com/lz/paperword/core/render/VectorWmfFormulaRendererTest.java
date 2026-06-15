@@ -516,12 +516,12 @@ class VectorWmfFormulaRendererTest {
         assertEquals(0.93d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
             "S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{2}=2"));
-        assertEquals(0.905d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{1}=a^{2}=1"));
+        assertEquals(0.90d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{1}=a^{2}=1"));
         assertEquals(0.93d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{3}=4=b^{2}"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{-1}b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{2}+b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{2}-b"));
-        assertEquals(1.075d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{1}=a^{2}=1"));
+        assertEquals(1.085d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{1}=a^{2}=1"));
         assertEquals(1.025d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}=a^{2}\\colon ab=25\\colon 35"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(

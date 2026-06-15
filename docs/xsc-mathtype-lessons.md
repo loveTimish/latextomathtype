@@ -859,3 +859,37 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v108-repeated-paren-width\formula-preview-ink-source-vs-v108-first30.json`
 - v108 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v108-repeated-paren-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v109 continues the exact `S_{1}=a^{2}=1` branch with a small balance change:
+  `SCRIPT_RELATION_EXACT_S1_EQUATION_FONT_Y_SCALE` moves from `0.905` to
+  `0.900`, and `SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION` moves
+  from `1.075` to `1.085`. This is not whitespace padding; it uses the
+  existing exact formula class to make the rendered MathType-style object a bit
+  shorter and wider.
+- The reason this combination works is that `previewScale` limits horizontal
+  scale when a non-grid formula is height-compressed. For `S_{1}=a^{2}=1`, the
+  residual was both too tall and too narrow, so lowering the exact Y scale and
+  increasing the exact dx compensation is a coherent paired move. Do not apply
+  this reasoning to broad relation formulas without rechecking width, because
+  earlier v102-style global height cuts widened regressions elsewhere.
+- v109 on doc 61 improved sourceIndex `15` from width/height deltas
+  `-0.414pt/+0.222pt` to `-0.314pt/+0.171pt`. First-30 width average improved
+  from v108 `0.154pt` to `0.151pt`, width max from `0.414pt` to `0.381pt`,
+  height average from `0.116pt` to `0.114pt`, and height max stayed `0.330pt`.
+  The next visible width residuals are sourceIndex `5` (`S_{2}=2`,
+  `+0.381pt`) and sourceIndex `18` (`+0.348pt`); the next top height residual
+  remains the relation-chain group led by sourceIndex `30` (`+0.330pt`).
+- v109 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal
+  target shape width/height `520/520` within 1%.
+- v109 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v109-s1-area-balance\xsc测试集完整重建_61.docx`
+- v109 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v109-s1-area-balance\leak-scan-61.json`
+- v109 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v109-s1-area-balance\wmf-report-61.json`
+- v109 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v109-s1-area-balance\formula-preview-ink-source-vs-v109-first30.json`
+- v109 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v109-s1-area-balance\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
