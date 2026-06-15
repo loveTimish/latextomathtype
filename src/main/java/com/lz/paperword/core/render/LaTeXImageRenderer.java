@@ -80,7 +80,7 @@ public class LaTeXImageRenderer {
     /** 系统属性：WMF 文本宽度校准。 */
     private static final String WMF_TEXT_WIDTH_SCALE_PROP = "paperword.wmf.textWidth.scale";
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v113b-xsc-upper-subscript-balanced";
+    private static final String CACHE_VERSION = "v114-xsc-simple-ratio-width";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     /** 像素到磅的换算比例。 */

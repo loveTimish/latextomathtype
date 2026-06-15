@@ -1033,3 +1033,41 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v113b-upper-subscript-balanced\formula-preview-ink-source-vs-v113b-first30.json`
 - v113b aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v113b-upper-subscript-balanced\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v114 adds a separate simple-ratio relation width branch instead of touching
+  the broad `SCRIPT_RELATION_WIDTH_SCALE`. `SCRIPT_RELATION_SIMPLE_RATIO_WIDTH_SCALE`
+  is `0.970` and only applies when there are exactly three top-level relation
+  operators, the formula contains a raw `:` or `\colon` plus `=`, and the
+  formula is not a `\bigtriangleup` relation or exact `S_{1}=a^{2}=1`. This
+  preserves long chains at `0.987`, triangle chains at `0.98`, and ordinary
+  three-part equations such as `S_{3}=4=b^{2}` at `0.975`.
+- v114 first hit a useful test boundary: the old test expected raw `:` and
+  `\colon` versions of `S_{1}:S_{3}=a^{2}:b^{2}` to have identical WMF text
+  advance. The simple-ratio branch must therefore recognize both raw colon and
+  `\colon`, not just `\colon`, or the renderer will split visually equivalent
+  authoring styles.
+- v114 on doc 61 improved the first-30 ink width average from v113b `0.141pt`
+  to `0.131pt`, median from `0.131pt` to `0.110pt`, p90 from `0.260pt` to
+  `0.249pt`, and max from `0.327pt` to `0.264pt`. The former top width residual
+  sourceIndex `1` (`S_{1}\colon S_{3}=a^{2}\colon b^{2}`) dropped out of the
+  worst-width list. Height average/max stayed `0.114pt` / `0.330pt`; the
+  relation-chain height issue remains for a later mechanism.
+- v114 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal target
+  shape width/height `520/520` within 1%.
+- v114 no-context review found no P0/P1/P2 issues. It confirmed the new branch
+  does not affect exact `S_{1}=a^{2}=1`, long chains, triangle chains,
+  `S_{3}=4=b^{2}`, or `a^{2}+b`, and recommended adding direct scale assertions
+  for raw colon, exact S1, and `S_{3}=4=b^{2}`; those assertions were added
+  before commit.
+- v114 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v114-simple-ratio-width\xsc测试集完整重建_61.docx`
+- v114 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v114-simple-ratio-width\leak-scan-61.json`
+- v114 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v114-simple-ratio-width\wmf-report-61.json`
+- v114 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v114-simple-ratio-width\formula-preview-ink-source-vs-v114-first30.json`
+- v114 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v114-simple-ratio-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`

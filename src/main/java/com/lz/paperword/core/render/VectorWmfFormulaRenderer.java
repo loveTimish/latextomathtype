@@ -62,6 +62,7 @@ final class VectorWmfFormulaRenderer {
     private static final double SHORT_B_EQUALS_TWO_WIDTH_SCALE = 0.965d;
     private static final double SHORT_SCRIPT_EQUATION_FONT_Y_SCALE = 0.955d;
     private static final double SCRIPT_RELATION_WIDTH_SCALE = 0.975d;
+    private static final double SCRIPT_RELATION_SIMPLE_RATIO_WIDTH_SCALE = 0.970d;
     private static final double SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE = 0.987d;
     private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_SCALE = 0.98d;
     private static final double SCRIPT_RELATION_FONT_Y_SCALE = 0.93d;
@@ -418,7 +419,15 @@ final class VectorWmfFormulaRenderer {
         if (raw.contains("\\bigtriangleup") && relationOperators >= 4) {
             return SCRIPT_RELATION_TRIANGLE_WIDTH_SCALE;
         }
+        if (isSimpleScriptRatioRelation(raw, text, relationOperators)) {
+            return SCRIPT_RELATION_SIMPLE_RATIO_WIDTH_SCALE;
+        }
         return relationOperators >= 6 ? SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE : SCRIPT_RELATION_WIDTH_SCALE;
+    }
+
+    private static boolean isSimpleScriptRatioRelation(String raw, String text, int relationOperators) {
+        return relationOperators == 3 && !raw.contains("\\bigtriangleup")
+            && !isExactS1AreaEquation(text) && (text.contains("\\colon") || text.contains(":")) && text.contains("=");
     }
 
     static double scriptRelationFontYScale(String latex) {
