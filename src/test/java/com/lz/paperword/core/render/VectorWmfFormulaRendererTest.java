@@ -478,6 +478,9 @@ class VectorWmfFormulaRendererTest {
 
         assertTrue(VectorWmfFormulaRenderer.canRender("S_{1}"));
         assertTrue(VectorWmfFormulaRenderer.canRender("a^{2}"));
+        assertTrue(VectorWmfFormulaRenderer.isStandaloneUpperSubscript("S_{1}"));
+        assertFalse(VectorWmfFormulaRenderer.isStandaloneUpperSubscript("a^{2}"));
+        assertFalse(VectorWmfFormulaRenderer.isStandaloneUpperSubscript("S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
         assertTrue(VectorWmfFormulaRenderer.canRender("S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
         assertTrue(VectorWmfFormulaRenderer.canRender("S_{1}:S_{3}=a^{2}:b^{2}"));
         assertTrue(VectorWmfFormulaRenderer.canRender(

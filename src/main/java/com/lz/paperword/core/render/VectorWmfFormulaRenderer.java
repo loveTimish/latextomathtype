@@ -52,6 +52,7 @@ final class VectorWmfFormulaRenderer {
     private static final double STANDALONE_BD_WIDTH_SCALE = 1.135d;
     private static final double STANDALONE_PAREN_POWER_WIDTH_SCALE = 0.93d;
     private static final double EQUATION_PAREN_POWER_WIDTH_SCALE = 0.93d;
+    private static final double STANDALONE_UPPER_SUBSCRIPT_FONT_Y_SCALE = 0.956d;
     private static final double STANDALONE_UPPER_SUBSCRIPT_WIDTH_SCALE = 0.82d;
     private static final double STANDALONE_LOWER_SUPERSCRIPT_WIDTH_SCALE = 0.86d;
     private static final double STANDALONE_B_SUPERSCRIPT_WIDTH_SCALE = 0.795d;
@@ -501,8 +502,30 @@ final class VectorWmfFormulaRenderer {
             || text.contains("\\under") || text.contains("\\boxed") || isStandaloneTallGeometryLabel(latex)) {
             return 1.0d;
         }
+        if (isStandaloneUpperSubscript(latex)) {
+            return SIMPLE_LINEAR_FONT_Y_SCALE * STANDALONE_UPPER_SUBSCRIPT_FONT_Y_SCALE;
+        }
         return isShortScriptEquation(latex) ? SIMPLE_LINEAR_FONT_Y_SCALE * SHORT_SCRIPT_EQUATION_FONT_Y_SCALE
             : SIMPLE_LINEAR_FONT_Y_SCALE;
+    }
+
+    static boolean isStandaloneUpperSubscript(String latex) {
+        String text = normalizeFlatLatex(normalizeTextCommands(stripMetricsAndStyles(latex == null ? "" : latex)))
+            .replaceAll("\\s+", "");
+        if (text.isEmpty() || hasFractionCommand(text) || text.contains("\\sqrt") || text.contains("\\begin")
+            || text.contains("\\left") || text.contains("\\right") || text.contains("\\over")
+            || text.contains("\\under") || text.contains("\\boxed") || text.contains("=")
+            || text.contains("\\colon") || text.contains("+") || text.contains("-")
+            || text.contains("\\times") || text.contains("\\div")) {
+            return false;
+        }
+        int op = findFirstTopLevelScriptOperator(text);
+        if (op <= 0 || text.charAt(op) != '_' || findAtomStart(text, op) != 0) {
+            return false;
+        }
+        ScriptGroup script = readScriptGroup(text, op);
+        return script != null && script.end() == text.length()
+            && text.substring(0, op).matches("[A-Z]") && script.body().matches("\\d{1,2}");
     }
 
     static boolean isShortScriptEquation(String latex) {
