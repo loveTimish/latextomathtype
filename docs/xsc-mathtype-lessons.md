@@ -343,6 +343,24 @@ batch, then append any useful lesson or pitfall found in that round.
   to all standalone two-digit objects, and regression tests should keep proving
   exact-object scoping for `b^2` with negative examples such as `b^3` and
   `c^2`.
+- v91/v92 showed that relation-script formulas needed vertical ink tuning:
+  applying a font-height scale to script formulas with top-level relation
+  operators reduced doc 61 first-30 height average from v90 `0.265pt` to about
+  `0.217pt`, and max height error from `0.634pt` to `0.482pt`. However, height
+  shrink can also slightly narrow visible ink, so sourceIndex `15` and `30`
+  needed a tiny `1.007` dx/advance compensation.
+- Scope relation-script height tuning to equality/colon chains, not every
+  top-level relation operator. A no-context v93 review caught that using
+  `scriptRelationWidthScale(...) < 0.999` would also shrink ordinary
+  expressions such as `a^{2}+b` and `a^{2}-b`. v94 uses an explicit top-level
+  equals-or-colon guard and tests those plus/minus negative examples.
+- v94 kept OLE/WMF safety on doc 61 (`520` valid MathType OLE, `520` vector
+  WMFs, `0` leaks, `0` bitmap WMFs). First-30 width average improved slightly
+  from v90 `0.226pt` to `0.222pt`; height average improved from `0.265pt` to
+  `0.217pt`. Width max regressed from v90 `0.616pt` to `0.666pt`, so the next
+  width work should start at exact sourceIndex `15` (`S_{1}=a^{2}=1`) and
+  `30` (`S_{\bigtriangleup AOB}\colon S_{\bigtriangleup BOC}=...`) rather than
+  broadening a global relation scale.
 
 ### Ink Comparison
 
@@ -535,3 +553,11 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v90-short-object-width-scoped-review\formula-preview-ink-source-vs-v90-first30.json`
 - v90 short-object targeted ink report:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v90-short-object-width-scoped-review\formula-preview-ink-source-vs-v90-short-objects.json`
+- v94 script-relation height sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v94-script-relation-height-scoped\xsc测试集完整重建_61.docx`
+- v94 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v94-script-relation-height-scoped\leak-scan-61.json`
+- v94 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v94-script-relation-height-scoped\wmf-report-61.json`
+- v94 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v94-script-relation-height-scoped\formula-preview-ink-source-vs-v94-first30.json`

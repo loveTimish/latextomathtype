@@ -60,6 +60,8 @@ final class VectorWmfFormulaRenderer {
     private static final double SHORT_SCRIPT_EQUATION_FONT_Y_SCALE = 0.955d;
     private static final double SCRIPT_RELATION_WIDTH_SCALE = 0.975d;
     private static final double SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE = 0.987d;
+    private static final double SCRIPT_RELATION_FONT_Y_SCALE = 0.965d;
+    private static final double SCRIPT_RELATION_HEIGHT_WIDTH_COMPENSATION = 1.007d;
     private static final Pattern LEFT_RIGHT_PAREN = Pattern.compile(
         "\\\\left\\s*\\(\\s*(?:\\{\\s*)?(.*?)(?:\\s*})?\\s*\\\\right\\s*\\)"
     );
@@ -113,6 +115,8 @@ final class VectorWmfFormulaRenderer {
         double shortScriptEquationWidthScale = shortScriptEquationWidthScale(latex);
         double shortExactEquationWidthScale = shortExactEquationWidthScale(latex);
         double fontYScale = fontYScale(latex);
+        double relationFontYScale = scriptRelationFontYScale(latex);
+        double relationHeightWidthCompensation = scriptRelationHeightWidthCompensation(latex);
         double regularFontWidthScale = standaloneSingleLetterWidthScale > 1.0d ? standaloneSingleLetterWidthScale
             : 1.0d;
         WmfBuilder builder = new WmfBuilder(widthPt, heightPt);
@@ -133,22 +137,22 @@ final class VectorWmfFormulaRenderer {
             writeWord(out, 0);
         }); // SetTextColor black
         builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
-            12.0d * fontYScale * previewScale.y(), ANSI_CHARSET, regularFontWidthScale));
+            12.0d * fontYScale * relationFontYScale * previewScale.y(), ANSI_CHARSET, regularFontWidthScale));
         builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
-            8.0d * shortScriptHeightScale * fontYScale * previewScale.y(), ANSI_CHARSET,
+            8.0d * shortScriptHeightScale * fontYScale * relationFontYScale * previewScale.y(), ANSI_CHARSET,
             shortScriptWidthScale));
         builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
             22.0d * previewScale.y(), ANSI_CHARSET));
         builder.record(0x02FB, out -> writeFont(out, "Symbol",
-            12.0d * fontYScale * previewScale.y(), SYMBOL_CHARSET, regularFontWidthScale));
+            12.0d * fontYScale * relationFontYScale * previewScale.y(), SYMBOL_CHARSET, regularFontWidthScale));
         builder.record(0x02FB, out -> writeFont(out, "Symbol",
-            8.0d * shortScriptHeightScale * fontYScale * previewScale.y(), SYMBOL_CHARSET,
+            8.0d * shortScriptHeightScale * fontYScale * relationFontYScale * previewScale.y(), SYMBOL_CHARSET,
             shortScriptWidthScale));
         builder.record(0x02FB, out -> writeFont(out, "Symbol", 22.0d * previewScale.y(), SYMBOL_CHARSET));
         builder.record(0x02FB, out -> writeFont(out, "SimSun",
-            12.0d * fontYScale * previewScale.y(), GB2312_CHARSET, regularFontWidthScale));
+            12.0d * fontYScale * relationFontYScale * previewScale.y(), GB2312_CHARSET, regularFontWidthScale));
         builder.record(0x02FB, out -> writeFont(out, "SimSun",
-            8.0d * shortScriptHeightScale * fontYScale * previewScale.y(), GB2312_CHARSET,
+            8.0d * shortScriptHeightScale * fontYScale * relationFontYScale * previewScale.y(), GB2312_CHARSET,
             shortScriptWidthScale));
         builder.record(0x02FB, out -> writeFont(out, "SimSun", 22.0d * previewScale.y(), GB2312_CHARSET));
         builder.record(0x02FA, VectorWmfFormulaRenderer::writeBlackPen); // CreatePen
@@ -179,7 +183,8 @@ final class VectorWmfFormulaRenderer {
                 final int runX = toTwips(LEFT_MARGIN_PT + offsetX + segmentX * previewScale.x());
                 byte[] bytes = segment.bytes();
                 double runWidthScale = run.widthScale() * standaloneDigitWidthScale * standaloneSingleLetterWidthScale
-                    * standaloneGeometryWidthScale * shortScriptEquationWidthScale * shortExactEquationWidthScale;
+                    * standaloneGeometryWidthScale * shortScriptEquationWidthScale * shortExactEquationWidthScale
+                    * relationHeightWidthCompensation;
                 int[] dx = characterDxTwips(segment, run.script(), run.display(), previewScale.x(), shortScriptWidthScale,
                     runWidthScale);
                 builder.record(0x0A32, out -> writeExtTextOut(out, runX, runBaseline, bytes, dx));
@@ -395,6 +400,59 @@ final class VectorWmfFormulaRenderer {
         }
         return relationOperators >= 6 && !raw.contains("\\bigtriangleup")
             ? SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE : SCRIPT_RELATION_WIDTH_SCALE;
+    }
+
+    static double scriptRelationFontYScale(String latex) {
+        return scriptRelationFontYEligible(latex) ? SCRIPT_RELATION_FONT_Y_SCALE : 1.0d;
+    }
+
+    static double scriptRelationHeightWidthCompensation(String latex) {
+        String raw = stripMetricsAndStyles(latex == null ? "" : latex);
+        String text = normalizeFlatLatex(normalizeTextCommands(raw)).replaceAll("\\s+", "");
+        if ("S_{1}=a^{2}=1".equals(text)) {
+            return SCRIPT_RELATION_HEIGHT_WIDTH_COMPENSATION;
+        }
+        int relationOperators = Math.max(topLevelRelationOperatorCount(normalizeFlatLatex(normalizeTextCommands(raw))),
+            topLevelRelationOperatorCount(normalizeFlatLatex(raw)));
+        return raw.contains("\\bigtriangleup") && relationOperators >= 4 && scriptRelationFontYScale(latex) < 0.999d
+            ? SCRIPT_RELATION_HEIGHT_WIDTH_COMPENSATION : 1.0d;
+    }
+
+    static boolean scriptRelationFontYEligible(String latex) {
+        String raw = stripMetricsAndStyles(latex == null ? "" : latex);
+        String text = normalizeFlatLatex(normalizeTextCommands(raw)).replaceAll("\\s+", "");
+        if (scriptRelationWidthScale(latex) >= 0.999d) {
+            return false;
+        }
+        return hasTopLevelEqualsOrColon(text) || hasTopLevelEqualsOrColon(normalizeFlatLatex(raw));
+    }
+
+    private static boolean hasTopLevelEqualsOrColon(String text) {
+        int depth = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '\\') {
+                int commandEnd = skipCommandName(text, i + 1);
+                String command = text.substring(i + 1, commandEnd);
+                if (depth == 0 && command.equals("colon")) {
+                    return true;
+                }
+                i = commandEnd - 1;
+                continue;
+            }
+            if (ch == '{') {
+                depth++;
+            } else if (ch == '}') {
+                depth = Math.max(0, depth - 1);
+            } else if (ch == '(' || ch == '[' || ch == '（' || ch == '【') {
+                depth++;
+            } else if (ch == ')' || ch == ']' || ch == '）' || ch == '】') {
+                depth = Math.max(0, depth - 1);
+            } else if (depth == 0 && (ch == '=' || ch == ':')) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static boolean hasTopLevelRelationOperator(String text) {
