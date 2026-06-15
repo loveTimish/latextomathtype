@@ -1288,3 +1288,32 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v121-compact-relation-height\formula-preview-ink-source-vs-v121-first30.json`
 - v121 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v121-compact-relation-height\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v122c targets only exact `S_{1}=a^{2}=1`. Lowering
+  `SCRIPT_RELATION_EXACT_S1_EQUATION_FONT_Y_SCALE` from `0.90` to `0.887`
+  improves sourceIndex `15` height residual from about `+0.171pt` to
+  `+0.120pt`; keep `SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION` at
+  `1.100` with this height scale, because the same height scale with `1.093`
+  worsened sourceIndex `15` width residual to about `-0.314pt`.
+- Do not keep the v122b exact-S1 experiment as-is. Lowering exact S1 Y further
+  to `0.878` removed sourceIndex `15` from the worst-height list, but it made
+  the first-30 width max worse at `0.314pt`. For this family, height tightening
+  and width compensation must be tuned together.
+- v122c on doc 61 first-30 ink versus v121: height average improved from
+  `0.080pt` to `0.079pt`, p90 improved from `0.114pt` to `0.113pt`, and max
+  stayed `0.210pt`. Width average stayed `0.133pt`, median stayed `0.126pt`,
+  p90 stayed `0.260pt`, and max stayed `0.298pt`.
+- v122c structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal target
+  shape width/height `520/520` within 1%.
+- v122c sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v122c-exact-s1-relation-height-width\xsc测试集完整重建_61.docx`
+- v122c leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v122c-exact-s1-relation-height-width\leak-scan-61.json`
+- v122c WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v122c-exact-s1-relation-height-width\wmf-report-61.json`
+- v122c first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v122c-exact-s1-relation-height-width\formula-preview-ink-source-vs-v122c-first30.json`
+- v122c aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v122c-exact-s1-relation-height-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
