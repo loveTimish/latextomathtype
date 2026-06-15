@@ -1115,3 +1115,40 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v115-triangle-relation-height\formula-preview-ink-source-vs-v115-first30.json`
 - v115 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v115-triangle-relation-height\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v116 was a rejected broad experiment: changing the generic
+  `SCRIPT_RELATION_FONT_Y_SCALE` from `0.93` to `0.906` improved the ordinary
+  short relation height representatives, but it also hit long relation/additive
+  equations. On doc 61 first-30 ink, sourceIndex `1`, `2`, and `11` height
+  residuals moved from `+0.311pt` to `+0.210pt`, but width max worsened from
+  v115 `0.264pt` to `0.413pt`, width average from `0.132pt` to `0.146pt`, and
+  height average from `0.111pt` to `0.119pt`. Do not reapply a broad relation
+  font-Y reduction without a separate width compensation plan.
+- v117 keeps the generic relation font-Y at `0.93` and adds a compact relation
+  branch at `0.906`. The compact branch only applies to eligible script
+  relations with two or three top-level relation operators, excludes
+  `\bigtriangleup`, and excludes formulas containing `\times`, `\div`, `+`, or
+  `-`. This covers short ratios such as `S_{1}\colon S_{3}=a^{2}\colon b^{2}`
+  and `S_{3}=4=b^{2}` without touching the long chain
+  `S_{1}\colon S_{3}\colon S_{2}\colon S_{4}=...` or the additive total
+  equation `S=S_{1}+S_{2}+S_{3}+S_{4}=...`.
+- v117 on doc 61 improved first-30 ink versus v115: width average
+  `0.132pt -> 0.130pt`, width median `0.116pt -> 0.094pt`, width max stayed
+  `0.264pt`; height average `0.111pt -> 0.104pt`, height p90
+  `0.264pt -> 0.231pt`, and height max stayed `0.311pt`. SourceIndex `1` and
+  `11` height residuals improved from `+0.311pt` to `+0.210pt`; sourceIndex
+  `2` remains `+0.311pt` because it is the protected long-chain case.
+- v117 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal target
+  shape width/height `520/520` within 1%.
+- v117 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v117-compact-relation-height\xsc测试集完整重建_61.docx`
+- v117 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v117-compact-relation-height\leak-scan-61.json`
+- v117 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v117-compact-relation-height\wmf-report-61.json`
+- v117 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v117-compact-relation-height\formula-preview-ink-source-vs-v117-first30.json`
+- v117 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v117-compact-relation-height\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`

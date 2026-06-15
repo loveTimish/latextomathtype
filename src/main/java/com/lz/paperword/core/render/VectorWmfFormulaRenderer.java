@@ -66,6 +66,7 @@ final class VectorWmfFormulaRenderer {
     private static final double SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE = 0.987d;
     private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_SCALE = 0.98d;
     private static final double SCRIPT_RELATION_FONT_Y_SCALE = 0.93d;
+    private static final double SCRIPT_RELATION_COMPACT_FONT_Y_SCALE = 0.906d;
     private static final double SCRIPT_RELATION_TRIANGLE_FONT_Y_SCALE = 0.905d;
     private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_FONT_Y_SCALE = 0.90d;
     private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION = 1.093d;
@@ -438,7 +439,20 @@ final class VectorWmfFormulaRenderer {
         if (isTriangleScriptRelation(latex)) {
             return SCRIPT_RELATION_TRIANGLE_FONT_Y_SCALE;
         }
+        if (isCompactScriptRelation(latex)) {
+            return SCRIPT_RELATION_COMPACT_FONT_Y_SCALE;
+        }
         return scriptRelationFontYEligible(latex) ? SCRIPT_RELATION_FONT_Y_SCALE : 1.0d;
+    }
+
+    private static boolean isCompactScriptRelation(String latex) {
+        String raw = stripMetricsAndStyles(latex == null ? "" : latex);
+        String text = normalizeFlatLatex(normalizeTextCommands(raw)).replaceAll("\\s+", "");
+        int relationOperators = Math.max(topLevelRelationOperatorCount(normalizeFlatLatex(normalizeTextCommands(raw))),
+            topLevelRelationOperatorCount(normalizeFlatLatex(raw)));
+        return relationOperators >= 2 && relationOperators <= 3 && !raw.contains("\\bigtriangleup")
+            && !text.contains("\\times") && !text.contains("\\div") && !text.contains("+") && !text.contains("-")
+            && scriptRelationFontYEligible(latex);
     }
 
     private static boolean isTriangleScriptRelation(String latex) {

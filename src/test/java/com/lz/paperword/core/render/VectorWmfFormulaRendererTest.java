@@ -515,15 +515,18 @@ class VectorWmfFormulaRendererTest {
         assertEquals(0.98d, VectorWmfFormulaRenderer.scriptRelationWidthScale(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}\\colon S_{\\bigtriangleup COD}"
                 + "\\colon S_{\\bigtriangleup DOA}=a^{2}\\colon ab\\colon b^{2}\\colon ac"));
-        assertEquals(0.93d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
+        assertEquals(0.906d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
             "S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
+        assertEquals(0.93d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
+            "S_{1}\\colon S_{3}\\colon S_{2}\\colon S_{4}=a^{2}\\colon b^{2}\\colon ab\\colon ab"));
         assertEquals(0.905d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}=a^{2}\\colon ab=25\\colon 35"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{2}=2"));
         assertEquals(0.975d, VectorWmfFormulaRenderer.scriptRelationWidthScale("S_{1}=a^{2}=1"));
         assertEquals(0.975d, VectorWmfFormulaRenderer.scriptRelationWidthScale("S_{3}=4=b^{2}"));
         assertEquals(0.90d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{1}=a^{2}=1"));
-        assertEquals(0.93d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{3}=4=b^{2}"));
+        assertEquals(0.906d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{3}=4=b^{2}"));
+        assertEquals(0.93d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{2}=2=a\\times b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{-1}b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{2}+b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{2}-b"));
