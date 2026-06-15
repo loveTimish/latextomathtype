@@ -957,3 +957,37 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v111-repeated-paren-width\formula-preview-ink-source-vs-v111-first30.json`
 - v111 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v111-repeated-paren-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v112 keeps the final submitted change narrow: only exact
+  `S_{1}=a^{2}=1` gets a width-compensation bump from `1.085` to `1.093`,
+  with cache version `v112-xsc-s1-area-width`. This is scoped through
+  `isExactS1AreaEquation(...)` and therefore does not alter ordinary relation
+  chains, long relation chains, or `\bigtriangleup` relation chains.
+- Two v112 experiments were intentionally discarded before commit. Lowering
+  `SCRIPT_RELATION_FONT_Y_SCALE` from `0.93` to `0.925` improved width max but
+  worsened first-30 height average from `0.114pt` to `0.119pt` and did not
+  move the `0.330pt` max height. Lowering ordinary
+  `SCRIPT_RELATION_WIDTH_SCALE` from `0.975` to `0.970` over-shrank exact
+  `S_{1}=a^{2}=1`, worsening its width delta to `-0.515pt`. Do not repeat
+  those broad relation moves without a new mechanism that separates exact S1,
+  ordinary ratio chains, long chains, and triangle chains.
+- v112 final on doc 61 improved sourceIndex `15` (`S_{1}=a^{2}=1`) width
+  delta from `-0.314pt` to `-0.264pt`. First-30 width average improved from
+  v111 `0.142pt` to `0.141pt`, p90 from `0.264pt` to `0.263pt`, and
+  height average/max stayed `0.114pt` / `0.330pt`. Width max stayed `0.327pt`,
+  now led by sourceIndex `1`; top height remains the relation-chain group led
+  by sourceIndex `30`.
+- v112 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal
+  target shape width/height `520/520` within 1%.
+- v112 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v112-s1-area-width\xsc测试集完整重建_61.docx`
+- v112 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v112-s1-area-width\leak-scan-61.json`
+- v112 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v112-s1-area-width\wmf-report-61.json`
+- v112 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v112-s1-area-width\formula-preview-ink-source-vs-v112-first30.json`
+- v112 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v112-s1-area-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`

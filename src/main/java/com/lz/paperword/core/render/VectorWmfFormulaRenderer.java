@@ -66,7 +66,7 @@ final class VectorWmfFormulaRenderer {
     private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_SCALE = 0.98d;
     private static final double SCRIPT_RELATION_FONT_Y_SCALE = 0.93d;
     private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_FONT_Y_SCALE = 0.90d;
-    private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION = 1.085d;
+    private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION = 1.093d;
     private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION = 1.025d;
     private static final Pattern LEFT_RIGHT_PAREN = Pattern.compile(
         "\\\\left\\s*\\(\\s*(?:\\{\\s*)?(.*?)(?:\\s*})?\\s*\\\\right\\s*\\)"

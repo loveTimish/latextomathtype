@@ -521,7 +521,7 @@ class VectorWmfFormulaRendererTest {
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{-1}b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{2}+b"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("a^{2}-b"));
-        assertEquals(1.085d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{1}=a^{2}=1"));
+        assertEquals(1.093d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{1}=a^{2}=1"));
         assertEquals(1.025d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}=a^{2}\\colon ab=25\\colon 35"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
