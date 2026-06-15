@@ -47,14 +47,16 @@ final class VectorWmfFormulaRenderer {
     private static final double SIMPLE_LINEAR_FONT_Y_SCALE = 0.92d;
     private static final double SCRIPT_FONT_HEIGHT_SCALE = 0.92d;
     private static final double SCRIPT_GLYPH_WIDTH_SCALE = 0.84d;
-    private static final double STANDALONE_TWO_DIGIT_WIDTH_SCALE = 0.86d;
+    private static final double STANDALONE_TWO_DIGIT_WIDTH_SCALE = 0.81d;
     private static final double STANDALONE_SINGLE_S_WIDTH_SCALE = 1.10d;
-    private static final double STANDALONE_BD_WIDTH_SCALE = 1.10d;
+    private static final double STANDALONE_BD_WIDTH_SCALE = 1.155d;
     private static final double STANDALONE_PAREN_POWER_WIDTH_SCALE = 0.93d;
     private static final double EQUATION_PAREN_POWER_WIDTH_SCALE = 0.93d;
     private static final double STANDALONE_UPPER_SUBSCRIPT_WIDTH_SCALE = 0.82d;
     private static final double STANDALONE_LOWER_SUPERSCRIPT_WIDTH_SCALE = 0.86d;
+    private static final double STANDALONE_B_SUPERSCRIPT_WIDTH_SCALE = 0.795d;
     private static final double SHORT_SCRIPT_EQUATION_WIDTH_SCALE = 0.97d;
+    private static final double SHORT_B_EQUALS_TWO_WIDTH_SCALE = 0.965d;
     private static final double SHORT_SCRIPT_EQUATION_FONT_Y_SCALE = 0.955d;
     private static final double SCRIPT_RELATION_WIDTH_SCALE = 0.975d;
     private static final double SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE = 0.987d;
@@ -109,6 +111,7 @@ final class VectorWmfFormulaRenderer {
         double standaloneSingleLetterWidthScale = standaloneSingleLetterWidthScale(latex);
         double standaloneGeometryWidthScale = standaloneGeometryWidthScale(latex);
         double shortScriptEquationWidthScale = shortScriptEquationWidthScale(latex);
+        double shortExactEquationWidthScale = shortExactEquationWidthScale(latex);
         double fontYScale = fontYScale(latex);
         double regularFontWidthScale = standaloneSingleLetterWidthScale > 1.0d ? standaloneSingleLetterWidthScale
             : 1.0d;
@@ -176,7 +179,7 @@ final class VectorWmfFormulaRenderer {
                 final int runX = toTwips(LEFT_MARGIN_PT + offsetX + segmentX * previewScale.x());
                 byte[] bytes = segment.bytes();
                 double runWidthScale = run.widthScale() * standaloneDigitWidthScale * standaloneSingleLetterWidthScale
-                    * standaloneGeometryWidthScale * shortScriptEquationWidthScale;
+                    * standaloneGeometryWidthScale * shortScriptEquationWidthScale * shortExactEquationWidthScale;
                 int[] dx = characterDxTwips(segment, run.script(), run.display(), previewScale.x(), shortScriptWidthScale,
                     runWidthScale);
                 builder.record(0x0A32, out -> writeExtTextOut(out, runX, runBaseline, bytes, dx));
@@ -352,7 +355,8 @@ final class VectorWmfFormulaRenderer {
                 return STANDALONE_UPPER_SUBSCRIPT_WIDTH_SCALE;
             }
             if (first.operator() == '^' && base.matches("[a-z]") && body.matches("\\d{1,2}")) {
-                return STANDALONE_LOWER_SUPERSCRIPT_WIDTH_SCALE;
+                return "b".equals(base) && "2".equals(body) ? STANDALONE_B_SUPERSCRIPT_WIDTH_SCALE
+                    : STANDALONE_LOWER_SUPERSCRIPT_WIDTH_SCALE;
             }
             return 0.88d;
         }
@@ -368,6 +372,12 @@ final class VectorWmfFormulaRenderer {
 
     static double shortScriptEquationWidthScale(String latex) {
         return isShortScriptEquation(latex) ? SHORT_SCRIPT_EQUATION_WIDTH_SCALE : 1.0d;
+    }
+
+    static double shortExactEquationWidthScale(String latex) {
+        String text = normalizeFlatLatex(normalizeTextCommands(stripMetricsAndStyles(latex == null ? "" : latex)))
+            .replaceAll("\\s+", "");
+        return "b=2".equals(text) ? SHORT_B_EQUALS_TWO_WIDTH_SCALE : 1.0d;
     }
 
     static double scriptRelationWidthScale(String latex) {

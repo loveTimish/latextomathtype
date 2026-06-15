@@ -603,14 +603,29 @@ class VectorWmfFormulaRendererTest {
         byte[] ab = VectorWmfFormulaRenderer.render("\\pwmetrics{17.992,11.995,18.000,12.000}AB", 18.0d,
             12.0d);
         byte[] abcd = VectorWmfFormulaRenderer.render("ABCD", 32.25d, 12.75d);
+        byte[] twentyFive = VectorWmfFormulaRenderer.render("25", 14.25d, 12.75d);
+        byte[] thirtyFive = VectorWmfFormulaRenderer.render("35", 14.25d, 12.75d);
+        byte[] longNumber = VectorWmfFormulaRenderer.render("144", 20.0d, 12.75d);
+        byte[] aSquared = VectorWmfFormulaRenderer.render("a^{2}", 9.75d, 15.75d);
+        byte[] bSquared = VectorWmfFormulaRenderer.render("b^{2}", 9.75d, 15.75d);
+        byte[] bCubed = VectorWmfFormulaRenderer.render("b^{3}", 9.75d, 15.75d);
+        byte[] cSquared = VectorWmfFormulaRenderer.render("c^{2}", 9.75d, 15.75d);
 
         assertTrue(createFontWidths(singleS).get(0) > 0);
         assertEquals(0, createFontWidths(singleA).get(0));
         assertEquals(0, createFontWidths(scriptS).get(0));
         assertTrue(firstTextDxTotal(singleS) > firstTextDxTotal(singleA));
         assertTrue(firstTextDxTotal(bd) > firstTextDxTotal(ab));
+        assertTrue(firstTextDxTotal(twentyFive) < firstTextDxTotal(longNumber));
+        assertEquals(firstTextDxTotal(twentyFive), firstTextDxTotal(thirtyFive));
+        assertTrue(maxTextRightCoordinate(bSquared) < maxTextRightCoordinate(aSquared));
+        assertTrue(maxTextRightCoordinate(bCubed) > maxTextRightCoordinate(bSquared));
+        assertTrue(maxTextRightCoordinate(cSquared) > maxTextRightCoordinate(bSquared));
         assertTrue(maxRecordCoordinate(bd) <= 18.0d * 20.0d);
         assertTrue(maxRecordCoordinate(abcd) <= 32.25d * 20.0d);
+        assertTrue(maxRecordCoordinate(twentyFive) <= 14.25d * 20.0d);
+        assertTrue(maxRecordCoordinate(aSquared) <= 9.75d * 20.0d);
+        assertTrue(maxRecordCoordinate(bSquared) <= 9.75d * 20.0d);
     }
 
     @Test
@@ -626,6 +641,9 @@ class VectorWmfFormulaRendererTest {
         assertEquals(createFontHeights(shortEquation).get(0), createFontHeights(shortSuperscriptEquation).get(0));
         assertTrue(VectorWmfFormulaRenderer.shortScriptEquationWidthScale("S_{2}=2") < 1.0d);
         assertTrue(VectorWmfFormulaRenderer.shortScriptEquationWidthScale("a^{2}=1") < 1.0d);
+        assertTrue(VectorWmfFormulaRenderer.shortExactEquationWidthScale("b=2") < 1.0d);
+        assertEquals(1.0d, VectorWmfFormulaRenderer.shortExactEquationWidthScale("a=1"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.shortExactEquationWidthScale("a\\colon b=5\\colon 7"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.shortScriptEquationWidthScale(
             "S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
         assertTrue(maxTextRightCoordinate(shortEquation) < 30.0d * 20.0d);

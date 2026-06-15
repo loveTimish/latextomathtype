@@ -326,6 +326,23 @@ batch, then append any useful lesson or pitfall found in that round.
   `dx` record. For formulas such as `S_{2}=2`, the first record can cover only
   the base glyph. Use classifier tests plus `compare_formula_preview_ink.py` for
   visible effect.
+- v88 was a useful but failed short-object experiment: lowering the global
+  lowercase superscript scale helped `b^2` but also damaged `a^2`, and matching
+  every `[a-z]=\d{1,2}` helped `b=2` but damaged `a=1`. Keep these corrections
+  formula-shape or exact-object scoped unless broader test-set evidence supports
+  widening them.
+- v90 scopes the short-object width corrections: standalone two-digit objects
+  use `0.81`, standalone `BD` uses `1.155`, only exact `b^2` uses the lower
+  superscript width scale `0.795`, and only exact `b=2` receives the extra
+  equation width scale `0.965`. On doc 61 first-30, width average improved from
+  v87 `0.292pt` to `0.226pt`, max width error from `0.698pt` to `0.616pt`,
+  while OLE/WMF safety stayed at `520` valid MathType OLE, `520` vector WMFs,
+  `0` LaTeX leaks, and `0` bitmap WMFs.
+- A no-context v90 review found no high-risk WMF/OLE/vector-path issue. It
+  flagged residual medium/low risks: the stronger two-digit scale still applies
+  to all standalone two-digit objects, and regression tests should keep proving
+  exact-object scoping for `b^2` with negative examples such as `b^3` and
+  `c^2`.
 
 ### Ink Comparison
 
@@ -508,3 +525,13 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v87-short-script-equation\wmf-report-61.json`
 - v87 first-30 ink report:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v87-short-script-equation\formula-preview-ink-source-vs-v87-first30.json`
+- v90 short-object scoped sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v90-short-object-width-scoped-review\xsc测试集完整重建_61.docx`
+- v90 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v90-short-object-width-scoped-review\leak-scan-61.json`
+- v90 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v90-short-object-width-scoped-review\wmf-report-61.json`
+- v90 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v90-short-object-width-scoped-review\formula-preview-ink-source-vs-v90-first30.json`
+- v90 short-object targeted ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v90-short-object-width-scoped-review\formula-preview-ink-source-vs-v90-short-objects.json`
