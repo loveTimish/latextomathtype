@@ -648,6 +648,8 @@ class VectorWmfFormulaRendererTest {
             12.75d);
         byte[] singleA = VectorWmfFormulaRenderer.render("A", 9.75d, 12.75d);
         byte[] scriptS = VectorWmfFormulaRenderer.render("S_{1}", 12.0d, 15.75d);
+        byte[] scriptS3 = VectorWmfFormulaRenderer.render("S_{3}", 12.0d, 15.75d);
+        byte[] scriptA1 = VectorWmfFormulaRenderer.render("A_{1}", 12.0d, 15.75d);
         byte[] bd = VectorWmfFormulaRenderer.render("\\pwmetrics{17.992,11.995,18.000,12.000}BD", 18.0d,
             12.0d);
         byte[] ab = VectorWmfFormulaRenderer.render("\\pwmetrics{17.992,11.995,18.000,12.000}AB", 18.0d,
@@ -664,7 +666,10 @@ class VectorWmfFormulaRendererTest {
         assertTrue(createFontWidths(singleS).get(0) > 0);
         assertEquals(0, createFontWidths(singleA).get(0));
         assertEquals(0, createFontWidths(scriptS).get(0));
+        assertEquals(0, createFontWidths(scriptS3).get(0));
         assertTrue(firstTextDxTotal(singleS) > firstTextDxTotal(singleA));
+        assertTrue(totalTextDx(scriptS) < totalTextDx(scriptA1));
+        assertTrue(totalTextDx(scriptS3) > totalTextDx(scriptS));
         assertTrue(firstTextDxTotal(bd) > firstTextDxTotal(ab));
         assertTrue(firstTextDxTotal(twentyFive) < firstTextDxTotal(longNumber));
         assertEquals(firstTextDxTotal(twentyFive), firstTextDxTotal(thirtyFive));

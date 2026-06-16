@@ -1517,3 +1517,38 @@ batch, then append any useful lesson or pitfall found in that round.
   and Pillow. The script reports `pillowAvailable` and per-formula
   `magickInkError`; use `--require-magick-ink` when a run must fail instead of
   silently producing record-only diagnostics.
+- v128 targets only standalone uppercase `S_{1}` and `S_{3}` subscript labels.
+  The v127 residuals had opposite signs for these two labels, so the renderer
+  now keeps the generic uppercase-subscript scale intact and applies exact local
+  width scales only for standalone `S_{1}` (`0.790`) and standalone `S_{3}`
+  (`0.842`). Do not broaden this into relation formulas such as
+  `S_{1}=a^{2}=1` or `S_{3}=4=b^{2}`.
+- v128 on doc 61 first-30 visible ink versus v127: width average improved from
+  `0.102pt` to `0.090pt`, p90 improved from `0.214pt` to `0.190pt`, and max
+  improved from `0.244pt` to `0.231pt`. Height average, p90, and max stayed
+  `0.075pt`, `0.112pt`, and `0.127pt`. The previous standalone `S_{1}` and
+  `S_{3}` worst residuals exited the worst-width list.
+- v128 structural gates on doc 61 still passed: `520` valid MathType OLE,
+  `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE, zero bitmap WMF,
+  zero WMF LaTeX leaks, and zero review-required suspicious WMF text.
+- v128 target physical metrics on doc 61 still passed when aligned with
+  `full-61.request.json`: target WMF width `520/520` within 1% with max error
+  `0.178%`, target WMF height `520/520` within 1% with max error `0.177%`,
+  and target shape width/height both `520/520` within 1% with max error `0`.
+  Do not use raw ordinal source comparison here: the source has extra objects,
+  so ordinal metrics can show false huge ratios even when target metrics are
+  correct.
+- `rebuild/compare_formula_preview_ink.py --indices` is zero-based DOCX object
+  indexing. To compare sourceIndex `1..30`, pass `--indices 0,1,...,29`; passing
+  `1..30` compares sourceIndex `2..31` and can create a false regression around
+  sourceIndex `31`.
+- v128 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v128-standalone-s1-s3-width\xsc测试集完整重建_61.docx`
+- v128 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v128-standalone-s1-s3-width\leak-scan-61.json`
+- v128 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v128-standalone-s1-s3-width\wmf-report-61.json`
+- v128 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v128-standalone-s1-s3-width\formula-preview-ink-source-vs-v128-first30.json`
+- v128 target physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v128-standalone-s1-s3-width\pair-metrics-target\4-3-4 蝴蝶模型_summary.json`

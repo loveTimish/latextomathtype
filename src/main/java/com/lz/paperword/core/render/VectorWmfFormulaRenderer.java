@@ -54,6 +54,8 @@ final class VectorWmfFormulaRenderer {
     private static final double EQUATION_PAREN_POWER_WIDTH_SCALE = 0.910d;
     private static final double STANDALONE_UPPER_SUBSCRIPT_FONT_Y_SCALE = 0.956d;
     private static final double STANDALONE_UPPER_SUBSCRIPT_WIDTH_SCALE = 0.814d;
+    private static final double STANDALONE_S1_SUBSCRIPT_WIDTH_SCALE = 0.790d;
+    private static final double STANDALONE_S3_SUBSCRIPT_WIDTH_SCALE = 0.842d;
     private static final double STANDALONE_LOWER_SUPERSCRIPT_WIDTH_SCALE = 0.86d;
     private static final double STANDALONE_B_SUPERSCRIPT_WIDTH_SCALE = 0.795d;
     private static final double SHORT_SCRIPT_EQUATION_WIDTH_SCALE = 0.97d;
@@ -374,6 +376,12 @@ final class VectorWmfFormulaRenderer {
             String base = text.substring(0, op);
             String body = first.body();
             if (first.operator() == '_' && base.matches("[A-Z]") && body.matches("\\d{1,2}")) {
+                if ("S".equals(base) && "1".equals(body)) {
+                    return STANDALONE_S1_SUBSCRIPT_WIDTH_SCALE;
+                }
+                if ("S".equals(base) && "3".equals(body)) {
+                    return STANDALONE_S3_SUBSCRIPT_WIDTH_SCALE;
+                }
                 return STANDALONE_UPPER_SUBSCRIPT_WIDTH_SCALE;
             }
             if (first.operator() == '^' && base.matches("[a-z]") && body.matches("\\d{1,2}")) {
