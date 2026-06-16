@@ -1552,3 +1552,26 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v128-standalone-s1-s3-width\formula-preview-ink-source-vs-v128-first30.json`
 - v128 target physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v128-standalone-s1-s3-width\pair-metrics-target\4-3-4 蝴蝶模型_summary.json`
+- Added `scripts/compare_wmf_formula_glyphs.py` to compare two JSON reports
+  from `scripts/measure_wmf_formula_glyphs.py`. It aligns by 1-based
+  `objectIndex`, writes formula/run diff CSVs, and ranks worst
+  record-width, ImageMagick ink-width, and ink-height deltas. Keep this as a
+  diagnostic attribution tool: it explains whether a renderer change moved
+  WMF records, preview-media ink, baselines, or run placement.
+- The glyph inspector `--indices` argument is 1-based object indexing because
+  it filters `box.index + 1`. This is intentionally different from
+  `rebuild/compare_formula_preview_ink.py --indices`, which is zero-based.
+  Always check the script help/source before reusing an index list across these
+  tools.
+- A v127-to-v128 glyph diff on doc 61 indexes `5,7,9,15,18` confirms the
+  intended narrow effect: standalone `S_{1}` record width changed by `-0.250pt`,
+  standalone `S_{3}` record width changed by `+0.300pt`, and `S_{2}=2`,
+  `S_{1}=a^{2}=1`, plus the repeated parenthesized-power equation stayed at
+  `0.000pt` record-width delta. The same diff reports `0.000pt`
+  `magickInkWidthDeltaPt` for `S_{1}`/`S_{3}`, which is another reminder that
+  ImageMagick preview-media ink can miss small real-layout changes; use
+  Word/page ink checks for final visual acceptance.
+- v128 glyph metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v128-standalone-s1-s3-width\wmf-glyph-metrics-5-7-9-15-18.json`
+- v128 glyph diff:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v128-standalone-s1-s3-width\wmf-glyph-diff-v127-v128-5-7-9-15-18.json`
