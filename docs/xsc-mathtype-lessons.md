@@ -1843,3 +1843,31 @@ batch, then append any useful lesson or pitfall found in that round.
 - v134 first-30 cached Word/page ink rows:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\formula-preview-ink-reference-v134-first30-rows.json`
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\formula-preview-ink-generated-v134-first30-rows.json`
+- `rebuild/compare_formula_preview_ink.py --measure-only` is needed for
+  single-side full-document measurement. Using `--source-indices 1` as a
+  bootstrap filter only measures one formula on both sides, which is not a
+  valid way to pre-cache the reference document.
+- Long single-side measurement must checkpoint as it runs. The first reference
+  full-doc attempt timed out after five minutes; after adding
+  `--checkpoint-every` and `--resume-reference-rows`, the partial cache
+  survived at `401/520` rows and the second run completed the remaining
+  `119` rows.
+- Resume caches must still be filtered by the current `--indices`,
+  `--source-indices`, and `--max-items`. A regression check resumed from a
+  full `520`-row reference cache with `--source-indices 1,2,3` and saved only
+  rows `0,1,2`. `--measure-only` intentionally rejects `--load-*-rows`; use
+  `--resume-*-rows` when the command is expected to write or extend a cache.
+- v134 doc 61 full Word/page ink cache is now available:
+  reference rows `520/520`,
+  generated rows `520/520`, and loaded comparison `paired_count=520`.
+  The raw all-index statistics are polluted by DOCX-local object-index
+  misalignment in later pages, so do not use the raw `avg=35.304pt` width
+  error as a renderer metric.
+- The full-doc ink comparison now reports `alignment_suspicious` using context
+  similarity and extreme width/height scale. In v134 doc 61,
+  `alignment_suspicious_count=212`, leaving `aligned_paired_count=308`. This
+  means the next large improvement is not another first-30 width constant; it
+  is better source/generated formula alignment and then long-formula family
+  calibration.
+- v134 full-doc guarded ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\formula-preview-ink-source-vs-v134-all-alignment-guard-v2.txt`

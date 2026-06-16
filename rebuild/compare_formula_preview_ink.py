@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import shutil
 import subprocess
 import tempfile
@@ -141,13 +142,18 @@ def measure_docx(
     max_items: int | None = None,
     label: str = "docx",
     progress_every: int = 0,
+    existing_rows: list[dict[str, Any]] | None = None,
+    checkpoint_path: Path | None = None,
+    checkpoint_every: int = 0,
 ) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
+    rows: list[dict[str, Any]] = filter_rows(list(existing_rows or []), indexes, max_items)
+    completed_indexes = {int(row.get("index", -1)) for row in rows}
     boxes = extract_boxes(docx)
     if indexes:
         boxes = [box for box in boxes if box.index in indexes]
     if max_items is not None:
         boxes = boxes[:max_items]
+    boxes = [box for box in boxes if box.index not in completed_indexes]
     with tempfile.TemporaryDirectory(prefix="formula-ink-") as tmp:
         temp_root = Path(tmp)
         total = len(boxes)
@@ -190,11 +196,15 @@ def measure_docx(
             row["ink_width_ratio"] = round(float(ink["ink_width_px"]) / image_w, 4)
             row["ink_height_ratio"] = round(float(ink["ink_height_px"]) / image_h, 4)
             rows.append(row)
+            if checkpoint_path and checkpoint_every > 0 and (ordinal % checkpoint_every == 0 or ordinal == total):
+                write_rows(checkpoint_path, rows, docx, indexes or set(), max_items)
     return rows
 
 
 def read_rows(path: Path | None) -> list[dict[str, Any]] | None:
     if not path:
+        return None
+    if not path.exists():
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(payload, list):
@@ -214,7 +224,7 @@ def write_rows(path: Path | None, rows: list[dict[str, Any]], docx: Path, indexe
         "source_indices": sorted(index + 1 for index in indexes),
         "max_items": max_items,
         "row_count": len(rows),
-        "rows": rows,
+        "rows": sorted(rows, key=lambda row: int(row.get("index", -1))),
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -238,6 +248,27 @@ def parse_index_list(value: str) -> set[int]:
     return indexes
 
 
+def normalize_context(value: Any) -> str:
+    text = "" if value is None else str(value)
+    return re.sub(r"\s+", "", text)
+
+
+def text_similarity(left: Any, right: Any) -> float:
+    a = normalize_context(left)
+    b = normalize_context(right)
+    if not a and not b:
+        return 1.0
+    if not a or not b:
+        return 0.0
+    if a in b or b in a:
+        return round(min(len(a), len(b)) / max(len(a), len(b)), 3)
+    a_tokens = set(a)
+    b_tokens = set(b)
+    if not a_tokens or not b_tokens:
+        return 0.0
+    return round(len(a_tokens & b_tokens) / len(a_tokens | b_tokens), 3)
+
+
 def compare_rows(reference: list[dict[str, Any]], generated: list[dict[str, Any]]) -> dict[str, Any]:
     reference_by_index = {int(row["index"]): row for row in reference}
     generated_by_index = {int(row["index"]): row for row in generated}
@@ -252,6 +283,16 @@ def compare_rows(reference: list[dict[str, Any]], generated: list[dict[str, Any]
         height_delta = float(gen["ink_height_pt"]) - float(ref["ink_height_pt"])
         width_scale = float(ref["ink_width_pt"]) / max(float(gen["ink_width_pt"]), 0.001)
         height_scale = float(ref["ink_height_pt"]) / max(float(gen["ink_height_pt"]), 0.001)
+        reference_context = ref.get("context")
+        generated_context = gen.get("context")
+        context_similarity = text_similarity(reference_context, generated_context)
+        extreme_scale = max(
+            width_scale,
+            1.0 / max(width_scale, 0.001),
+            height_scale,
+            1.0 / max(height_scale, 0.001),
+        )
+        alignment_suspicious = context_similarity < 0.15 or extreme_scale > 3.0
         rows.append(
             {
                 "index": index,
@@ -270,10 +311,14 @@ def compare_rows(reference: list[dict[str, Any]], generated: list[dict[str, Any]
                 "generated_image_size_px": [gen["image_width_px"], gen["image_height_px"]],
                 "reference_ink_bbox_px": ref["ink_bbox_px"],
                 "generated_ink_bbox_px": gen["ink_bbox_px"],
-                "reference_context": ref.get("context"),
-                "generated_context": gen.get("context"),
+                "context_similarity": context_similarity,
+                "extreme_scale": round(extreme_scale, 4),
+                "alignment_suspicious": alignment_suspicious,
+                "reference_context": reference_context,
+                "generated_context": generated_context,
             }
         )
+    aligned_rows = [row for row in rows if not row["alignment_suspicious"]]
     return {
         "paired_count": len(rows),
         "unpaired_reference": sorted(set(reference_by_index) - set(generated_by_index)),
@@ -285,10 +330,17 @@ def compare_rows(reference: list[dict[str, Any]], generated: list[dict[str, Any]
         ),
         "ink_width_abs_delta_pt": stats([row["ink_width_abs_delta_pt"] for row in rows]),
         "ink_height_abs_delta_pt": stats([row["ink_height_abs_delta_pt"] for row in rows]),
+        "aligned_paired_count": len(aligned_rows),
+        "alignment_suspicious_count": len(rows) - len(aligned_rows),
+        "aligned_ink_width_abs_delta_pt": stats([row["ink_width_abs_delta_pt"] for row in aligned_rows]),
+        "aligned_ink_height_abs_delta_pt": stats([row["ink_height_abs_delta_pt"] for row in aligned_rows]),
         "required_width_scale": stats([row["required_width_scale"] for row in rows if math.isfinite(row["required_width_scale"])]),
         "required_height_scale": stats([row["required_height_scale"] for row in rows if math.isfinite(row["required_height_scale"])]),
         "worst_width": sorted(rows, key=lambda row: row["ink_width_abs_delta_pt"], reverse=True)[:30],
         "worst_height": sorted(rows, key=lambda row: row["ink_height_abs_delta_pt"], reverse=True)[:30],
+        "worst_aligned_width": sorted(aligned_rows, key=lambda row: row["ink_width_abs_delta_pt"], reverse=True)[:30],
+        "worst_aligned_height": sorted(aligned_rows, key=lambda row: row["ink_height_abs_delta_pt"], reverse=True)[:30],
+        "alignment_suspicious_rows": [row for row in rows if row["alignment_suspicious"]][:30],
         "rows": rows,
     }
 
@@ -301,9 +353,13 @@ def render_text(report: dict[str, Any]) -> str:
         f"reference: {report['reference']}",
         f"generated: {report['generated']}",
         f"paired_count: {comparison['paired_count']}",
+        f"aligned_paired_count: {comparison['aligned_paired_count']}",
+        f"alignment_suspicious_count: {comparison['alignment_suspicious_count']}",
         "",
         f"ink_width_abs_delta_pt: {comparison['ink_width_abs_delta_pt']}",
         f"ink_height_abs_delta_pt: {comparison['ink_height_abs_delta_pt']}",
+        f"aligned_ink_width_abs_delta_pt: {comparison['aligned_ink_width_abs_delta_pt']}",
+        f"aligned_ink_height_abs_delta_pt: {comparison['aligned_ink_height_abs_delta_pt']}",
         f"required_width_scale: {comparison['required_width_scale']}",
         f"required_height_scale: {comparison['required_height_scale']}",
         "",
@@ -312,13 +368,27 @@ def render_text(report: dict[str, Any]) -> str:
     for row in comparison["worst_width"][:12]:
         lines.append(
             "  #{index}/sourceIndex={sourceIndex}: ref={reference_ink_width_pt}pt gen={generated_ink_width_pt}pt "
-            "delta={ink_width_delta_pt}pt scale={required_width_scale} text={generated_context}".format(**row)
+            "delta={ink_width_delta_pt}pt scale={required_width_scale} suspicious={alignment_suspicious} "
+            "sim={context_similarity} text={generated_context}".format(**row)
         )
     lines.extend(["", "Worst visible height deltas"])
     for row in comparison["worst_height"][:12]:
         lines.append(
             "  #{index}/sourceIndex={sourceIndex}: ref={reference_ink_height_pt}pt gen={generated_ink_height_pt}pt "
-            "delta={ink_height_delta_pt}pt scale={required_height_scale} text={generated_context}".format(**row)
+            "delta={ink_height_delta_pt}pt scale={required_height_scale} suspicious={alignment_suspicious} "
+            "sim={context_similarity} text={generated_context}".format(**row)
+        )
+    lines.extend(["", "Worst aligned-looking width deltas"])
+    for row in comparison["worst_aligned_width"][:12]:
+        lines.append(
+            "  #{index}/sourceIndex={sourceIndex}: ref={reference_ink_width_pt}pt gen={generated_ink_width_pt}pt "
+            "delta={ink_width_delta_pt}pt scale={required_width_scale} sim={context_similarity} text={generated_context}".format(**row)
+        )
+    lines.extend(["", "Worst aligned-looking height deltas"])
+    for row in comparison["worst_aligned_height"][:12]:
+        lines.append(
+            "  #{index}/sourceIndex={sourceIndex}: ref={reference_ink_height_pt}pt gen={generated_ink_height_pt}pt "
+            "delta={ink_height_delta_pt}pt scale={required_height_scale} sim={context_similarity} text={generated_context}".format(**row)
         )
     return "\n".join(lines) + "\n"
 
@@ -337,23 +407,45 @@ def main() -> int:
     parser.add_argument("--max-items", type=int, help="Compare only the first N formulas after index filtering.")
     parser.add_argument("--load-reference-rows", type=Path, help="Load cached reference measurement rows instead of rendering.")
     parser.add_argument("--load-generated-rows", type=Path, help="Load cached generated measurement rows instead of rendering.")
+    parser.add_argument("--resume-reference-rows", type=Path, help="Resume reference measurement from an existing partial row cache.")
+    parser.add_argument("--resume-generated-rows", type=Path, help="Resume generated measurement from an existing partial row cache.")
     parser.add_argument("--save-reference-rows", type=Path, help="Write reference measurement rows for reuse.")
     parser.add_argument("--save-generated-rows", type=Path, help="Write generated measurement rows for reuse.")
     parser.add_argument("--progress-every", type=int, default=0, help="Print rendering progress every N formulas.")
+    parser.add_argument("--checkpoint-every", type=int, default=0, help="Save partial measurement rows every N newly rendered formulas.")
+    parser.add_argument(
+        "--measure-only",
+        choices=["reference", "generated"],
+        help="Only measure and save one side; requires the matching --save-*-rows option.",
+    )
     args = parser.parse_args()
+    if args.measure_only == "reference" and not args.save_reference_rows:
+        parser.error("--measure-only reference requires --save-reference-rows")
+    if args.measure_only == "generated" and not args.save_generated_rows:
+        parser.error("--measure-only generated requires --save-generated-rows")
+    if args.measure_only == "reference" and args.load_reference_rows:
+        parser.error("--measure-only reference cannot be combined with --load-reference-rows; use --resume-reference-rows")
+    if args.measure_only == "generated" and args.load_generated_rows:
+        parser.error("--measure-only generated cannot be combined with --load-generated-rows; use --resume-generated-rows")
 
     selected_indexes = parse_index_list(args.indices)
     selected_source_indexes = parse_index_list(args.source_indices)
     if selected_source_indexes:
         selected_indexes.update(index - 1 for index in selected_source_indexes)
-    needs_render = not args.load_reference_rows or not args.load_generated_rows
+    needs_reference = args.measure_only in (None, "reference")
+    needs_generated = args.measure_only in (None, "generated")
+    needs_render = (
+        (needs_reference and not args.load_reference_rows)
+        or (needs_generated and not args.load_generated_rows)
+    )
     magick: Path | None = None
     if needs_render:
         if not args.magick.exists() and not shutil.which("magick"):
             raise SystemExit(f"ImageMagick magick.exe not found: {args.magick}")
         magick = args.magick if args.magick.exists() else Path(shutil.which("magick"))
-    reference_rows = read_rows(args.load_reference_rows)
-    if reference_rows is None:
+    reference_rows = read_rows(args.load_reference_rows) if needs_reference else []
+    if needs_reference and reference_rows is None:
+        existing_reference_rows = read_rows(args.resume_reference_rows) or []
         assert magick is not None
         reference_rows = measure_docx(
             args.reference,
@@ -364,13 +456,20 @@ def main() -> int:
             args.max_items,
             "reference",
             args.progress_every,
+            existing_reference_rows,
+            args.save_reference_rows,
+            args.checkpoint_every,
         )
         write_rows(args.save_reference_rows, reference_rows, args.reference, selected_indexes, args.max_items)
     else:
         reference_rows = filter_rows(reference_rows, selected_indexes, args.max_items)
+    if args.measure_only == "reference":
+        print(f"measured reference rows: {len(reference_rows)}")
+        return 0
 
-    generated_rows = read_rows(args.load_generated_rows)
-    if generated_rows is None:
+    generated_rows = read_rows(args.load_generated_rows) if needs_generated else []
+    if needs_generated and generated_rows is None:
+        existing_generated_rows = read_rows(args.resume_generated_rows) or []
         assert magick is not None
         generated_rows = measure_docx(
             args.generated,
@@ -381,10 +480,16 @@ def main() -> int:
             args.max_items,
             "generated",
             args.progress_every,
+            existing_generated_rows,
+            args.save_generated_rows,
+            args.checkpoint_every,
         )
         write_rows(args.save_generated_rows, generated_rows, args.generated, selected_indexes, args.max_items)
     else:
         generated_rows = filter_rows(generated_rows, selected_indexes, args.max_items)
+    if args.measure_only == "generated":
+        print(f"measured generated rows: {len(generated_rows)}")
+        return 0
     report = {
         "reference": str(args.reference.resolve()),
         "generated": str(args.generated.resolve()),
