@@ -1575,3 +1575,39 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v128-standalone-s1-s3-width\wmf-glyph-metrics-5-7-9-15-18.json`
 - v128 glyph diff:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v128-standalone-s1-s3-width\wmf-glyph-diff-v127-v128-5-7-9-15-18.json`
+- v129 targets only exact `S_{2}=2` after v128. Lowering
+  `SHORT_S2_EQUALS_TWO_WIDTH_SCALE` from `0.985` to `0.976` reduced doc 61
+  sourceIndex `5` Word/page ink width residual from v128 `+0.231pt` to v129
+  `+0.181pt`, while v128-to-v129 glyph diff across worst-first30 indexes shows
+  only objectIndex `5` moved at record level (`-0.100pt` record width); sampled
+  `S_{1}=a^{2}=1`, repeated parenthesized-power, standalone `S`, `b^{2}`,
+  `b=2`, `CD`, `25`, `35`, and triangle-chain relations stayed at `0.000pt`
+  record-width delta.
+- v129 on doc 61 first-30 visible ink versus v128: width average improved from
+  `0.090pt` to `0.088pt`, p90 improved from `0.190pt` to `0.182pt`, and max
+  improved from `0.231pt` to `0.213pt`. Height average, p90, and max stayed
+  `0.075pt`, `0.112pt`, and `0.127pt`.
+- v129 structural gates on doc 61 still passed: `520` valid MathType OLE,
+  `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE, zero bitmap WMF,
+  zero WMF LaTeX leaks, and zero review-required suspicious WMF text.
+- v129 target physical metrics on doc 61 still passed when aligned with
+  `full-61.request.json`: target WMF width `520/520` within 1% with max error
+  `0.178%`, target WMF height `520/520` within 1% with max error `0.177%`,
+  and target shape width/height both `520/520` within 1% with max error `0`.
+- v129 also reconfirmed that official/source MathType WMF record structure is
+  not a calibration target by itself: source WMFs often use about `32` logical
+  units per point and overlapping `x=0` runs, so source-vs-generated glyph diff
+  is useful for attribution but Word/page ink remains the visual acceptance
+  evidence.
+- v129 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v129-exact-s2-equals-two-width\xsc测试集完整重建_61.docx`
+- v129 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v129-exact-s2-equals-two-width\leak-scan-61.json`
+- v129 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v129-exact-s2-equals-two-width\wmf-report-61.json`
+- v129 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v129-exact-s2-equals-two-width\formula-preview-ink-source-vs-v129-first30.json`
+- v129 target physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v129-exact-s2-equals-two-width\pair-metrics-target\4-3-4 蝴蝶模型_summary.json`
+- v129 glyph diff:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v129-exact-s2-equals-two-width\wmf-glyph-diff-v128-v129-worst-first30.json`
