@@ -712,7 +712,7 @@ class VectorWmfFormulaRendererTest {
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{2}=2"));
         assertTrue(VectorWmfFormulaRenderer.shortScriptEquationWidthScale("S_{2}=2") < 1.0d);
         assertTrue(VectorWmfFormulaRenderer.shortScriptEquationWidthScale("a^{2}=1") < 1.0d);
-        assertEquals(0.976d, VectorWmfFormulaRenderer.shortExactEquationWidthScale("S_{2}=2"));
+        assertEquals(0.969d, VectorWmfFormulaRenderer.shortExactEquationWidthScale("S_{2}=2"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.shortExactEquationWidthScale("S_{2}=2=a\\times b"));
         assertEquals(0.965d, VectorWmfFormulaRenderer.shortExactEquationWidthScale("b=2"));
         assertEquals(1.025d, VectorWmfFormulaRenderer.shortExactEquationWidthScale("a=1"));
@@ -721,7 +721,7 @@ class VectorWmfFormulaRendererTest {
         assertEquals(1.0d, VectorWmfFormulaRenderer.shortExactEquationWidthScale("a\\colon b=5\\colon 7"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.shortScriptEquationWidthScale(
             "S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
-        assertTrue(maxTextRightCoordinate(shortEquation) < 30.0d * 20.0d);
+        assertTrue(maxTextRightCoordinate(shortEquation) < 568);
         assertTrue(maxTextRightCoordinate(shortSuperscriptEquation) < 30.0d * 20.0d);
         assertEquals(1.0d, VectorWmfFormulaRenderer.shortScriptEquationWidthScale("S_{2}"));
         assertTrue(createFontHeights(simple).get(0) > createFontHeights(shortScript).get(0));

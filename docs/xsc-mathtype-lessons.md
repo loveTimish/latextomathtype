@@ -1725,3 +1725,37 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v132-standalone-s-width\pair-metrics-target\4-3-4 蝴蝶模型_summary.json`
 - v132 glyph diff:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v132-standalone-s-width\wmf-glyph-diff-v131-v132-worst-first30.json`
+- v133 retunes exact `S_{2}=2` after it remained the doc 61 first-30 worst
+  width residual. Lowering `SHORT_S2_EQUALS_TWO_WIDTH_SCALE` from `0.976` to
+  `0.969` reduced sourceIndex `5` visible Word/page ink width residual from
+  v132 `+0.181pt` to v133 `+0.131pt`. First-30 width average improved from
+  `0.079pt` to `0.077pt`, p90 from `0.153pt` to `0.150pt`, and max from
+  `0.181pt` to `0.169pt`. Height average, p90, and max stayed `0.075pt`,
+  `0.112pt`, and `0.127pt`.
+- v133 confirms that exact short-script equation tuning should stay local:
+  the v132-to-v133 glyph diff showed only objectIndex `5` moving materially
+  with record width `-0.100pt`; sampled `S_{1}` relation formulas,
+  standalone parenthesized powers, `b^{2}`, `b=2`, repeated parenthesized
+  equations, `CD`, `25`, `35`, and triangle-chain relations stayed at
+  `0.000pt` record-width delta. ImageMagick ink again stayed unchanged while
+  Word/page ink improved, so keep treating `magickInk*` as a diagnostic layer,
+  not the visual acceptance signal.
+- v133 structural gates on doc 61 still passed: `520` valid MathType OLE,
+  `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE, zero bitmap
+  WMF, zero WMF LaTeX leaks, and zero review-required suspicious WMF text.
+- v133 target physical metrics on doc 61 still passed when aligned with
+  `full-61.request.json`: target WMF width `520/520` within 1% with max error
+  `0.178%`, target WMF height `520/520` within 1% with max error `0.177%`,
+  and target shape width/height both `520/520` within 1% with max error `0`.
+- v133 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v133-exact-s2-equation-width\xsc测试集完整重建_61.docx`
+- v133 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v133-exact-s2-equation-width\leak-scan-61.json`
+- v133 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v133-exact-s2-equation-width\wmf-report-61.json`
+- v133 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v133-exact-s2-equation-width\formula-preview-ink-source-vs-v133-first30.json`
+- v133 target physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v133-exact-s2-equation-width\pair-metrics-target\4-3-4 蝴蝶模型_summary.json`
+- v133 glyph diff:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v133-exact-s2-equation-width\wmf-glyph-diff-v132-v133-worst-first30.json`
