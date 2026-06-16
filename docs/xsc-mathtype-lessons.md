@@ -2017,3 +2017,13 @@ batch, then append any useful lesson or pitfall found in that round.
   same width compensation to `heightPt <= 12.1` preserved the target sample
   gains and improved the doc 61 aligned width average to `1.043pt`; keep future
   local calibrations tied to the physical box family that actually needs them.
+- Non-compact fraction rows in the 27.75pt-high family were height-light even
+  when their glyph font was already readable. The fix was vertical geometry,
+  not font size: move the numerator slot up, denominator slot down, fraction
+  bar with it, and keep compact inline fractions on their separate geometry.
+  On doc 61 v140, representative rows such as
+  `S_{\Delta DEO}=\frac{2}{3}...` moved from about `20.812pt` Magick ink height
+  to `21.804pt`, while compact inline rows like `48\times\frac{1}{4}=12`
+  stayed unchanged. Full comparison improved height without widening formulas:
+  `aligned_ink_height_abs_delta_pt avg 0.366pt -> 0.318pt`, max
+  `4.773pt -> 3.484pt`, with width avg unchanged at `1.043pt`.

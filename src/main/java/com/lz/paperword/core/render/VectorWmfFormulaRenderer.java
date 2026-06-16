@@ -44,6 +44,10 @@ final class VectorWmfFormulaRenderer {
     private static final double COMPACT_FRACTION_DENOMINATOR_Y_PT = 13.0d;
     private static final double COMPACT_FRACTION_BAR_Y_PT = 13.1d;
     private static final double COMPACT_FRACTION_HEIGHT_PT = 24.5d;
+    private static final double FRACTION_NUMERATOR_Y_PT = -2.4d;
+    private static final double FRACTION_DENOMINATOR_Y_PT = 11.8d;
+    private static final double FRACTION_BAR_Y_PT = 12.8d;
+    private static final double FRACTION_HEIGHT_PT = 26.2d;
     private static final Font TIMES_FONT = new Font(ANSI_PREVIEW_FACE, Font.PLAIN, 12);
     private static final Font SYMBOL_FONT = new Font("Symbol", Font.PLAIN, 12);
     private static final Font CJK_FONT = new Font("SimSun", Font.PLAIN, 12);
@@ -1226,9 +1230,11 @@ final class VectorWmfFormulaRenderer {
                 lines.add(new LineSegment(fractionX, COMPACT_FRACTION_BAR_Y_PT,
                     fractionX + fractionWidth, COMPACT_FRACTION_BAR_Y_PT));
             } else {
-                appendLayout(placed, lines, numerator, fractionX + (fractionWidth - numeratorWidth) / 2.0d, -2.0d);
-                appendLayout(placed, lines, denominator, fractionX + (fractionWidth - denominatorWidth) / 2.0d, 10.9d);
-                lines.add(new LineSegment(fractionX, 12.3d, fractionX + fractionWidth, 12.3d));
+                appendLayout(placed, lines, numerator, fractionX + (fractionWidth - numeratorWidth) / 2.0d,
+                    FRACTION_NUMERATOR_Y_PT);
+                appendLayout(placed, lines, denominator, fractionX + (fractionWidth - denominatorWidth) / 2.0d,
+                    FRACTION_DENOMINATOR_Y_PT);
+                lines.add(new LineSegment(fractionX, FRACTION_BAR_Y_PT, fractionX + fractionWidth, FRACTION_BAR_Y_PT));
             }
             x = fractionX + fractionWidth + (compactInlineFraction ? 0.8d : 1.4d);
             sawFraction = true;
@@ -1236,7 +1242,7 @@ final class VectorWmfFormulaRenderer {
         }
         return sawFraction && !placed.isEmpty()
             ? new FormulaLayout(placed, lines, Math.max(x, 1.0d),
-                compactInlineFraction ? COMPACT_FRACTION_HEIGHT_PT : 25.5d)
+                compactInlineFraction ? COMPACT_FRACTION_HEIGHT_PT : FRACTION_HEIGHT_PT)
             : null;
     }
 

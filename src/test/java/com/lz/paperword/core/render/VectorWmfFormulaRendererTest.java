@@ -280,6 +280,18 @@ class VectorWmfFormulaRendererTest {
     }
 
     @Test
+    void nonCompactFractionsUseReadableVerticalSlotSpacing() throws IOException {
+        byte[] wmf = VectorWmfFormulaRenderer.render("S=\\frac{\\frac{1}{2}}{3}", 42.0d, 28.0d);
+        int baselineSpread = maxTextYCoordinate(wmf) - minTextYCoordinate(wmf);
+
+        assertTrue(baselineSpread >= 280,
+            "non-compact fraction numerator and denominator baselines should not be visually cramped: "
+                + baselineSpread);
+        assertTrue(maxTextYCoordinate(wmf) <= 28.0d * 20.0d);
+        assertTrue(maxTextRightCoordinate(wmf) <= 42.0d * 20.0d);
+    }
+
+    @Test
     void nestedInlineFractionsDoNotUseCompactFractionSlotGeometry() throws IOException {
         byte[] nested = VectorWmfFormulaRenderer.render("CO=\\frac{\\frac{1}{2}}{3}", 42.0d, 28.0d);
 
