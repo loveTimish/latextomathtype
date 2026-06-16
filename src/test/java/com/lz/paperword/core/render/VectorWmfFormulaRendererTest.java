@@ -26,6 +26,30 @@ class VectorWmfFormulaRendererTest {
     }
 
     @Test
+    void shortLinearEquationsUseReadableFontHeightWithoutAddingSpaces() throws IOException {
+        byte[] equation = VectorWmfFormulaRenderer.render("AE=EF=FB", 66.75d, 12.0d);
+        byte[] product = VectorWmfFormulaRenderer.render("12\\times 2=24", 48.0d, 12.0d);
+        byte[] label = VectorWmfFormulaRenderer.render("ABC", 30.0d, 12.0d);
+
+        assertTrue(VectorWmfFormulaRenderer.isShortLinearEquation("AE=EF=FB"));
+        assertTrue(VectorWmfFormulaRenderer.isShortLinearEquation("12\\times 2=24"));
+        assertFalse(VectorWmfFormulaRenderer.isShortLinearEquation("ABC"));
+        assertFalse(VectorWmfFormulaRenderer.isShortLinearEquation("A+B+C"));
+        assertFalse(VectorWmfFormulaRenderer.isShortLinearEquation("12+34"));
+        assertFalse(VectorWmfFormulaRenderer.isShortLinearEquation("AB-CD"));
+        int equationFontHeight = textFontHeightTwips(equation, "AE=EF=FB");
+        int productFontHeight = textFontHeightTwips(product, "12");
+        assertTrue(equationFontHeight > 195,
+            "short equality formulas should use readable preview font height: " + equationFontHeight);
+        assertTrue(productFontHeight > 195,
+            "short product formulas should use readable short-linear height: " + productFontHeight);
+        assertTrue(totalTextDx(equation) > textDxTotal(label, "ABC"),
+            "short-linear calibration should widen glyph advances, not add spaces");
+        assertTrue(maxTextRightCoordinate(equation) <= 66.75d * 20.0d);
+        assertTrue(maxTextRightCoordinate(product) <= 48.0d * 20.0d);
+    }
+
+    @Test
     void limitedStructuredPlaceholdersCanRenderAsVectorText() {
         assertFalse(VectorWmfFormulaRenderer.canRender("x^{\\frac{1}{2}}"));
         assertTrue(VectorWmfFormulaRenderer.canRender("\\sqrt{\\frac{1}{2}}"));

@@ -1990,3 +1990,22 @@ batch, then append any useful lesson or pitfall found in that round.
   readable text, do not blindly force every child run to non-script. Real script
   children inside a numerator/denominator, such as `\frac{S_{1}}{ABC}`, must
   remain script-sized while the main slot text stays readable.
+- Short linear formulas in 12pt-high boxes, such as `AE=EF=FB`,
+  `BE=DF=1`, and `12\times 2=24`, were visually too small after the generic
+  simple-linear font Y scale: generated WMF used about `9.75pt` text while the
+  reference MathType WMF samples used about `10.5pt`. A scoped short-linear
+  equation classifier can raise font height without adding spaces or changing
+  fraction/script layout. On doc 61 v137, sample glyph metrics moved these rows
+  to `10.5pt` text and `7.0pt` Magick ink height; full-doc width average only
+  improved slightly (`aligned_ink_width_abs_delta_pt avg 1.072pt -> 1.066pt`),
+  so this is a readability fix, not the final width solution.
+- The short-linear readable-height classifier must require an equality,
+  multiplication, division, or dot-product operator. Do not let plain short
+  addition/subtraction expressions such as `A+B+C`, `12+34`, or `AB-CD` match
+  this calibration; those are near-neighbor negative cases for the regression
+  test.
+- `scripts/run_xsc_unattended_acceptance.ps1` may call system `python` for
+  compare steps, which can fail on Chinese source paths if that Python/runtime
+  decodes arguments incorrectly. A failed compare after `RUN mvn-*` can still
+  leave a valid generated DOCX; verify with the bundled Codex Python and the
+  known source path before discarding the run.

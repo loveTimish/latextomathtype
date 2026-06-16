@@ -49,6 +49,7 @@ final class VectorWmfFormulaRenderer {
     private static final Font CJK_FONT = new Font("SimSun", Font.PLAIN, 12);
     private static final double SHORT_GEOMETRY_LABEL_WIDTH_SCALE = 0.90d;
     private static final double SIMPLE_LINEAR_FONT_Y_SCALE = 0.92d;
+    private static final double SHORT_LINEAR_EQUATION_FONT_Y_SCALE = 1.076d;
     private static final double SCRIPT_FONT_HEIGHT_SCALE = 0.90d;
     private static final double SCRIPT_GLYPH_WIDTH_SCALE = 0.84d;
     private static final double STANDALONE_TWO_DIGIT_WIDTH_SCALE = 0.79d;
@@ -602,7 +603,23 @@ final class VectorWmfFormulaRenderer {
             return SIMPLE_LINEAR_FONT_Y_SCALE * STANDALONE_UPPER_SUBSCRIPT_FONT_Y_SCALE;
         }
         return isShortScriptEquation(latex) ? SIMPLE_LINEAR_FONT_Y_SCALE * SHORT_SCRIPT_EQUATION_FONT_Y_SCALE
+            : isShortLinearEquation(latex) ? SIMPLE_LINEAR_FONT_Y_SCALE * SHORT_LINEAR_EQUATION_FONT_Y_SCALE
             : SIMPLE_LINEAR_FONT_Y_SCALE;
+    }
+
+    static boolean isShortLinearEquation(String latex) {
+        String raw = stripMetricsAndStyles(latex == null ? "" : latex);
+        if (raw.contains("\\left") || raw.contains("\\right") || hasFractionCommand(raw) || raw.contains("\\sqrt")
+            || raw.contains("\\begin") || raw.contains("\\over") || raw.contains("\\under")
+            || raw.contains("\\boxed") || raw.contains("^") || raw.contains("_")) {
+            return false;
+        }
+        String text = normalizeFlatLatex(normalizeTextCommands(raw)).replaceAll("\\s+", "");
+        return text.length() >= 5 && text.length() <= 16
+            && (text.contains("=") || text.contains("×") || text.contains("÷") || text.contains("\\times")
+                || text.contains("\\div") || text.contains("\\cdot") || text.contains("\\spot"))
+            && text.matches("[A-Za-z0-9]+(?:[=×÷+\\-]|\\\\times|\\\\div|\\\\cdot|\\\\spot)[A-Za-z0-9=×÷+\\-]+")
+            && topLevelRelationOperatorCount(text) >= 1;
     }
 
     static boolean hasClosingFenceSuperscript(String latex) {
