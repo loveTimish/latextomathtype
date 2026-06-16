@@ -288,13 +288,21 @@ TRACE_EDGE_SPACE_RE = re.compile(r"^" + TRACE_ASCII_WS + r"+|" + TRACE_ASCII_WS 
 TRACE_SPACE_RE = re.compile(TRACE_ASCII_WS + "+")
 
 
-def formula_trace_id(latex: str) -> str:
+def formula_trace_hash(latex: str) -> str:
     value = (latex or "").replace("\u00a0", " ")
     value = TRACE_METRICS_RE.sub("", value)
     value = TRACE_STYLE_RE.sub("", value)
     value = TRACE_EDGE_SPACE_RE.sub("", value)
     value = TRACE_SPACE_RE.sub(" ", value)
-    return "pwf:" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def formula_trace_id(index: int, latex: str) -> str:
+    return f"pwf:{index + 1}-{formula_trace_hash(latex)}"
+
+
+def legacy_formula_trace_id(latex: str) -> str:
+    return "pwf:" + formula_trace_hash(latex)
 
 
 def pair_by_key(
@@ -347,7 +355,9 @@ def build_latex_alignment(
         request_trace_indexes: dict[str, list[int]] = {}
         row_trace_indexes: dict[str, list[int]] = {}
         for index, item in enumerate(request_math):
-            request_trace_indexes.setdefault(formula_trace_id(item.get("rawLatex") or item.get("latex") or ""), []).append(index)
+            latex = item.get("rawLatex") or item.get("latex") or ""
+            request_trace_indexes.setdefault(formula_trace_id(index, latex), []).append(index)
+            request_trace_indexes.setdefault(legacy_formula_trace_id(latex), []).append(index)
         for row in generated_rows:
             trace = str(row.get("image_title") or "")
             if trace.startswith("pwf:"):

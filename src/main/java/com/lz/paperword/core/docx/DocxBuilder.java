@@ -195,6 +195,7 @@ public class DocxBuilder {
      */
     public byte[] build(PaperExportRequest request) throws IOException {
         try (XWPFDocument doc = new XWPFDocument()) {
+            mathEmbedder.resetDocumentFormulaCounter();
             compactLayoutContext = isCompactLayout(request);
             hideQuestionTypeMetadataContext = request != null
                     && request.getPaper() != null

@@ -177,7 +177,7 @@ class MathTypeAlignmentRegressionTest {
         Matcher titleMatcher = Pattern.compile("<v:imagedata\\b[^>]*o:title=\"([^\"]*)\"").matcher(documentXml);
         assertTrue(titleMatcher.find(), "preview image should expose a diagnostic formula trace id");
         String title = titleMatcher.group(1);
-        assertTrue(title.matches("pwf:[0-9a-f]{16}"), "trace id should be a short hash");
+        assertTrue(title.matches("pwf:1-[0-9a-f]{16}"), "trace id should include formula ordinal plus a short hash");
         assertFalse(title.contains("\\frac"), "trace id must not leak raw LaTeX");
     }
 
@@ -190,18 +190,44 @@ class MathTypeAlignmentRegressionTest {
         assertNotNull(documentXml);
         Matcher titleMatcher = Pattern.compile("<v:imagedata\\b[^>]*o:title=\"([^\"]*)\"").matcher(documentXml);
         assertTrue(titleMatcher.find(), "preview image should expose a diagnostic formula trace id");
-        assertEquals("pwf:cb23f6635a581786", titleMatcher.group(1),
+        assertEquals("pwf:1-cb23f6635a581786", titleMatcher.group(1),
             "trace hash must match the Python request-to-DOCX whitespace normalization contract");
     }
 
     @Test
     void shouldUseSameTraceHashWhenEmbedderReceivesNbspDirectly()
         throws ReflectiveOperationException {
-        Method method = MathTypeEmbedder.class.getDeclaredMethod("formulaTraceId", String.class);
+        Method method = MathTypeEmbedder.class.getDeclaredMethod("formulaTraceId", int.class, String.class);
         method.setAccessible(true);
 
-        assertEquals("pwf:cb23f6635a581786", invokeFormulaTraceId(method,
+        assertEquals("pwf:7-cb23f6635a581786", invokeFormulaTraceId(method, 7,
             "\\pwmetrics{1,2,3,4}\t\\pwstyle{trace}\n a\u00a0 +\t b "));
+    }
+
+    @Test
+    void shouldDisambiguateDuplicateFormulaTraceIdsByDocumentOrdinal() throws IOException {
+        List<String> titles = extractPreviewTitles(buildDocxWithContent("甲：$ABCD$<br/>乙：$ABCD$"));
+
+        assertEquals(2, titles.size(), "both duplicate formulas should have preview titles");
+        assertTrue(titles.get(0).matches("pwf:1-[0-9a-f]{16}"));
+        assertTrue(titles.get(1).matches("pwf:2-[0-9a-f]{16}"));
+        assertEquals(titles.get(0).substring(titles.get(0).indexOf('-') + 1),
+            titles.get(1).substring(titles.get(1).indexOf('-') + 1),
+            "duplicate formulas should share the content hash part");
+        assertNotEquals(titles.get(0), titles.get(1),
+            "duplicate formulas must remain unique through the document ordinal");
+    }
+
+    @Test
+    void shouldResetTraceOrdinalsForEachBuildOnReusedBuilder() throws IOException {
+        List<String> firstTitles = extractPreviewTitles(buildDocxWithContent("甲：$ABCD$"));
+        List<String> secondTitles = extractPreviewTitles(buildDocxWithContent("乙：$ABCD$"));
+
+        assertEquals(1, firstTitles.size());
+        assertEquals(1, secondTitles.size());
+        assertTrue(firstTitles.get(0).startsWith("pwf:1-"));
+        assertEquals(firstTitles.get(0), secondTitles.get(0),
+            "a reused DocxBuilder should reset formula trace ordinals for each document");
     }
 
     @Test
@@ -247,9 +273,9 @@ class MathTypeAlignmentRegressionTest {
         assertTrue(generated.styleWidthPt <= 500.5d, "long inline formula preview width should fit the page");
     }
 
-    private String invokeFormulaTraceId(Method method, String latex)
+    private String invokeFormulaTraceId(Method method, int formulaIndex, String latex)
         throws InvocationTargetException, IllegalAccessException {
-        return (String) method.invoke(new MathTypeEmbedder(), latex);
+        return (String) method.invoke(new MathTypeEmbedder(), formulaIndex, latex);
     }
 
     private byte[] buildDocxWithFormula(String latex) throws IOException {
@@ -339,6 +365,17 @@ class MathTypeAlignmentRegressionTest {
         Matcher objectMatcher = Pattern.compile("<o:OLEObject\\b[^>]*r:id=\"([^\"]+)\"").matcher(documentXml);
         assertTrue(objectMatcher.find(), "should contain OLE object relationship");
         return objectMatcher.group(1);
+    }
+
+    private List<String> extractPreviewTitles(byte[] docxBytes) throws IOException {
+        String documentXml = unzipTextEntries(docxBytes).get("word/document.xml");
+        assertNotNull(documentXml);
+        Matcher matcher = Pattern.compile("<v:imagedata\\b[^>]*o:title=\"([^\"]*)\"").matcher(documentXml);
+        java.util.ArrayList<String> titles = new java.util.ArrayList<>();
+        while (matcher.find()) {
+            titles.add(matcher.group(1));
+        }
+        return titles;
     }
 
     private Map<String, String> unzipTextEntries(byte[] docxBytes) throws IOException {

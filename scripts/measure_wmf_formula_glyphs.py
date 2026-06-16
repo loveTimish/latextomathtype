@@ -709,13 +709,21 @@ TRACE_EDGE_SPACE_RE = re.compile(r"^" + TRACE_ASCII_WS + r"+|" + TRACE_ASCII_WS 
 TRACE_SPACE_RE = re.compile(TRACE_ASCII_WS + "+")
 
 
-def formula_trace_id(latex: str) -> str:
+def formula_trace_hash(latex: str) -> str:
     value = (latex or "").replace("\u00a0", " ")
     value = TRACE_METRICS_RE.sub("", value)
     value = TRACE_STYLE_RE.sub("", value)
     value = TRACE_EDGE_SPACE_RE.sub("", value)
     value = TRACE_SPACE_RE.sub(" ", value)
-    return "pwf:" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def formula_trace_id(index: int, latex: str) -> str:
+    return f"pwf:{index + 1}-{formula_trace_hash(latex)}"
+
+
+def legacy_formula_trace_id(latex: str) -> str:
+    return "pwf:" + formula_trace_hash(latex)
 
 
 def math_bodies(text: str) -> list[str]:
@@ -761,14 +769,15 @@ def extract_request_formulas(request_path: Path | None) -> list[dict[str, Any]]:
         return []
     request = json.loads(request_path.read_text(encoding="utf-8"))
     formulas = []
-    for raw in request_math_sequence(request):
+    for index, raw in enumerate(request_math_sequence(request)):
         stripped = strip_formula_prefixes(raw)
         formulas.append(
             {
                 "formula": stripped,
                 "rawFormula": raw,
                 "formulaKey": normalize_latex_key(stripped),
-                "traceId": formula_trace_id(raw),
+                "traceId": formula_trace_id(index, raw),
+                "legacyTraceId": legacy_formula_trace_id(raw),
             }
         )
     return formulas
@@ -780,6 +789,9 @@ def unique_request_formula_by_trace(request_formulas: list[dict[str, Any]]) -> d
         trace = formula.get("traceId")
         if trace:
             by_trace.setdefault(str(trace), []).append(formula)
+        legacy_trace = formula.get("legacyTraceId")
+        if legacy_trace:
+            by_trace.setdefault(str(legacy_trace), []).append(formula)
     return {
         trace: formulas[0]
         for trace, formulas in by_trace.items()
@@ -848,10 +860,10 @@ def inspect_docx(args: argparse.Namespace) -> dict[str, Any]:
                     request_formula = request_formula_by_trace[image_title]
                     formula_match_method = "trace_unique"
                 elif generated_trace_counts.get(image_title, 0) > 1:
-                    request_formula = {}
+                    request_formula = request_formulas[box.index] if box.index < len(request_formulas) else {}
                     formula_match_method = "trace_duplicate"
                 else:
-                    request_formula = {}
+                    request_formula = request_formulas[box.index] if box.index < len(request_formulas) else {}
                     formula_match_method = "trace_unmatched"
             else:
                 request_formula = request_formulas[box.index] if box.index < len(request_formulas) else {}

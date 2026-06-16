@@ -51,6 +51,7 @@ public class LayoutDocxBuilder {
 
     public byte[] build(LayoutDocumentRequest request) throws IOException {
         try (XWPFDocument doc = new XWPFDocument()) {
+            mathEmbedder.resetDocumentFormulaCounter();
             setPageMargins(doc, request.getDocument());
             List<LayoutDocumentRequest.Page> pages = request.getPages() == null
                 ? List.of()

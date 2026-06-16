@@ -1940,3 +1940,31 @@ batch, then append any useful lesson or pitfall found in that round.
   `target/reference-roundtrip/trace-candidate.docx` with a matching temporary
   request: `scripts/measure_wmf_formula_glyphs.py` reported
   `match=trace_unique trace=pwf:ec640c8e884a30bf` for the first object.
+- Content-only trace ids are not enough for real test-set alignment. A doc 61
+  trace run had `520/520` preview titles but only `271/520` unique generated
+  trace matches because repeated formulas shared the same `pwf:<hash>`. New
+  generated DOCX previews use `pwf:<documentOrdinal>-<sha256-prefix>`, keeping
+  the normalized content hash non-leaking while making duplicate formulas
+  uniquely traceable.
+- The trace ordinal must be document-scoped, not merely a long-lived
+  `MathTypeEmbedder` instance counter. `PaperExportService` and several tests
+  reuse `DocxBuilder` instances, so `DocxBuilder.build(...)` and
+  `LayoutDocxBuilder.build(...)` must reset the embedder's document formula
+  counter before writing a new DOCX. Regression tests should cover duplicate
+  formulas in one document and repeated builds through the same builder.
+- Python trace helpers must index both the new `pwf:<ordinal>-<hash>` format
+  and legacy `pwf:<hash>` titles. Legacy duplicates remain diagnostic only:
+  `scripts/measure_wmf_formula_glyphs.py` labels them `trace_duplicate` /
+  `trace_unmatched` but falls back to request ordinal for formula text context
+  instead of treating the labels as authoritative matches.
+- After ordinal trace ids, regenerated doc 61 at
+  `J:\latextomathtype\analysis\trace-runs\20260616-doc61-ordinal-trace\docx\xsc测试集完整重建_61.docx`
+  has `520` MathType OLE objects, `520` WMF previews, `0` LaTeX leaks, and
+  `520/520` unique ordinal trace titles. Cached full-doc ink comparison now
+  reports `generated_trace_count=520`, `generated_trace_match_count=520`,
+  `usable_latex_pair_count=513`, `aligned_paired_count=499`, and
+  `alignment_suspicious_count=14`; width/height deltas are not solved yet
+  (`aligned_ink_width_abs_delta_pt avg=1.072pt`,
+  `aligned_ink_height_abs_delta_pt avg=0.829pt`), so the next renderer work
+  should target the remaining height-heavy and long-formula families rather
+  than more alignment plumbing.

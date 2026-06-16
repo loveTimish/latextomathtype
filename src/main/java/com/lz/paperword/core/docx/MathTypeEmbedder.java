@@ -48,6 +48,10 @@ public class MathTypeEmbedder {
     /**
      * 将 MathType 公式嵌入 Word 段落的指定 run 中。
      */
+    public void resetDocumentFormulaCounter() {
+        oleCounter.set(1);
+    }
+
     public void embedEquation(XWPFParagraph paragraph, XWPFRun run, LaTeXNode latexAst, String rawLatex) {
         embedEquation(paragraph, run, latexAst, rawLatex, 1.0d);
     }
@@ -155,7 +159,7 @@ public class MathTypeEmbedder {
                 : resolveRunPositionHalfPoints(rawLatex, targetShapeHeightPt);
 
             String objectId = "_" + Integer.toUnsignedString((shapeId + ":" + oleRelId).hashCode());
-            String formulaTraceId = formulaTraceId(rawLatex);
+            String formulaTraceId = formulaTraceId(shapeIdx, rawLatex);
 
             // 参考文档 OLE run rPr 仅含 w:position，不含 w:rFonts。
             // w:position 负值 = 下移（半磅），用于补偿公式基线与文本基线的偏差。
@@ -216,12 +220,13 @@ public class MathTypeEmbedder {
         }
     }
 
-    private String formulaTraceId(String rawLatex) {
+    private String formulaTraceId(int formulaIndex, String rawLatex) {
         String normalized = normalizeTraceLatex(rawLatex);
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] bytes = digest.digest(normalized.getBytes(StandardCharsets.UTF_8));
             StringBuilder out = new StringBuilder("pwf:");
+            out.append(formulaIndex).append("-");
             for (int i = 0; i < 8 && i < bytes.length; i++) {
                 out.append(String.format("%02x", bytes[i] & 0xFF));
             }
