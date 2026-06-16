@@ -33,10 +33,17 @@ class VectorWmfFormulaRendererTest {
 
         assertTrue(VectorWmfFormulaRenderer.isShortLinearEquation("AE=EF=FB"));
         assertTrue(VectorWmfFormulaRenderer.isShortLinearEquation("12\\times 2=24"));
+        assertEquals(1.08d, VectorWmfFormulaRenderer.shortLinearEquationWidthScale("AE=EF=FB"));
+        assertEquals(1.08d, VectorWmfFormulaRenderer.shortLinearEquationWidthScale("12\\times 2=24"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.shortLinearEquationWidthScale("AE=EF=FB", 12.75d));
         assertFalse(VectorWmfFormulaRenderer.isShortLinearEquation("ABC"));
         assertFalse(VectorWmfFormulaRenderer.isShortLinearEquation("A+B+C"));
         assertFalse(VectorWmfFormulaRenderer.isShortLinearEquation("12+34"));
         assertFalse(VectorWmfFormulaRenderer.isShortLinearEquation("AB-CD"));
+        assertFalse(VectorWmfFormulaRenderer.isShortLinearEquation("S=25+35"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.shortLinearEquationWidthScale("ABC"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.shortLinearEquationWidthScale("A+B+C"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.shortLinearEquationWidthScale("S=25+35"));
         int equationFontHeight = textFontHeightTwips(equation, "AE=EF=FB");
         int productFontHeight = textFontHeightTwips(product, "12");
         assertTrue(equationFontHeight > 195,

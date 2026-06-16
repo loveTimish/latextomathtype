@@ -2009,3 +2009,11 @@ batch, then append any useful lesson or pitfall found in that round.
   decodes arguments incorrectly. A failed compare after `RUN mvn-*` can still
   leave a valid generated DOCX; verify with the bundled Codex Python and the
   known source path before discarding the run.
+- Short-linear width compensation must be scoped by rendered box height, not
+  only by LaTeX text. A broad `1.08` width scale for every short linear
+  equation improved target 12pt samples such as `AE=EF=FB` and `BE=DF=1`, but
+  widened many already-close 12.75pt formulas and made doc 61 full comparison
+  worse (`aligned_ink_width_abs_delta_pt avg 1.066pt -> 1.076pt`). Gating the
+  same width compensation to `heightPt <= 12.1` preserved the target sample
+  gains and improved the doc 61 aligned width average to `1.043pt`; keep future
+  local calibrations tied to the physical box family that actually needs them.

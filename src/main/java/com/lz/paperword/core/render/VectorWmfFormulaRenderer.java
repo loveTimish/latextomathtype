@@ -50,6 +50,7 @@ final class VectorWmfFormulaRenderer {
     private static final double SHORT_GEOMETRY_LABEL_WIDTH_SCALE = 0.90d;
     private static final double SIMPLE_LINEAR_FONT_Y_SCALE = 0.92d;
     private static final double SHORT_LINEAR_EQUATION_FONT_Y_SCALE = 1.076d;
+    private static final double SHORT_LINEAR_EQUATION_WIDTH_SCALE = 1.08d;
     private static final double SCRIPT_FONT_HEIGHT_SCALE = 0.90d;
     private static final double SCRIPT_GLYPH_WIDTH_SCALE = 0.84d;
     private static final double STANDALONE_TWO_DIGIT_WIDTH_SCALE = 0.79d;
@@ -133,6 +134,7 @@ final class VectorWmfFormulaRenderer {
         double standaloneGeometryWidthScale = standaloneGeometryWidthScale(latex);
         double shortScriptEquationWidthScale = shortScriptEquationWidthScale(latex);
         double shortExactEquationWidthScale = shortExactEquationWidthScale(latex);
+        double shortLinearEquationWidthScale = shortLinearEquationWidthScale(latex, heightPt);
         double fontYScale = fontYScale(latex);
         double relationFontYScale = scriptRelationFontYScale(latex);
         double relationHeightWidthCompensation = scriptRelationHeightWidthCompensation(latex);
@@ -203,7 +205,7 @@ final class VectorWmfFormulaRenderer {
                 byte[] bytes = segment.bytes();
                 double runWidthScale = run.widthScale() * standaloneDigitWidthScale * standaloneSingleLetterWidthScale
                     * standaloneGeometryWidthScale * shortScriptEquationWidthScale * shortExactEquationWidthScale
-                    * relationHeightWidthCompensation;
+                    * shortLinearEquationWidthScale * relationHeightWidthCompensation;
                 int[] dx = characterDxTwips(segment, run.script(), run.display(), previewScale.x(), shortScriptWidthScale,
                     runWidthScale);
                 builder.record(0x0A32, out -> writeExtTextOut(out, runX, runBaseline, bytes, dx));
@@ -615,11 +617,24 @@ final class VectorWmfFormulaRenderer {
             return false;
         }
         String text = normalizeFlatLatex(normalizeTextCommands(raw)).replaceAll("\\s+", "");
+        if (text.matches("[A-Za-z]=\\d+(?:[+\\-]\\d+)+")) {
+            return false;
+        }
+        boolean hasMultiplicativeOperator = text.contains("×") || text.contains("÷") || text.contains("\\times")
+            || text.contains("\\div") || text.contains("\\cdot") || text.contains("\\spot");
         return text.length() >= 5 && text.length() <= 16
-            && (text.contains("=") || text.contains("×") || text.contains("÷") || text.contains("\\times")
-                || text.contains("\\div") || text.contains("\\cdot") || text.contains("\\spot"))
+            && (text.matches(".*[A-Za-z].*") || hasMultiplicativeOperator)
+            && (text.contains("=") || hasMultiplicativeOperator)
             && text.matches("[A-Za-z0-9]+(?:[=×÷+\\-]|\\\\times|\\\\div|\\\\cdot|\\\\spot)[A-Za-z0-9=×÷+\\-]+")
             && topLevelRelationOperatorCount(text) >= 1;
+    }
+
+    static double shortLinearEquationWidthScale(String latex) {
+        return shortLinearEquationWidthScale(latex, 12.0d);
+    }
+
+    static double shortLinearEquationWidthScale(String latex, double heightPt) {
+        return heightPt <= 12.1d && isShortLinearEquation(latex) ? SHORT_LINEAR_EQUATION_WIDTH_SCALE : 1.0d;
     }
 
     static boolean hasClosingFenceSuperscript(String latex) {
