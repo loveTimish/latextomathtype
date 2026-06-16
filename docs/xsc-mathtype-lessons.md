@@ -1924,3 +1924,19 @@ batch, then append any useful lesson or pitfall found in that round.
 - A small generated trace candidate proved the Java/Python metadata path:
   `target/reference-roundtrip/trace-candidate.docx` extracted one object with
   `image_title=pwf:ec640c8e884a30bf`.
+- `scripts/measure_wmf_formula_glyphs.py` must not independently scrape every
+  JSON string with a loose `$...$` regex. For generated DOCX files that carry
+  `pwf:` preview titles, it now trusts only trace ids that are unique in both
+  the generated DOCX rows and the request formulas. Duplicate or unmatched trace
+  rows are labeled `trace_duplicate` / `trace_unmatched` instead of silently
+  falling back to ordinal formula labels. Without trace titles it falls back to
+  request order only as diagnostic context and labels rows with
+  `formulaMatchMethod=ordinal_fallback`.
+  Reports keep `formula` as the stripped display body for compatibility, and
+  add `rawFormula`, `formulaKey`, `formulaTraceId`, and `formulaMatchMethod`.
+  Standard generated request JSON may not preserve `_mathOrder`, because
+  `make_full_batch10_requests.py` strips internal request fields before writing.
+- Trace-backed glyph labeling was verified on
+  `target/reference-roundtrip/trace-candidate.docx` with a matching temporary
+  request: `scripts/measure_wmf_formula_glyphs.py` reported
+  `match=trace_unique trace=pwf:ec640c8e884a30bf` for the first object.

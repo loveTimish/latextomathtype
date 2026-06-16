@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import re
 import shutil
@@ -32,6 +33,12 @@ if str(REBUILD_DIR) not in sys.path:
     sys.path.insert(0, str(REBUILD_DIR))
 
 from extract_formula_boxes import extract_boxes  # noqa: E402
+
+SCRIPTS_DIR = ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from compare_docx_pair_metrics import normalize_latex_key  # noqa: E402
 
 try:
     from PIL import Image
@@ -694,47 +701,105 @@ def measure_ink(
     return measure_png_ink(png, box_width_pt, box_height_pt, white_threshold, alpha_threshold)
 
 
-def iter_json_strings(value: Any) -> list[str]:
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, list):
-        out: list[str] = []
-        for item in value:
-            out.extend(iter_json_strings(item))
-        return out
-    if isinstance(value, dict):
-        out: list[str] = []
-        for key, item in value.items():
-            if key in {"content", "stem", "answer", "analysis", "explanation"} or isinstance(item, (dict, list)):
-                out.extend(iter_json_strings(item))
-        return out
-    return []
+TRACE_PREFIX_RE = re.compile(r"^\\pw(?:metrics|style)\{[^}]*}\s*")
+TRACE_ASCII_WS = r"[ \t\n\x0b\f\r]"
+TRACE_METRICS_RE = re.compile(r"^\\pwmetrics\{[^}]+}" + TRACE_ASCII_WS + "*")
+TRACE_STYLE_RE = re.compile(r"^\\pwstyle\{[^}]*}" + TRACE_ASCII_WS + "*")
+TRACE_EDGE_SPACE_RE = re.compile(r"^" + TRACE_ASCII_WS + r"+|" + TRACE_ASCII_WS + r"+$")
+TRACE_SPACE_RE = re.compile(TRACE_ASCII_WS + "+")
+
+
+def formula_trace_id(latex: str) -> str:
+    value = (latex or "").replace("\u00a0", " ")
+    value = TRACE_METRICS_RE.sub("", value)
+    value = TRACE_STYLE_RE.sub("", value)
+    value = TRACE_EDGE_SPACE_RE.sub("", value)
+    value = TRACE_SPACE_RE.sub(" ", value)
+    return "pwf:" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
+def math_bodies(text: str) -> list[str]:
+    return [
+        (match.group(1) or match.group(2) or "").strip()
+        for match in re.finditer(r"\$\$(.+?)\$\$|\$(.+?)\$", text, re.S)
+    ]
 
 
 def strip_formula_prefixes(latex: str) -> str:
-    previous = None
     value = latex.strip()
-    while previous != value:
+    previous = None
+    while value != previous:
         previous = value
-        value = re.sub(r"^\\pwmetrics\{[^{}]*}\s*", "", value)
-        value = re.sub(r"^\\pwstyle\{[^{}]*}\s*", "", value)
-    return value.strip()
+        value = TRACE_PREFIX_RE.sub("", value).strip()
+    return value
 
 
-def extract_request_formulas(request_path: Path | None) -> list[str]:
+def request_math_sequence(request: dict[str, Any]) -> list[str]:
+    fields = ("content", "analyze", "solution", "correct", "difficulty", "knowledgePoint")
+    sequence: list[str] = []
+    for section in request.get("sections", []):
+        for question in section.get("questions", []):
+            ordered_fields = question.get("_mathOrder")
+            if ordered_fields is not None:
+                ordered_values = {str(item or "") for item in ordered_fields}
+                for item in ordered_fields:
+                    sequence.extend(math_bodies(str(item or "")))
+                for field in fields:
+                    if field == "content" or str(question.get(field) or "") in ordered_values:
+                        continue
+                    sequence.extend(math_bodies(str(question.get(field) or "")))
+            else:
+                for field in fields:
+                    sequence.extend(math_bodies(str(question.get(field) or "")))
+            for tag in question.get("tags") or []:
+                sequence.extend(math_bodies(str(tag)))
+    return sequence
+
+
+def extract_request_formulas(request_path: Path | None) -> list[dict[str, Any]]:
     if not request_path:
         return []
-    payload = json.loads(request_path.read_text(encoding="utf-8"))
-    formulas: list[str] = []
-    for text in iter_json_strings(payload):
-        for match in re.finditer(r"\$(.+?)\$", text, flags=re.S):
-            formulas.append(strip_formula_prefixes(match.group(1)))
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    formulas = []
+    for raw in request_math_sequence(request):
+        stripped = strip_formula_prefixes(raw)
+        formulas.append(
+            {
+                "formula": stripped,
+                "rawFormula": raw,
+                "formulaKey": normalize_latex_key(stripped),
+                "traceId": formula_trace_id(raw),
+            }
+        )
     return formulas
+
+
+def unique_request_formula_by_trace(request_formulas: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    by_trace: dict[str, list[dict[str, Any]]] = {}
+    for formula in request_formulas:
+        trace = formula.get("traceId")
+        if trace:
+            by_trace.setdefault(str(trace), []).append(formula)
+    return {
+        trace: formulas[0]
+        for trace, formulas in by_trace.items()
+        if len(formulas) == 1
+    }
+
+
+def docx_trace_counts(boxes: list[Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for box in boxes:
+        trace = str(getattr(box, "image_title", "") or "")
+        if trace.startswith("pwf:"):
+            counts[trace] = counts.get(trace, 0) + 1
+    return counts
 
 
 def inspect_docx(args: argparse.Namespace) -> dict[str, Any]:
     indexes = parse_index_list(args.indices)
-    formulas = extract_request_formulas(args.request)
+    request_formulas = extract_request_formulas(args.request)
+    request_formula_by_trace = unique_request_formula_by_trace(request_formulas)
     magick: Path | None = None
     if args.with_ink:
         if args.magick.exists():
@@ -747,6 +812,7 @@ def inspect_docx(args: argparse.Namespace) -> dict[str, Any]:
         boxes = [box for box in boxes if box.index + 1 in indexes]
     if args.max_items is not None:
         boxes = boxes[: args.max_items]
+    generated_trace_counts = docx_trace_counts(boxes)
 
     formulas_out: list[dict[str, Any]] = []
     char_rows: list[dict[str, Any]] = []
@@ -776,11 +842,28 @@ def inspect_docx(args: argparse.Namespace) -> dict[str, Any]:
                 if args.with_ink
                 else None
             )
-            formula = formulas[box.index] if box.index < len(formulas) else None
+            image_title = str(box.image_title or "")
+            if image_title.startswith("pwf:"):
+                if generated_trace_counts.get(image_title) == 1 and image_title in request_formula_by_trace:
+                    request_formula = request_formula_by_trace[image_title]
+                    formula_match_method = "trace_unique"
+                elif generated_trace_counts.get(image_title, 0) > 1:
+                    request_formula = {}
+                    formula_match_method = "trace_duplicate"
+                else:
+                    request_formula = {}
+                    formula_match_method = "trace_unmatched"
+            else:
+                request_formula = request_formulas[box.index] if box.index < len(request_formulas) else {}
+                formula_match_method = "ordinal_fallback" if request_formula else "absent"
             outer = {
                 "objectIndex": box.index + 1,
                 "zeroBasedIndex": box.index,
-                "formula": formula,
+                "formula": request_formula.get("formula"),
+                "rawFormula": request_formula.get("rawFormula"),
+                "formulaKey": request_formula.get("formulaKey"),
+                "formulaTraceId": image_title if image_title.startswith("pwf:") else request_formula.get("traceId"),
+                "formulaMatchMethod": formula_match_method,
                 "context": box.context,
                 "imageTarget": box.image_target,
                 "oleTarget": box.ole_target,
@@ -904,7 +987,7 @@ def render_text(report: dict[str, Any], limit: int) -> str:
             else:
                 ink_bits = f" magickInk={ink.get('magickInkWidthPt')}x{ink.get('magickInkHeightPt')}pt"
         lines.append(
-            "#{idx} shape={sw}x{sh}pt wmf={ww}x{wh}pt recordWidth={rw}pt units={ux}/{uy} runs={runs}{ink} text={text}".format(
+            "#{idx} shape={sw}x{sh}pt wmf={ww}x{wh}pt recordWidth={rw}pt units={ux}/{uy} runs={runs} match={match} trace={trace}{ink} text={text}".format(
                 idx=item["objectIndex"],
                 sw=item["shapeWidthPt"],
                 sh=item["shapeHeightPt"],
@@ -914,6 +997,8 @@ def render_text(report: dict[str, Any], limit: int) -> str:
                 ux=item.get("wmfXUnitsPerPt"),
                 uy=item.get("wmfYUnitsPerPt"),
                 runs=summary.get("runCount"),
+                match=item.get("formulaMatchMethod"),
+                trace=item.get("formulaTraceId"),
                 ink=ink_bits,
                 text=(item.get("formula") or item.get("context") or "")[:120],
             )
