@@ -12,6 +12,8 @@ import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -166,6 +168,43 @@ class MathTypeAlignmentRegressionTest {
     }
 
     @Test
+    void shouldWriteHashedFormulaTraceWithoutLeakingLatex() throws IOException {
+        byte[] docx = buildDocxWithFormula("\\frac{1}{2}");
+        Map<String, String> entries = unzipTextEntries(docx);
+        String documentXml = entries.get("word/document.xml");
+
+        assertNotNull(documentXml);
+        Matcher titleMatcher = Pattern.compile("<v:imagedata\\b[^>]*o:title=\"([^\"]*)\"").matcher(documentXml);
+        assertTrue(titleMatcher.find(), "preview image should expose a diagnostic formula trace id");
+        String title = titleMatcher.group(1);
+        assertTrue(title.matches("pwf:[0-9a-f]{16}"), "trace id should be a short hash");
+        assertFalse(title.contains("\\frac"), "trace id must not leak raw LaTeX");
+    }
+
+    @Test
+    void shouldUseStableAsciiWhitespaceTraceHash() throws IOException {
+        byte[] docx = buildDocxWithFormula("\\pwmetrics{1,2,3,4}\t\\pwstyle{trace}\n a\u00a0 +\t b ");
+        Map<String, String> entries = unzipTextEntries(docx);
+        String documentXml = entries.get("word/document.xml");
+
+        assertNotNull(documentXml);
+        Matcher titleMatcher = Pattern.compile("<v:imagedata\\b[^>]*o:title=\"([^\"]*)\"").matcher(documentXml);
+        assertTrue(titleMatcher.find(), "preview image should expose a diagnostic formula trace id");
+        assertEquals("pwf:cb23f6635a581786", titleMatcher.group(1),
+            "trace hash must match the Python request-to-DOCX whitespace normalization contract");
+    }
+
+    @Test
+    void shouldUseSameTraceHashWhenEmbedderReceivesNbspDirectly()
+        throws ReflectiveOperationException {
+        Method method = MathTypeEmbedder.class.getDeclaredMethod("formulaTraceId", String.class);
+        method.setAccessible(true);
+
+        assertEquals("pwf:cb23f6635a581786", invokeFormulaTraceId(method,
+            "\\pwmetrics{1,2,3,4}\t\\pwstyle{trace}\n a\u00a0 +\t b "));
+    }
+
+    @Test
     void shouldKeepMultipleVerticalTemplatesAsOleObjects() throws IOException {
         byte[] docx = buildDocxWithContent(
             "整数加法：<br/>$$\\begin{array}{rrrr} & 1 & 2 & 3 \\\\ + & 4 & 5 & 6 \\\\ \\hline & 5 & 7 & 9\\end{array}$$"
@@ -206,6 +245,11 @@ class MathTypeAlignmentRegressionTest {
             "长题干：$\\frac{1}{1\\times3}+\\frac{2}{3\\times5}+\\frac{2^2}{5\\times7}+\\cdots+\\frac{2^8}{17\\times19}-\\left(\\frac{2^3}{1\\times3\\times5}+\\frac{2^4}{3\\times5\\times7}+\\cdots+\\frac{2^{11}}{17\\times19\\times21}\\right)$"
         ));
         assertTrue(generated.styleWidthPt <= 500.5d, "long inline formula preview width should fit the page");
+    }
+
+    private String invokeFormulaTraceId(Method method, String latex)
+        throws InvocationTargetException, IllegalAccessException {
+        return (String) method.invoke(new MathTypeEmbedder(), latex);
     }
 
     private byte[] buildDocxWithFormula(String latex) throws IOException {

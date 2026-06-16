@@ -10,6 +10,7 @@ size in Word points after scaling into the object box.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -280,6 +281,22 @@ def read_source_report_records(report_path: Path) -> list[dict[str, Any]]:
     return records
 
 
+TRACE_ASCII_WS = r"[ \t\n\x0b\f\r]"
+TRACE_METRICS_RE = re.compile(r"^\\pwmetrics\{[^}]+}" + TRACE_ASCII_WS + "*")
+TRACE_STYLE_RE = re.compile(r"^\\pwstyle\{[^}]*}" + TRACE_ASCII_WS + "*")
+TRACE_EDGE_SPACE_RE = re.compile(r"^" + TRACE_ASCII_WS + r"+|" + TRACE_ASCII_WS + r"+$")
+TRACE_SPACE_RE = re.compile(TRACE_ASCII_WS + "+")
+
+
+def formula_trace_id(latex: str) -> str:
+    value = (latex or "").replace("\u00a0", " ")
+    value = TRACE_METRICS_RE.sub("", value)
+    value = TRACE_STYLE_RE.sub("", value)
+    value = TRACE_EDGE_SPACE_RE.sub("", value)
+    value = TRACE_SPACE_RE.sub(" ", value)
+    return "pwf:" + hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
+
+
 def pair_by_key(
     source_values: list[str],
     generated_values: list[str],
@@ -324,6 +341,21 @@ def build_latex_alignment(
     source_latex = [record["latex"] for record in source_records]
     request_math = parse_request_math(generated_request)
     generated_latex = [item["latex"] for item in request_math]
+    generated_trace_count = sum(1 for row in generated_rows if str(row.get("image_title") or "").startswith("pwf:"))
+    generated_position_by_trace: dict[int, int] = {}
+    if generated_trace_count:
+        request_trace_indexes: dict[str, list[int]] = {}
+        row_trace_indexes: dict[str, list[int]] = {}
+        for index, item in enumerate(request_math):
+            request_trace_indexes.setdefault(formula_trace_id(item.get("rawLatex") or item.get("latex") or ""), []).append(index)
+        for row in generated_rows:
+            trace = str(row.get("image_title") or "")
+            if trace.startswith("pwf:"):
+                row_trace_indexes.setdefault(trace, []).append(int(row["index"]))
+        for trace, request_indexes in request_trace_indexes.items():
+            row_indexes = row_trace_indexes.get(trace) or []
+            if len(request_indexes) == 1 and len(row_indexes) == 1:
+                generated_position_by_trace[request_indexes[0]] = row_indexes[0]
     exact_pairs = latex_alignment(source_latex, generated_latex)
     exact_source_positions = {source_position for source_position, _ in exact_pairs}
     exact_generated_positions = {generated_position for _, generated_position in exact_pairs}
@@ -342,6 +374,7 @@ def build_latex_alignment(
     generated_indexes = {int(row["index"]) for row in generated_rows}
     usable_pairs: list[tuple[int, int]] = []
     usable_pair_methods: dict[str, str] = {}
+    usable_pair_trace_status: dict[str, str] = {}
     for source_position, generated_position in pairs:
         if source_position >= len(source_records):
             continue
@@ -349,9 +382,15 @@ def build_latex_alignment(
         if reference_index is None:
             continue
         reference_index = int(reference_index)
-        if reference_index in reference_indexes and generated_position in generated_indexes:
-            usable_pairs.append((reference_index, generated_position))
-            usable_pair_methods[f"{reference_index}:{generated_position}"] = pair_methods.get((source_position, generated_position), "unknown")
+        generated_row_index = generated_position_by_trace.get(generated_position, generated_position)
+        if reference_index in reference_indexes and generated_row_index in generated_indexes:
+            usable_pairs.append((reference_index, generated_row_index))
+            usable_pair_methods[f"{reference_index}:{generated_row_index}"] = pair_methods.get((source_position, generated_position), "unknown")
+            if generated_trace_count:
+                status = "matched" if generated_position in generated_position_by_trace else "unmatched"
+            else:
+                status = "absent"
+            usable_pair_trace_status[f"{reference_index}:{generated_row_index}"] = status
     paired_source_positions = {source_position for source_position, _ in pairs}
     paired_generated_positions = {generated_position for _, generated_position in pairs}
     known_doc_indexes = [record["docObjectIndex"] for record in source_records if record["docObjectIndex"] is not None]
@@ -365,11 +404,14 @@ def build_latex_alignment(
         "generated_latex_count": len(generated_latex),
         "reference_row_count": len(reference_rows),
         "generated_row_count": len(generated_rows),
+        "generated_trace_count": generated_trace_count,
+        "generated_trace_match_count": len(generated_position_by_trace),
         "latex_pair_count": len(pairs),
         "exact_latex_pair_count": len(exact_pairs),
         "ordinal_key_latex_pair_count": len(fallback_pairs),
         "usable_latex_pair_count": len(usable_pairs),
         "usable_pair_methods": usable_pair_methods,
+        "usable_pair_trace_status": usable_pair_trace_status,
         "unpaired_source_latex_count": len(source_latex) - len(paired_source_positions),
         "unpaired_generated_latex_count": len(generated_latex) - len(paired_generated_positions),
         "source_doc_object_index_min": min(known_doc_indexes, default=None),
@@ -441,6 +483,7 @@ def compare_rows(
         if ref is None or gen is None:
             continue
         pair_method = (alignment_info.get("usable_pair_methods") or {}).get(f"{source_index}:{generated_index}")
+        trace_status = (alignment_info.get("usable_pair_trace_status") or {}).get(f"{source_index}:{generated_index}")
         if ref.get("ink_width_pt") is None or gen.get("ink_width_pt") is None:
             paired_without_ink.append(
                 {
@@ -449,6 +492,7 @@ def compare_rows(
                     "generated_index": generated_index,
                     "generatedSourceIndex": generated_index + 1,
                     "pair_method": pair_method,
+                    "generated_trace_status": trace_status,
                     "reference_preview_error": ref.get("preview_error"),
                     "generated_preview_error": gen.get("preview_error"),
                 }
@@ -469,7 +513,7 @@ def compare_rows(
             height_scale,
             1.0 / max(height_scale, 0.001),
         )
-        alignment_suspicious = context_similarity < 0.15 or extreme_scale > 3.0
+        alignment_suspicious = context_similarity < 0.15 or extreme_scale > 3.0 or trace_status == "unmatched"
         rows.append(
             {
                 "index": source_index,
@@ -478,6 +522,7 @@ def compare_rows(
                 "generated_index": generated_index,
                 "generatedSourceIndex": generated_index + 1,
                 "pair_method": pair_method,
+                "generated_trace_status": trace_status,
                 "reference_ink_width_pt": ref["ink_width_pt"],
                 "generated_ink_width_pt": gen["ink_width_pt"],
                 "reference_ink_height_pt": ref["ink_height_pt"],
@@ -501,6 +546,7 @@ def compare_rows(
         )
     aligned_rows = [row for row in rows if not row["alignment_suspicious"]]
     pairing_warnings: list[str] = []
+    pairing_notes: list[str] = []
     if alignment_mode == "ordinal" and set(reference_by_index) != set(generated_by_index):
         pairing_warnings.append("DOCX-local indexes are only safe when object counts and order already match in strict acceptance.")
     if alignment_mode == "latex":
@@ -513,7 +559,14 @@ def compare_rows(
         if alignment_info.get("missing_doc_object_index_count"):
             pairing_warnings.append("Some source report equations lack docObjectIndex and were excluded from source row mapping.")
         if alignment_info.get("generated_latex_count") == len(generated_by_index):
-            pairing_warnings.append("Generated request order is assumed to match generated DOCX preview order; this is not an explicit renderer object map.")
+            if alignment_info.get("generated_trace_count") == len(generated_by_index):
+                if alignment_info.get("generated_trace_match_count") == alignment_info.get("generated_latex_count"):
+                    pairing_notes.append("Generated DOCX trace ids matched request formulas one-to-one.")
+                else:
+                    pairing_warnings.append("Generated DOCX carries formula trace ids, but some request formulas could not be matched uniquely by trace.")
+                    pairing_warnings.append("Rows without a unique generated trace match are marked alignment_suspicious.")
+            else:
+                pairing_warnings.append("Generated request order is assumed to match generated DOCX preview order; this is not an explicit renderer object map.")
         if alignment_info.get("generated_latex_count") != len(generated_by_index):
             pairing_warnings.append("Generated request formula count differs from generated preview row count; generated positions may shift.")
     summary = {
@@ -525,6 +578,7 @@ def compare_rows(
         "paired_without_ink_count": len(paired_without_ink),
         "paired_without_ink": paired_without_ink[:30],
         "pairing_warning": " ".join(pairing_warnings),
+        "pairing_note": " ".join(pairing_notes),
         "ink_width_abs_delta_pt": stats([row["ink_width_abs_delta_pt"] for row in rows]),
         "ink_height_abs_delta_pt": stats([row["ink_height_abs_delta_pt"] for row in rows]),
         "aligned_paired_count": len(aligned_rows),
@@ -558,6 +612,8 @@ def render_text(report: dict[str, Any]) -> str:
         f"generated_latex_count: {comparison.get('generated_latex_count')}",
         f"reference_row_count: {comparison.get('reference_row_count')}",
         f"generated_row_count: {comparison.get('generated_row_count')}",
+        f"generated_trace_count: {comparison.get('generated_trace_count')}",
+        f"generated_trace_match_count: {comparison.get('generated_trace_match_count')}",
         f"latex_pair_count: {comparison.get('latex_pair_count')}",
         f"exact_latex_pair_count: {comparison.get('exact_latex_pair_count')}",
         f"ordinal_key_latex_pair_count: {comparison.get('ordinal_key_latex_pair_count')}",
@@ -567,6 +623,7 @@ def render_text(report: dict[str, Any]) -> str:
         f"missing_doc_object_index_count: {comparison.get('missing_doc_object_index_count')}",
         f"paired_without_ink_count: {comparison.get('paired_without_ink_count')}",
         f"pairing_warning: {comparison.get('pairing_warning')}",
+        f"pairing_note: {comparison.get('pairing_note')}",
         f"aligned_paired_count: {comparison['aligned_paired_count']}",
         f"alignment_suspicious_count: {comparison['alignment_suspicious_count']}",
         "",

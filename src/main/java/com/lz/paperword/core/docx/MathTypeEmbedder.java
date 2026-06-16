@@ -14,8 +14,12 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTR;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 /**
  * MathType OLE 公式嵌入器 — 将 LaTeX 公式作为可编辑的 MathType OLE 对象嵌入 Word 文档。
@@ -32,6 +36,10 @@ public class MathTypeEmbedder {
     /** 版面安全上限：测试集公式最宽约 428pt，超出页面可用宽度才整体缩小。 */
     private static final double MAX_GENERIC_FORMULA_WIDTH_PT = 430.0d;
     private static final double MAX_DISPLAY_HEIGHT_PT = 230.0d;
+    private static final Pattern TRACE_METRICS_PATTERN = Pattern.compile("^\\\\pwmetrics\\{[^}]+}[ \\t\\n\\x0B\\f\\r]*");
+    private static final Pattern TRACE_STYLE_PATTERN = Pattern.compile("^\\\\pwstyle\\{[^}]*}[ \\t\\n\\x0B\\f\\r]*");
+    private static final Pattern TRACE_EDGE_SPACE_PATTERN = Pattern.compile("^[ \\t\\n\\x0B\\f\\r]+|[ \\t\\n\\x0B\\f\\r]+$");
+    private static final Pattern TRACE_SPACE_PATTERN = Pattern.compile("[ \\t\\n\\x0B\\f\\r]+");
     private final MtefWriter mtefWriter = new MtefWriter();
     private final OlePackager olePackager = new OlePackager();
     private final LaTeXImageRenderer imageRenderer = new LaTeXImageRenderer();
@@ -147,6 +155,7 @@ public class MathTypeEmbedder {
                 : resolveRunPositionHalfPoints(rawLatex, targetShapeHeightPt);
 
             String objectId = "_" + Integer.toUnsignedString((shapeId + ":" + oleRelId).hashCode());
+            String formulaTraceId = formulaTraceId(rawLatex);
 
             // 参考文档 OLE run rPr 仅含 w:position，不含 w:rFonts。
             // w:position 负值 = 下移（半磅），用于补偿公式基线与文本基线的偏差。
@@ -183,7 +192,7 @@ public class MathTypeEmbedder {
 
                 "<v:shape id=\"" + shapeId + "\" type=\"#_x0000_t75\" " +
                 "style=\"width:" + styleWidth + ";height:" + styleHeight + "\" o:ole=\"\">" +
-                "<v:imagedata r:id=\"" + imgRelId + "\" o:title=\"\"/>" +
+                "<v:imagedata r:id=\"" + imgRelId + "\" o:title=\"" + xmlAttr(formulaTraceId) + "\"/>" +
                 "</v:shape>" +
 
                 "<o:OLEObject Type=\"Embed\" ProgID=\"Equation.DSMT4\" " +
@@ -205,6 +214,38 @@ public class MathTypeEmbedder {
         } catch (Exception e) {
             log.error("Failed to insert OLE XML into run", e);
         }
+    }
+
+    private String formulaTraceId(String rawLatex) {
+        String normalized = normalizeTraceLatex(rawLatex);
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(normalized.getBytes(StandardCharsets.UTF_8));
+            StringBuilder out = new StringBuilder("pwf:");
+            for (int i = 0; i < 8 && i < bytes.length; i++) {
+                out.append(String.format("%02x", bytes[i] & 0xFF));
+            }
+            return out.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is not available", e);
+        }
+    }
+
+    private String normalizeTraceLatex(String rawLatex) {
+        String value = rawLatex == null ? "" : rawLatex;
+        value = value.replace('\u00A0', ' ');
+        value = TRACE_METRICS_PATTERN.matcher(value).replaceFirst("");
+        value = TRACE_STYLE_PATTERN.matcher(value).replaceFirst("");
+        value = TRACE_EDGE_SPACE_PATTERN.matcher(value).replaceAll("");
+        return TRACE_SPACE_PATTERN.matcher(value).replaceAll(" ");
+    }
+
+    private String xmlAttr(String value) {
+        return value
+            .replace("&", "&amp;")
+            .replace("\"", "&quot;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;");
     }
 
     /**

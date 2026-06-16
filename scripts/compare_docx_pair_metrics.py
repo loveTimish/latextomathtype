@@ -254,6 +254,7 @@ def parse_request_math(request_path: Path) -> list[dict]:
     out = []
     for a, b in re.findall(r"\$\$(.+?)\$\$|\$(.+?)\$", text, re.S):
         body = (a or b).strip()
+        raw_body = body
         metrics = None
         match = re.match(
             r"^\\pwmetrics\{([0-9]+(?:\.[0-9]+)?)\s*,\s*([0-9]+(?:\.[0-9]+)?)(?:\s*,\s*([0-9]+(?:\.[0-9]+)?)\s*,\s*([0-9]+(?:\.[0-9]+)?))?\}\s*",
@@ -268,7 +269,7 @@ def parse_request_math(request_path: Path) -> list[dict]:
             }
             body = body[match.end():].strip()
         body = re.sub(r"^\\pwstyle\{[^}]*}\s*", "", body).strip()
-        out.append({"latex": normalize_latex_key(body), "metrics": metrics})
+        out.append({"latex": normalize_latex_key(body), "rawLatex": raw_body, "metrics": metrics})
     return out
 
 

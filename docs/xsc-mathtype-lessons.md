@@ -1893,3 +1893,34 @@ batch, then append any useful lesson or pitfall found in that round.
   `1.084pt`, height avg is `0.863pt`, and `alignment_suspicious_count=14`.
   The report still warns that generated request order is assumed to match DOCX
   preview order because there is no explicit renderer object map yet.
+- Generated DOCX previews now carry a non-leaking formula trace id on
+  `<v:imagedata o:title="pwf:<sha256-prefix>">`. This gives future
+  source/request/generated alignment an explicit renderer object map without
+  writing raw LaTeX into the Word XML or WMF preview.
+- The Java and Python trace hash inputs must stay byte-for-byte compatible:
+  mirror the request-to-DOCX path, strip only leading `\pwmetrics{...}` and
+  `\pwstyle{...}`, normalize NBSP to ordinary space, then trim/collapse only
+  ASCII whitespace `[ \t\n\v\f\r]`. Do not hash `normalize_latex_key(...)`,
+  because canonical LaTeX keys intentionally rewrite style wrappers and would
+  diverge from the DOCX metadata written by `MathTypeEmbedder`.
+- A contract fixture for trace ids is now locked in Java:
+  `\pwmetrics{1,2,3,4}\t\pwstyle{trace}\n a\u00a0 +\t b ` must normalize to
+  `a + b` through the actual DOCX builder path and hash to
+  `pwf:cb23f6635a581786`. Keep the Python helper in
+  `rebuild/compare_formula_preview_ink.py` matching that exact request-to-DOCX
+  whitespace protocol.
+- `scripts/compare_docx_pair_metrics.py` now preserves request `rawLatex`, and
+  `rebuild/extract_formula_boxes.py` exposes `image_title`, so
+  `rebuild/compare_formula_preview_ink.py` can match generated preview rows by
+  trace id when the generated DOCX was produced by this newer build.
+- Trace matching is intentionally strict: only a trace id that is unique in the
+  request and unique in the generated DOCX row set is trusted. Duplicate or
+  otherwise unmatched trace rows are marked `generated_trace_status=unmatched`
+  and `alignment_suspicious` instead of silently falling back to an authoritative
+  visual metric.
+- Old v134 doc 61 cached rows have `generated_trace_count=0` because they were
+  generated before preview trace ids existed. Regenerate and remeasure the DOCX
+  before using trace ids as alignment evidence on the full test set.
+- A small generated trace candidate proved the Java/Python metadata path:
+  `target/reference-roundtrip/trace-candidate.docx` extracted one object with
+  `image_title=pwf:ec640c8e884a30bf`.
