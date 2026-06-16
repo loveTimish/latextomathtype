@@ -1647,3 +1647,49 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v130-exact-s1-equation-width\pair-metrics-target\4-3-4 蝴蝶模型_summary.json`
 - v130 glyph diff:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v130-exact-s1-equation-width\wmf-glyph-diff-v129-v130-worst-first30.json`
+- v131 continues the repeated parenthesized-power equation tuning after v130.
+  Lowering `EQUATION_PAREN_POWER_WIDTH_SCALE` from `0.910` to `0.908` reduced
+  doc 61 sourceIndex `18`
+  `S=\left(a+b\right)^{2}=\left(1+2\right)^{2}=9` Word/page ink width residual
+  from v130 `+0.198pt` to v131 `+0.148pt`; height stayed `-0.111pt`.
+  The scope is still `repeatedEquationParenPower(...)`, so single equations
+  such as `S=\left(a+b\right)^2=9` and standalone `\left(a+b\right)^2` stay
+  out of this local compression path.
+- v131 on doc 61 first-30 visible ink versus v130: width average improved from
+  `0.087pt` to `0.085pt`, p90 improved from `0.170pt` to `0.164pt`, and max
+  improved from `0.198pt` to `0.189pt`. Height average, p90, and max stayed
+  `0.075pt`, `0.112pt`, and `0.127pt`. After this, the worst width residual
+  moved to sourceIndex `3` standalone `S` at `+0.189pt`.
+- v131 structural gates on doc 61 still passed: `520` valid MathType OLE,
+  `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE, zero bitmap WMF,
+  zero WMF LaTeX leaks, and zero review-required suspicious WMF text.
+- v131 target physical metrics on doc 61 still passed when aligned with
+  `full-61.request.json`: target WMF width `520/520` within 1% with max error
+  `0.178%`, target WMF height `520/520` within 1% with max error `0.177%`,
+  and target shape width/height both `520/520` within 1% with max error `0`.
+- v130-to-v131 glyph diff across worst-first30 indexes confirms the intended
+  narrow effect: only objectIndex `18` moved materially, with record width
+  `-0.050pt`; sampled `S_{1}=a^{2}=1`, `S_{2}=2`, standalone `S`,
+  standalone `\left(a+b\right)^{2}`, `b^{2}`, `b=2`, `CD`, `25`, `35`, and
+  triangle-chain relations stayed at `0.000pt` record-width delta. ImageMagick
+  ink did not move, while Word/page ink improved, so keep using Word/page ink as
+  visual acceptance evidence.
+- v131 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v131-repeated-paren-equation-width\xsc测试集完整重建_61.docx`
+- v131 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v131-repeated-paren-equation-width\leak-scan-61.json`
+- v131 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v131-repeated-paren-equation-width\wmf-report-61.json`
+- v131 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v131-repeated-paren-equation-width\formula-preview-ink-source-vs-v131-first30.json`
+- v131 target physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v131-repeated-paren-equation-width\pair-metrics-target\4-3-4 蝴蝶模型_summary.json`
+- v131 glyph diff:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v131-repeated-paren-equation-width\wmf-glyph-diff-v130-v131-worst-first30.json`
+- v131 review lesson: when a calibration changes a record coordinate by only a
+  few logical units, regression tests must use a threshold tight enough to fail
+  on the previous constant. A broad relative assertion such as comparing a
+  repeated parenthesized-power equation to a shorter single equation can prove
+  compactness but still allow the exact `0.908` backslide to `0.910`; the test
+  now caps the repeated equation `maxTextRightCoordinate` below `2189` logical
+  units, which is above the v131 value and below the v130/backslide value.

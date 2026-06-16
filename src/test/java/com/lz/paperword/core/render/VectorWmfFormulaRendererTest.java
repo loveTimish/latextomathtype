@@ -632,7 +632,7 @@ class VectorWmfFormulaRendererTest {
         assertTrue(VectorWmfFormulaRenderer.hasClosingFenceSuperscript("(a+b)^2"));
         assertFalse(VectorWmfFormulaRenderer.hasClosingFenceSuperscript("S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
         assertFalse(VectorWmfFormulaRenderer.hasClosingFenceSuperscript("a^{2}+b"));
-        assertTrue(maxTextRightCoordinate(repeatedEquation) < 2200);
+        assertTrue(maxTextRightCoordinate(repeatedEquation) < 2189);
         assertTrue(totalTextDx(repeatedEquation) < 2200);
         assertTrue(totalTextDx(standalone) < firstTextDxTotal(longEquation) * 0.8d);
         assertTrue(maxRecordCoordinate(standalone) <= 36.0d * 20.0d);
