@@ -218,6 +218,25 @@ def byte_units_for_text(text: str, raw: bytes, encoding: str) -> list[dict[str, 
     ]
 
 
+def byte_dx_rows(raw: bytes, dx_values: list[int], x: int, x_units_per_pt: float) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    cursor = 0
+    for index, byte in enumerate(raw):
+        dx = dx_values[index] if index < len(dx_values) else 0
+        rows.append(
+            {
+                "byteIndex": index,
+                "rawHex": f"{byte:02x}",
+                "dxTwips": dx,
+                "dxPt": round3(dx / x_units_per_pt),
+                "leftPt": round3((x + cursor) / x_units_per_pt),
+                "rightPt": round3((x + cursor + dx) / x_units_per_pt),
+            }
+        )
+        cursor += dx
+    return rows
+
+
 def parse_ext_text_out(
     payload: bytes,
     run_index: int,
@@ -247,6 +266,7 @@ def parse_ext_text_out(
     font = fonts.get(selected_font if selected_font is not None else -1, {})
     text, encoding = decode_text_bytes(raw_text, int(font.get("charset", 0)))
     byte_units = byte_units_for_text(text, raw_text, encoding)
+    bytes_out = byte_dx_rows(raw_text, dx_values, x, x_units_per_pt)
     chars = []
     cursor = 0
     for char_index, unit in enumerate(byte_units):
@@ -291,6 +311,7 @@ def parse_ext_text_out(
         "charCount": len(chars),
         "byteCount": len(raw_text),
         "chars": chars,
+        "bytes": bytes_out,
     }
 
 
@@ -334,6 +355,17 @@ def parse_text_out(
         "charCount": len(text),
         "byteCount": len(raw_text),
         "chars": [],
+        "bytes": [
+            {
+                "byteIndex": index,
+                "rawHex": f"{byte:02x}",
+                "dxTwips": None,
+                "dxPt": None,
+                "leftPt": None,
+                "rightPt": None,
+            }
+            for index, byte in enumerate(raw_text)
+        ],
     }
 
 
@@ -368,6 +400,54 @@ def scan_window_ext(data: bytes) -> tuple[int, int] | None:
             return s16(payload, 2), s16(payload, 0)
         offset += size_words * 2
     return None
+
+
+def wmf_record(function: int, payload: bytes = b"") -> bytes:
+    return struct.pack("<IH", 3 + (len(payload) + 1) // 2, function) + payload + (b"\x00" if len(payload) & 1 else b"")
+
+
+def make_test_font(face: str = "Times New Roman", charset: int = 0) -> bytes:
+    face_bytes = face.encode("ascii", "replace")[:31] + b"\x00"
+    face_bytes = face_bytes.ljust(32, b"\x00")
+    return (
+        struct.pack("<hhhhHBBBBBBBB", -240, 0, 0, 0, 400, 0, 0, 0, charset, 0, 0, 0, 0)
+        + face_bytes
+    )
+
+
+def build_self_test_wmf() -> bytes:
+    records = [
+        wmf_record(META_SETWINDOWEXT, struct.pack("<hh", 240, 400)),
+        wmf_record(META_CREATEPENINDIRECT, struct.pack("<hhhI", 0, 1, 0, 0)),
+        wmf_record(META_CREATEFONTINDIRECT, make_test_font()),
+        wmf_record(META_SELECTOBJECT, struct.pack("<H", 1)),
+        wmf_record(
+            META_EXTTEXTOUT,
+            struct.pack("<hhhhhhhh", 100, 20, 2, ETO_CLIPPED, 0, 0, 200, 120)
+            + b"AB"
+            + struct.pack("<hh", 120, 80),
+        ),
+        wmf_record(META_DELETEOBJECT, struct.pack("<H", 0)),
+        wmf_record(META_EOF),
+    ]
+    body = b"".join(records)
+    header = struct.pack("<HHHIHIH", 1, 9, 0x0300, (18 + len(body)) // 2, 2, 0, 0)
+    return header + body
+
+
+def run_self_test() -> None:
+    wmf = parse_wmf(build_self_test_wmf(), 20.0, 20.0, 12.0)
+    runs = wmf.get("runs") or []
+    assert len(runs) == 1, f"expected one run, got {len(runs)}"
+    run = runs[0]
+    assert run.get("fontFace") == "Times New Roman", run
+    assert run.get("selectedFontObjectIndex") == 1, run
+    assert run.get("text") == "AB", run
+    assert run.get("rect", {}).get("rightPt") == 10.0, run
+    assert run.get("dxTwips") == [120, 80], run
+    assert run.get("bytes", [])[0].get("rawHex") == "41", run
+    assert run.get("bytes", [])[1].get("dxPt") == 4.0, run
+    assert wmf.get("summary", {}).get("recordWidthPt") == 10.0, wmf
 
 
 def scale_for_axis(raw_units: int | None, physical_pt: float | None, fallback_units_per_pt: float) -> tuple[float, str]:
@@ -670,6 +750,7 @@ def inspect_docx(args: argparse.Namespace) -> dict[str, Any]:
 
     formulas_out: list[dict[str, Any]] = []
     char_rows: list[dict[str, Any]] = []
+    byte_rows: list[dict[str, Any]] = []
     run_rows: list[dict[str, Any]] = []
     with zipfile.ZipFile(args.docx) as zf, tempfile.TemporaryDirectory(prefix="wmf-glyphs-") as tmp:
         temp_root = Path(tmp)
@@ -750,6 +831,17 @@ def inspect_docx(args: argparse.Namespace) -> dict[str, Any]:
                             "byteLength": ch.get("byteLength"),
                         }
                     )
+                for byte in run.get("bytes", []):
+                    byte_rows.append(
+                        {
+                            **row,
+                            "byteIndex": byte.get("byteIndex"),
+                            "rawHex": byte.get("rawHex"),
+                            "byteDxPt": byte.get("dxPt"),
+                            "byteLeftPt": byte.get("leftPt"),
+                            "byteRightPt": byte.get("rightPt"),
+                        }
+                    )
             formulas_out.append(
                 {
                     **outer,
@@ -768,9 +860,11 @@ def inspect_docx(args: argparse.Namespace) -> dict[str, Any]:
         "formulaCount": len(formulas_out),
         "runCount": len(run_rows),
         "charCount": len(char_rows),
+        "byteCount": len(byte_rows),
         "formulas": formulas_out,
         "runs": run_rows,
         "chars": char_rows,
+        "bytes": byte_rows,
     }
 
 
@@ -791,7 +885,7 @@ def render_text(report: dict[str, Any], limit: int) -> str:
     lines = [
         "WMF formula glyph metrics",
         f"docx: {report['docx']}",
-        f"formulas: {report['formulaCount']} runs: {report['runCount']} chars: {report['charCount']}",
+        f"formulas: {report['formulaCount']} runs: {report['runCount']} chars: {report['charCount']} bytes: {report['byteCount']}",
         "ink: {mode} magick: {magick} pillow: {pillow}".format(
             mode="enabled" if report["withInk"] else "disabled",
             magick=report.get("magick") or "",
@@ -844,7 +938,8 @@ def render_text(report: dict[str, Any], limit: int) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("docx", type=Path)
+    parser.add_argument("docx", type=Path, nargs="?")
+    parser.add_argument("--self-test", action="store_true", help="Run parser self-checks and exit.")
     parser.add_argument("--request", type=Path)
     parser.add_argument("--indices", help="Comma-separated 1-based object indexes.")
     parser.add_argument("--max-items", type=int)
@@ -857,9 +952,18 @@ def main() -> int:
     parser.add_argument("--out-json", type=Path)
     parser.add_argument("--out-runs-csv", type=Path)
     parser.add_argument("--out-chars-csv", type=Path)
+    parser.add_argument("--out-bytes-csv", type=Path)
     parser.add_argument("--out-text", type=Path)
     parser.add_argument("--text-limit", type=int, default=20)
     args = parser.parse_args()
+
+    if args.self_test:
+        run_self_test()
+        print("measure_wmf_formula_glyphs self-test passed")
+        return 0
+
+    if args.docx is None:
+        parser.error("docx is required unless --self-test is used")
 
     report = inspect_docx(args)
     if args.require_magick_ink:
@@ -877,6 +981,8 @@ def main() -> int:
         write_csv(args.out_runs_csv, report["runs"])
     if args.out_chars_csv:
         write_csv(args.out_chars_csv, report["chars"])
+    if args.out_bytes_csv:
+        write_csv(args.out_bytes_csv, report["bytes"])
     text = render_text(report, args.text_limit)
     if args.out_text:
         args.out_text.parent.mkdir(parents=True, exist_ok=True)

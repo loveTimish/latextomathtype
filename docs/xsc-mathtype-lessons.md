@@ -1792,3 +1792,21 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\pair-metrics-target\4-3-4 蝴蝶模型_summary.json`
 - v134 glyph diff:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\wmf-glyph-diff-v133-v134-worst-first30.json`
+- A v135 micro-step that changed only
+  `SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION` from `1.113` to
+  `1.116` was intentionally not kept: doc 61 first-30 Word/page ink stayed
+  unchanged, with sourceIndex `15` still at width delta `-0.163pt`. Do not
+  commit record-only or constant-only changes unless the Word/page ink report
+  or another acceptance-level visual metric moves in the right direction.
+- `scripts/measure_wmf_formula_glyphs.py` now emits byte-level `ExtTextOut`
+  dx rows via `--out-bytes-csv` in addition to decoded character rows. This is
+  necessary for Symbol/CJK/DBCS runs: objectIndex `30` in the v134 doc 61
+  sample decodes the triangle marker through `SimSun` as `¡÷`, so decoded
+  characters are useful for human hints but raw byte dx is the safer
+  calibration evidence.
+- The glyph inspector has a `--self-test` path that constructs a tiny WMF with
+  `CreatePenIndirect` before `CreateFontIndirect`, selects the font at object
+  index `1`, and uses `ExtTextOut` with `ETO_CLIPPED`. Keep this self-test
+  passing before relying on the tool for glyph-size diagnosis.
+- v134 byte-level glyph sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\wmf-glyph-bytes-byte-sample.csv`
