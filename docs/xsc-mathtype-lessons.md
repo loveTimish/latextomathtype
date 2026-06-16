@@ -2040,3 +2040,12 @@ batch, then append any useful lesson or pitfall found in that round.
   formula; a no-context review caught that overmatch. Require explicit area
   semantics such as `\bigtriangleup`, `\Delta`, `\Updelta`, `梯形`, or `三角形`
   so ordinary sequences like `S_{n}=\frac{...}{...}+b^{2}` remain unscaled.
+- For long triangle/script ratio chains such as
+  `S_{\bigtriangleup GEF}\colon ...=4\colon9\colon6\colon6`, check glyph
+  metrics before changing `dx`: source and generated boxes were both
+  `368.25x17.25pt`, and generated record width was not smaller, but generated
+  main text used about `9.8pt` while MathType reference used about `10.5pt`.
+  A scoped long-triangle relation font-height branch is the right lever; do not
+  add spaces or only widen `ExtTextOut dx`. v143 improved doc 61 width max
+  `5.517pt -> 4.766pt` and aligned width avg `0.981pt -> 0.976pt`, with a small
+  height avg tradeoff `0.318pt -> 0.320pt`.

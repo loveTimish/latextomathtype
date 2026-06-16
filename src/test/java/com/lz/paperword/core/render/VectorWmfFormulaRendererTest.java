@@ -570,6 +570,13 @@ class VectorWmfFormulaRendererTest {
         byte[] triangleChainFormula = VectorWmfFormulaRenderer.render(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}=a^{2}\\colon ab=25\\colon 35",
             131.25d, 17.25d);
+        String longTriangleRelation = "S_{\\bigtriangleup GEF}\\colon S_{\\bigtriangleup GBD}"
+            + "\\colon S_{\\bigtriangleup DGF}\\colon S_{nBGE}=EF^{2}\\colon BD^{2}"
+            + "\\colon DF^{2}\\colon DE^{2}=8\\colon18\\colon12\\colon12=4\\colon9\\colon6\\colon6";
+        String incidentalTriangleLongRelation = "S_{1}\\colon S_{3}\\colon S_{2}\\colon S_{4}=a^{2}"
+            + "\\colon b^{2}\\colon ab\\colon ab\\colon \\bigtriangleup X"
+            + "\\colon c^{2}\\colon d^{2}\\colon e^{2}\\colon f^{2}";
+        byte[] longTriangleChainFormula = VectorWmfFormulaRenderer.render(longTriangleRelation, 368.25d, 17.25d);
         byte[] leftRightEquation = VectorWmfFormulaRenderer.render("S=\\left(a+b\\right)^2=9", 76.0d, 18.75d);
         byte[] repeatedLeftRightEquation = VectorWmfFormulaRenderer.render(
             "S=\\left(a+b\\right)^2=\\left(1+2\\right)^2=9", 111.0d, 18.75d);
@@ -613,12 +620,16 @@ class VectorWmfFormulaRendererTest {
         assertEquals(0.98d, VectorWmfFormulaRenderer.scriptRelationWidthScale(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}\\colon S_{\\bigtriangleup COD}"
                 + "\\colon S_{\\bigtriangleup DOA}=a^{2}\\colon ab\\colon b^{2}\\colon ac"));
+        assertEquals(0.981d, VectorWmfFormulaRenderer.scriptRelationWidthScale(longTriangleRelation));
+        assertEquals(0.9895d, VectorWmfFormulaRenderer.scriptRelationWidthScale(incidentalTriangleLongRelation));
         assertEquals(0.890d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
             "S_{1}\\colon S_{3}=a^{2}\\colon b^{2}"));
         assertEquals(0.890d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
             "S_{1}\\colon S_{3}\\colon S_{2}\\colon S_{4}=a^{2}\\colon b^{2}\\colon ab\\colon ab"));
         assertEquals(0.887d, VectorWmfFormulaRenderer.scriptRelationFontYScale(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}=a^{2}\\colon ab=25\\colon 35"));
+        assertEquals(0.955d, VectorWmfFormulaRenderer.scriptRelationFontYScale(longTriangleRelation));
+        assertEquals(0.890d, VectorWmfFormulaRenderer.scriptRelationFontYScale(incidentalTriangleLongRelation));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationFontYScale("S_{2}=2"));
         assertEquals(0.975d, VectorWmfFormulaRenderer.scriptRelationWidthScale("S_{1}=a^{2}=1"));
         assertEquals(0.975d, VectorWmfFormulaRenderer.scriptRelationWidthScale("S_{3}=4=b^{2}"));
@@ -633,6 +644,9 @@ class VectorWmfFormulaRendererTest {
         assertEquals(1.113d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation("S_{1}=a^{2}=1"));
         assertEquals(1.025d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
             "S_{\\bigtriangleup AOB}\\colon S_{\\bigtriangleup BOC}=a^{2}\\colon ab=25\\colon 35"));
+        assertEquals(1.016d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(longTriangleRelation));
+        assertEquals(1.022d,
+            VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(incidentalTriangleLongRelation));
         assertEquals(1.022d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
             "S_{1}\\colon S_{3}\\colon S_{2}\\colon S_{4}=a^{2}\\colon b^{2}\\colon ab\\colon ab"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.scriptRelationHeightWidthCompensation(
@@ -647,6 +661,8 @@ class VectorWmfFormulaRendererTest {
         assertTrue(maxTextRightCoordinate(ratioFormula) < 62.5d * 20.0d);
         assertTrue(maxTextRightCoordinate(longChainFormula) > 126.0d * 20.0d);
         assertTrue(maxTextRightCoordinate(triangleChainFormula) < 129.0d * 20.0d);
+        assertTrue(maxTextRightCoordinate(longTriangleChainFormula) > 360.0d * 20.0d);
+        assertTrue(maxTextRightCoordinate(longTriangleChainFormula) <= 368.25d * 20.0d);
         assertTrue(maxTextRightCoordinate(ratioFormula) > maxTextRightCoordinate(upperSubscript) * 5);
         assertTrue(totalTextDx(ratioFormula) > totalTextDx(upperSubscript) * 6);
         assertTrue(maxTextRightCoordinate(leftRightEquation) > maxTextRightCoordinate(upperSubscript) * 6);
@@ -658,6 +674,7 @@ class VectorWmfFormulaRendererTest {
         assertTrue(maxRecordCoordinate(ratioFormula) <= 64.0d * 20.0d);
         assertTrue(maxRecordCoordinate(rawColonFormula) <= 64.0d * 20.0d);
         assertTrue(maxRecordCoordinate(longChainFormula) <= 131.25d * 20.0d);
+        assertTrue(maxRecordCoordinate(longTriangleChainFormula) <= 368.25d * 20.0d);
         assertTrue(maxRecordCoordinate(triangleChainFormula) <= 131.25d * 20.0d);
         assertTrue(maxRecordCoordinate(leftRightEquation) <= 76.0d * 20.0d);
     }

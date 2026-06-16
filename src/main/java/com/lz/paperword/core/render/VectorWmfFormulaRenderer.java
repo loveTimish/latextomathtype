@@ -79,13 +79,16 @@ final class VectorWmfFormulaRenderer {
     private static final double SCRIPT_RELATION_SIMPLE_RATIO_WIDTH_SCALE = 0.970d;
     private static final double SCRIPT_RELATION_LONG_CHAIN_WIDTH_SCALE = 0.9895d;
     private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_SCALE = 0.98d;
+    private static final double SCRIPT_RELATION_LONG_TRIANGLE_WIDTH_SCALE = 0.981d;
     private static final double SCRIPT_RELATION_FONT_Y_SCALE = 0.93d;
     private static final double SCRIPT_RELATION_COMPACT_FONT_Y_SCALE = 0.890d;
     private static final double SCRIPT_RELATION_LONG_CHAIN_FONT_Y_SCALE = 0.890d;
     private static final double SCRIPT_RELATION_TRIANGLE_FONT_Y_SCALE = 0.887d;
+    private static final double SCRIPT_RELATION_LONG_TRIANGLE_FONT_Y_SCALE = 0.955d;
     private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_FONT_Y_SCALE = 0.887d;
     private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION = 1.113d;
     private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION = 1.025d;
+    private static final double SCRIPT_RELATION_LONG_TRIANGLE_WIDTH_COMPENSATION = 1.016d;
     private static final double SCRIPT_RELATION_LONG_CHAIN_WIDTH_COMPENSATION = 1.022d;
     private static final Pattern LEFT_RIGHT_PAREN = Pattern.compile(
         "\\\\left\\s*\\(\\s*(?:\\{\\s*)?(.*?)(?:\\s*})?\\s*\\\\right\\s*\\)"
@@ -441,8 +444,9 @@ final class VectorWmfFormulaRenderer {
         if (relationOperators == 0 || standaloneShortScriptWidthScale(latex) < 0.999d) {
             return 1.0d;
         }
-        if (raw.contains("\\bigtriangleup") && relationOperators >= 4) {
-            return SCRIPT_RELATION_TRIANGLE_WIDTH_SCALE;
+        if (triangleAreaScriptTermCount(text) >= 2 && relationOperators >= 4) {
+            return isLongTriangleScriptRelation(raw) ? SCRIPT_RELATION_LONG_TRIANGLE_WIDTH_SCALE
+                : SCRIPT_RELATION_TRIANGLE_WIDTH_SCALE;
         }
         if (isSimpleScriptRatioRelation(raw, text, relationOperators)) {
             return SCRIPT_RELATION_SIMPLE_RATIO_WIDTH_SCALE;
@@ -460,7 +464,8 @@ final class VectorWmfFormulaRenderer {
             return SCRIPT_RELATION_EXACT_S1_EQUATION_FONT_Y_SCALE;
         }
         if (isTriangleScriptRelation(latex)) {
-            return SCRIPT_RELATION_TRIANGLE_FONT_Y_SCALE;
+            return isLongTriangleScriptRelation(latex) ? SCRIPT_RELATION_LONG_TRIANGLE_FONT_Y_SCALE
+                : SCRIPT_RELATION_TRIANGLE_FONT_Y_SCALE;
         }
         if (isCompactScriptRelation(latex)) {
             return SCRIPT_RELATION_COMPACT_FONT_Y_SCALE;
@@ -483,9 +488,32 @@ final class VectorWmfFormulaRenderer {
 
     private static boolean isTriangleScriptRelation(String latex) {
         String raw = stripMetricsAndStyles(latex == null ? "" : latex);
+        String text = normalizeFlatLatex(normalizeTextCommands(raw)).replaceAll("\\s+", "");
         int relationOperators = Math.max(topLevelRelationOperatorCount(normalizeFlatLatex(normalizeTextCommands(raw))),
             topLevelRelationOperatorCount(normalizeFlatLatex(raw)));
-        return raw.contains("\\bigtriangleup") && relationOperators >= 4 && scriptRelationFontYEligible(latex);
+        return triangleAreaScriptTermCount(text) >= 2 && relationOperators >= 4 && scriptRelationFontYEligible(latex);
+    }
+
+    private static boolean isLongTriangleScriptRelation(String latex) {
+        String raw = stripMetricsAndStyles(latex == null ? "" : latex);
+        String text = normalizeFlatLatex(normalizeTextCommands(raw)).replaceAll("\\s+", "");
+        int relationOperators = Math.max(topLevelRelationOperatorCount(normalizeFlatLatex(normalizeTextCommands(raw))),
+            topLevelRelationOperatorCount(normalizeFlatLatex(raw)));
+        return triangleAreaScriptTermCount(text) >= 3 && relationOperators >= 8 && text.length() >= 120;
+    }
+
+    private static int triangleAreaScriptTermCount(String text) {
+        int count = 0;
+        int cursor = 0;
+        while (cursor < text.length()) {
+            int index = text.indexOf("S_{\\bigtriangleup", cursor);
+            if (index < 0) {
+                return count;
+            }
+            count++;
+            cursor = index + 1;
+        }
+        return count;
     }
 
     private static boolean isLongChainScriptRelation(String latex) {
@@ -493,7 +521,7 @@ final class VectorWmfFormulaRenderer {
         String text = normalizeFlatLatex(normalizeTextCommands(raw)).replaceAll("\\s+", "");
         int relationOperators = Math.max(topLevelRelationOperatorCount(normalizeFlatLatex(normalizeTextCommands(raw))),
             topLevelRelationOperatorCount(normalizeFlatLatex(raw)));
-        return relationOperators >= 6 && !raw.contains("\\bigtriangleup")
+        return relationOperators >= 6 && triangleAreaScriptTermCount(text) < 2
             && !text.contains("\\times") && !text.contains("\\div") && !text.contains("+") && !text.contains("-")
             && scriptRelationFontYEligible(latex);
     }
@@ -509,8 +537,11 @@ final class VectorWmfFormulaRenderer {
         }
         int relationOperators = Math.max(topLevelRelationOperatorCount(normalizeFlatLatex(normalizeTextCommands(raw))),
             topLevelRelationOperatorCount(normalizeFlatLatex(raw)));
-        return raw.contains("\\bigtriangleup") && relationOperators >= 4 && scriptRelationFontYScale(latex) < 0.999d
-            ? SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION : 1.0d;
+        if (triangleAreaScriptTermCount(text) >= 2 && relationOperators >= 4 && scriptRelationFontYScale(latex) < 0.999d) {
+            return isLongTriangleScriptRelation(latex) ? SCRIPT_RELATION_LONG_TRIANGLE_WIDTH_COMPENSATION
+                : SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION;
+        }
+        return 1.0d;
     }
 
     private static boolean isExactS1AreaEquation(String latex) {
