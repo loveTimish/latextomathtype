@@ -1827,3 +1827,19 @@ batch, then append any useful lesson or pitfall found in that round.
   different and should stay low-trust.
 - v134 source/generated glyph structural diff:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\wmf-glyph-diff-source-generated-worst-first30-v3.txt`
+- A doc 61 all-formula Word/page ink run over `520` formulas can exceed a
+  five-minute command timeout because it renders both reference and generated
+  preview media. `rebuild/compare_formula_preview_ink.py` now supports
+  `--save-reference-rows`, `--save-generated-rows`, `--load-reference-rows`,
+  `--load-generated-rows`, and `--progress-every` so full visual checks can be
+  split into reusable measurement and fast comparison phases.
+- The first cache-mode verification used doc 61 first 30 formulas and matched
+  the previous v134 metrics exactly: width avg `0.074pt`, p90 `0.150pt`, max
+  `0.163pt`; height avg `0.075pt`, p90 `0.112pt`, max `0.127pt`.
+- Cache load mode must not require ImageMagick when both reference and
+  generated rows are loaded, and loaded rows must still honor `--indices`,
+  `--source-indices`, and `--max-items`. A regression check used a missing
+  `--magick` path plus `--source-indices 1,2,3` and produced `paired_count=3`.
+- v134 first-30 cached Word/page ink rows:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\formula-preview-ink-reference-v134-first30-rows.json`
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\formula-preview-ink-generated-v134-first30-rows.json`

@@ -139,6 +139,8 @@ def measure_docx(
     alpha_threshold: int,
     indexes: set[int] | None = None,
     max_items: int | None = None,
+    label: str = "docx",
+    progress_every: int = 0,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     boxes = extract_boxes(docx)
@@ -148,7 +150,10 @@ def measure_docx(
         boxes = boxes[:max_items]
     with tempfile.TemporaryDirectory(prefix="formula-ink-") as tmp:
         temp_root = Path(tmp)
-        for box in boxes:
+        total = len(boxes)
+        for ordinal, box in enumerate(boxes, start=1):
+            if progress_every > 0 and (ordinal == 1 or ordinal % progress_every == 0 or ordinal == total):
+                print(f"[{label}] measuring {ordinal}/{total} sourceIndex={box.index + 1}", flush=True)
             row = asdict(box)
             media = resolve_media(docx, box.image_target)
             suffix = Path(box.image_target or "").suffix or ".bin"
@@ -186,6 +191,41 @@ def measure_docx(
             row["ink_height_ratio"] = round(float(ink["ink_height_px"]) / image_h, 4)
             rows.append(row)
     return rows
+
+
+def read_rows(path: Path | None) -> list[dict[str, Any]] | None:
+    if not path:
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict) and isinstance(payload.get("rows"), list):
+        return payload["rows"]
+    raise ValueError(f"measurement cache does not contain rows: {path}")
+
+
+def write_rows(path: Path | None, rows: list[dict[str, Any]], docx: Path, indexes: set[int], max_items: int | None) -> None:
+    if not path:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "docx": str(docx.resolve()),
+        "indices": sorted(indexes),
+        "source_indices": sorted(index + 1 for index in indexes),
+        "max_items": max_items,
+        "row_count": len(rows),
+        "rows": rows,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def filter_rows(rows: list[dict[str, Any]], indexes: set[int] | None, max_items: int | None) -> list[dict[str, Any]]:
+    out = rows
+    if indexes:
+        out = [row for row in out if int(row.get("index", -1)) in indexes]
+    if max_items is not None:
+        out = out[:max_items]
+    return out
 
 
 def parse_index_list(value: str) -> set[int]:
@@ -295,38 +335,66 @@ def main() -> int:
     parser.add_argument("--indices", default="", help="Comma-separated zero-based formula indexes to compare; sourceIndex is index + 1.")
     parser.add_argument("--source-indices", default="", help="Comma-separated one-based sourceIndex values to compare.")
     parser.add_argument("--max-items", type=int, help="Compare only the first N formulas after index filtering.")
+    parser.add_argument("--load-reference-rows", type=Path, help="Load cached reference measurement rows instead of rendering.")
+    parser.add_argument("--load-generated-rows", type=Path, help="Load cached generated measurement rows instead of rendering.")
+    parser.add_argument("--save-reference-rows", type=Path, help="Write reference measurement rows for reuse.")
+    parser.add_argument("--save-generated-rows", type=Path, help="Write generated measurement rows for reuse.")
+    parser.add_argument("--progress-every", type=int, default=0, help="Print rendering progress every N formulas.")
     args = parser.parse_args()
-
-    if not args.magick.exists() and not shutil.which("magick"):
-        raise SystemExit(f"ImageMagick magick.exe not found: {args.magick}")
-    magick = args.magick if args.magick.exists() else Path(shutil.which("magick"))
 
     selected_indexes = parse_index_list(args.indices)
     selected_source_indexes = parse_index_list(args.source_indices)
     if selected_source_indexes:
         selected_indexes.update(index - 1 for index in selected_source_indexes)
-    reference_rows = measure_docx(
-        args.reference,
-        magick,
-        args.white_threshold,
-        args.alpha_threshold,
-        selected_indexes,
-        args.max_items,
-    )
-    generated_rows = measure_docx(
-        args.generated,
-        magick,
-        args.white_threshold,
-        args.alpha_threshold,
-        selected_indexes,
-        args.max_items,
-    )
+    needs_render = not args.load_reference_rows or not args.load_generated_rows
+    magick: Path | None = None
+    if needs_render:
+        if not args.magick.exists() and not shutil.which("magick"):
+            raise SystemExit(f"ImageMagick magick.exe not found: {args.magick}")
+        magick = args.magick if args.magick.exists() else Path(shutil.which("magick"))
+    reference_rows = read_rows(args.load_reference_rows)
+    if reference_rows is None:
+        assert magick is not None
+        reference_rows = measure_docx(
+            args.reference,
+            magick,
+            args.white_threshold,
+            args.alpha_threshold,
+            selected_indexes,
+            args.max_items,
+            "reference",
+            args.progress_every,
+        )
+        write_rows(args.save_reference_rows, reference_rows, args.reference, selected_indexes, args.max_items)
+    else:
+        reference_rows = filter_rows(reference_rows, selected_indexes, args.max_items)
+
+    generated_rows = read_rows(args.load_generated_rows)
+    if generated_rows is None:
+        assert magick is not None
+        generated_rows = measure_docx(
+            args.generated,
+            magick,
+            args.white_threshold,
+            args.alpha_threshold,
+            selected_indexes,
+            args.max_items,
+            "generated",
+            args.progress_every,
+        )
+        write_rows(args.save_generated_rows, generated_rows, args.generated, selected_indexes, args.max_items)
+    else:
+        generated_rows = filter_rows(generated_rows, selected_indexes, args.max_items)
     report = {
         "reference": str(args.reference.resolve()),
         "generated": str(args.generated.resolve()),
         "indices": sorted(selected_indexes),
         "source_indices": sorted(index + 1 for index in selected_indexes),
         "max_items": args.max_items,
+        "load_reference_rows": str(args.load_reference_rows.resolve()) if args.load_reference_rows else None,
+        "load_generated_rows": str(args.load_generated_rows.resolve()) if args.load_generated_rows else None,
+        "save_reference_rows": str(args.save_reference_rows.resolve()) if args.save_reference_rows else None,
+        "save_generated_rows": str(args.save_generated_rows.resolve()) if args.save_generated_rows else None,
         "comparison": compare_rows(reference_rows, generated_rows),
         "reference_rows": reference_rows,
         "generated_rows": generated_rows,
