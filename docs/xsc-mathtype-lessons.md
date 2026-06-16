@@ -1871,3 +1871,13 @@ batch, then append any useful lesson or pitfall found in that round.
   calibration.
 - v134 full-doc guarded ink report:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\formula-preview-ink-source-vs-v134-all-alignment-guard-v2.txt`
+- Full-doc preview ink comparison must not use docx2tex report ordinal as the
+  source DOCX object index. In doc 61, `source-report-61.json` has `520`
+  converted equations but `docObjectIndex` spans `1..527` with `7` gaps. The
+  correct source-row mapping is `docObjectIndex - 1`; using the report ordinal
+  created fake huge deltas and a misleading full-doc average. The fixed
+  LaTeX-aligned cached run produced `488` usable pairs, width avg `1.057pt`,
+  height avg `0.756pt`, and only `12` context/scale suspicious rows, with an
+  explicit warning that coverage is not full-document acceptance.
+- Latest LaTeX-aligned preview ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\formula-preview-ink-source-vs-v134-all-latex-aligned.txt`

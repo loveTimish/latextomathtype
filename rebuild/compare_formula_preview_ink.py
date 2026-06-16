@@ -15,6 +15,7 @@ import math
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import zipfile
 from dataclasses import asdict
@@ -27,6 +28,16 @@ from extract_formula_boxes import extract_boxes
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from compare_docx_pair_metrics import (  # noqa: E402
+    latex_alignment,
+    normalize_latex_key,
+    parse_request_math,
+)
+
 DEFAULT_REFERENCE = ROOT / "rebuild-assets/external/fraction-split-reference.docx"
 DEFAULT_GENERATED = ROOT / "target/reference-roundtrip/fraction-split-reference-regenerated.docx"
 DEFAULT_OUT_JSON = ROOT / "target/reference-roundtrip/formula-preview-ink-comparison.json"
@@ -248,6 +259,89 @@ def parse_index_list(value: str) -> set[int]:
     return indexes
 
 
+def read_source_report_records(report_path: Path) -> list[dict[str, Any]]:
+    report = json.loads(report_path.read_text(encoding="utf-8-sig"))
+    records: list[dict[str, Any]] = []
+    for item in report.get("equations") or []:
+        if item.get("status") != "converted" or not item.get("output"):
+            continue
+        raw_index = item.get("docObjectIndex")
+        doc_object_index = int(raw_index) if raw_index else None
+        records.append(
+            {
+                "reportPosition": len(records),
+                "latex": normalize_latex_key(item.get("output", "")),
+                "docObjectIndex": doc_object_index,
+                "referenceIndex": doc_object_index - 1 if doc_object_index else len(records),
+            }
+        )
+    return records
+
+
+def build_latex_alignment(
+    source_report: Path | None,
+    generated_request: Path | None,
+    reference_rows: list[dict[str, Any]],
+    generated_rows: list[dict[str, Any]],
+) -> tuple[list[tuple[int, int]] | None, dict[str, Any]]:
+    if not source_report or not generated_request:
+        return None, {"alignment_mode": "ordinal"}
+
+    source_records = read_source_report_records(source_report)
+    source_latex = [record["latex"] for record in source_records]
+    request_math = parse_request_math(generated_request)
+    generated_latex = [item["latex"] for item in request_math]
+    pairs = latex_alignment(source_latex, generated_latex)
+    reference_indexes = {int(row["index"]) for row in reference_rows}
+    generated_indexes = {int(row["index"]) for row in generated_rows}
+    usable_pairs: list[tuple[int, int]] = []
+    for source_position, generated_position in pairs:
+        if source_position >= len(source_records):
+            continue
+        reference_index = int(source_records[source_position]["referenceIndex"])
+        if reference_index in reference_indexes and generated_position in generated_indexes:
+            usable_pairs.append((reference_index, generated_position))
+    paired_source_positions = {source_position for source_position, _ in pairs}
+    paired_generated_positions = {generated_position for _, generated_position in pairs}
+    known_doc_indexes = [record["docObjectIndex"] for record in source_records if record["docObjectIndex"] is not None]
+    doc_index_gap_count = 0
+    if known_doc_indexes:
+        doc_index_gap_count = len(set(range(min(known_doc_indexes), max(known_doc_indexes) + 1)) - set(known_doc_indexes))
+    return usable_pairs, {
+        "alignment_mode": "latex",
+        "source_latex_count": len(source_latex),
+        "generated_latex_count": len(generated_latex),
+        "reference_row_count": len(reference_rows),
+        "generated_row_count": len(generated_rows),
+        "latex_pair_count": len(pairs),
+        "usable_latex_pair_count": len(usable_pairs),
+        "unpaired_source_latex_count": len(source_latex) - len(paired_source_positions),
+        "unpaired_generated_latex_count": len(generated_latex) - len(paired_generated_positions),
+        "source_doc_object_index_min": min(known_doc_indexes, default=None),
+        "source_doc_object_index_max": max(known_doc_indexes, default=None),
+        "source_doc_object_index_gaps": doc_index_gap_count,
+        "unpaired_source_latex_samples": [
+            {
+                "reportPosition": record["reportPosition"],
+                "sourceIndex": record["docObjectIndex"] or (record["reportPosition"] + 1),
+                "docObjectIndex": record["docObjectIndex"],
+                "latex": record["latex"],
+            }
+            for record in source_records
+            if record["reportPosition"] not in paired_source_positions
+        ][:12],
+        "unpaired_generated_latex_samples": [
+            {
+                "generatedPosition": index,
+                "generatedSourceIndex": index + 1,
+                "latex": generated_latex[index],
+            }
+            for index in range(len(generated_latex))
+            if index not in paired_generated_positions
+        ][:12],
+    }
+
+
 def normalize_context(value: Any) -> str:
     text = "" if value is None else str(value)
     return re.sub(r"\s+", "", text)
@@ -269,16 +363,41 @@ def text_similarity(left: Any, right: Any) -> float:
     return round(len(a_tokens & b_tokens) / len(a_tokens | b_tokens), 3)
 
 
-def compare_rows(reference: list[dict[str, Any]], generated: list[dict[str, Any]]) -> dict[str, Any]:
+def compare_rows(
+    reference: list[dict[str, Any]],
+    generated: list[dict[str, Any]],
+    index_pairs: list[tuple[int, int]] | None = None,
+    alignment_info: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     reference_by_index = {int(row["index"]): row for row in reference}
     generated_by_index = {int(row["index"]): row for row in generated}
-    paired_indexes = sorted(set(reference_by_index) & set(generated_by_index))
+    alignment_info = dict(alignment_info or {})
+    alignment_mode = alignment_info.get("alignment_mode") or "ordinal"
+    if index_pairs is None:
+        index_pairs = [(index, index) for index in sorted(set(reference_by_index) & set(generated_by_index))]
     rows: list[dict[str, Any]] = []
-    for index in paired_indexes:
-        ref = reference_by_index[index]
-        gen = generated_by_index[index]
-        if ref.get("ink_width_pt") is None or gen.get("ink_width_pt") is None:
+    paired_reference_indexes = set()
+    paired_generated_indexes = set()
+    paired_without_ink: list[dict[str, Any]] = []
+    for source_index, generated_index in index_pairs:
+        ref = reference_by_index.get(source_index)
+        gen = generated_by_index.get(generated_index)
+        if ref is None or gen is None:
             continue
+        if ref.get("ink_width_pt") is None or gen.get("ink_width_pt") is None:
+            paired_without_ink.append(
+                {
+                    "reference_index": source_index,
+                    "sourceIndex": source_index + 1,
+                    "generated_index": generated_index,
+                    "generatedSourceIndex": generated_index + 1,
+                    "reference_preview_error": ref.get("preview_error"),
+                    "generated_preview_error": gen.get("preview_error"),
+                }
+            )
+            continue
+        paired_reference_indexes.add(source_index)
+        paired_generated_indexes.add(generated_index)
         width_delta = float(gen["ink_width_pt"]) - float(ref["ink_width_pt"])
         height_delta = float(gen["ink_height_pt"]) - float(ref["ink_height_pt"])
         width_scale = float(ref["ink_width_pt"]) / max(float(gen["ink_width_pt"]), 0.001)
@@ -295,8 +414,11 @@ def compare_rows(reference: list[dict[str, Any]], generated: list[dict[str, Any]
         alignment_suspicious = context_similarity < 0.15 or extreme_scale > 3.0
         rows.append(
             {
-                "index": index,
-                "sourceIndex": index + 1,
+                "index": source_index,
+                "sourceIndex": source_index + 1,
+                "reference_index": source_index,
+                "generated_index": generated_index,
+                "generatedSourceIndex": generated_index + 1,
                 "reference_ink_width_pt": ref["ink_width_pt"],
                 "generated_ink_width_pt": gen["ink_width_pt"],
                 "reference_ink_height_pt": ref["ink_height_pt"],
@@ -319,15 +441,23 @@ def compare_rows(reference: list[dict[str, Any]], generated: list[dict[str, Any]
             }
         )
     aligned_rows = [row for row in rows if not row["alignment_suspicious"]]
-    return {
+    pairing_warnings: list[str] = []
+    if alignment_mode == "ordinal" and set(reference_by_index) != set(generated_by_index):
+        pairing_warnings.append("DOCX-local indexes are only safe when object counts and order already match in strict acceptance.")
+    if alignment_mode == "latex":
+        if alignment_info.get("usable_latex_pair_count") != len(reference_by_index):
+            pairing_warnings.append("LaTeX alignment covers only a subset of measured reference rows; do not treat summary stats as full-document acceptance.")
+        if alignment_info.get("generated_latex_count") != len(generated_by_index):
+            pairing_warnings.append("Generated request formula count differs from generated preview row count; generated positions may shift.")
+    summary = {
+        "alignment_mode": alignment_mode,
         "paired_count": len(rows),
-        "unpaired_reference": sorted(set(reference_by_index) - set(generated_by_index)),
-        "unpaired_generated": sorted(set(generated_by_index) - set(reference_by_index)),
-        "pairing_warning": (
-            "DOCX-local indexes are only safe when object counts and order already match in strict acceptance."
-            if set(reference_by_index) != set(generated_by_index)
-            else ""
-        ),
+        "index_pair_count": len(index_pairs),
+        "unpaired_reference": sorted(set(reference_by_index) - paired_reference_indexes),
+        "unpaired_generated": sorted(set(generated_by_index) - paired_generated_indexes),
+        "paired_without_ink_count": len(paired_without_ink),
+        "paired_without_ink": paired_without_ink[:30],
+        "pairing_warning": " ".join(pairing_warnings),
         "ink_width_abs_delta_pt": stats([row["ink_width_abs_delta_pt"] for row in rows]),
         "ink_height_abs_delta_pt": stats([row["ink_height_abs_delta_pt"] for row in rows]),
         "aligned_paired_count": len(aligned_rows),
@@ -343,6 +473,8 @@ def compare_rows(reference: list[dict[str, Any]], generated: list[dict[str, Any]
         "alignment_suspicious_rows": [row for row in rows if row["alignment_suspicious"]][:30],
         "rows": rows,
     }
+    summary.update(alignment_info)
+    return summary
 
 
 def render_text(report: dict[str, Any]) -> str:
@@ -352,7 +484,19 @@ def render_text(report: dict[str, Any]) -> str:
         "",
         f"reference: {report['reference']}",
         f"generated: {report['generated']}",
+        f"alignment_mode: {comparison['alignment_mode']}",
         f"paired_count: {comparison['paired_count']}",
+        f"index_pair_count: {comparison['index_pair_count']}",
+        f"source_latex_count: {comparison.get('source_latex_count')}",
+        f"generated_latex_count: {comparison.get('generated_latex_count')}",
+        f"reference_row_count: {comparison.get('reference_row_count')}",
+        f"generated_row_count: {comparison.get('generated_row_count')}",
+        f"latex_pair_count: {comparison.get('latex_pair_count')}",
+        f"usable_latex_pair_count: {comparison.get('usable_latex_pair_count')}",
+        f"source_doc_object_index_range: {comparison.get('source_doc_object_index_min')}..{comparison.get('source_doc_object_index_max')}",
+        f"source_doc_object_index_gaps: {comparison.get('source_doc_object_index_gaps')}",
+        f"paired_without_ink_count: {comparison.get('paired_without_ink_count')}",
+        f"pairing_warning: {comparison.get('pairing_warning')}",
         f"aligned_paired_count: {comparison['aligned_paired_count']}",
         f"alignment_suspicious_count: {comparison['alignment_suspicious_count']}",
         "",
@@ -367,27 +511,27 @@ def render_text(report: dict[str, Any]) -> str:
     ]
     for row in comparison["worst_width"][:12]:
         lines.append(
-            "  #{index}/sourceIndex={sourceIndex}: ref={reference_ink_width_pt}pt gen={generated_ink_width_pt}pt "
+            "  #{index}/sourceIndex={sourceIndex}->generatedSourceIndex={generatedSourceIndex}: ref={reference_ink_width_pt}pt gen={generated_ink_width_pt}pt "
             "delta={ink_width_delta_pt}pt scale={required_width_scale} suspicious={alignment_suspicious} "
             "sim={context_similarity} text={generated_context}".format(**row)
         )
     lines.extend(["", "Worst visible height deltas"])
     for row in comparison["worst_height"][:12]:
         lines.append(
-            "  #{index}/sourceIndex={sourceIndex}: ref={reference_ink_height_pt}pt gen={generated_ink_height_pt}pt "
+            "  #{index}/sourceIndex={sourceIndex}->generatedSourceIndex={generatedSourceIndex}: ref={reference_ink_height_pt}pt gen={generated_ink_height_pt}pt "
             "delta={ink_height_delta_pt}pt scale={required_height_scale} suspicious={alignment_suspicious} "
             "sim={context_similarity} text={generated_context}".format(**row)
         )
     lines.extend(["", "Worst aligned-looking width deltas"])
     for row in comparison["worst_aligned_width"][:12]:
         lines.append(
-            "  #{index}/sourceIndex={sourceIndex}: ref={reference_ink_width_pt}pt gen={generated_ink_width_pt}pt "
+            "  #{index}/sourceIndex={sourceIndex}->generatedSourceIndex={generatedSourceIndex}: ref={reference_ink_width_pt}pt gen={generated_ink_width_pt}pt "
             "delta={ink_width_delta_pt}pt scale={required_width_scale} sim={context_similarity} text={generated_context}".format(**row)
         )
     lines.extend(["", "Worst aligned-looking height deltas"])
     for row in comparison["worst_aligned_height"][:12]:
         lines.append(
-            "  #{index}/sourceIndex={sourceIndex}: ref={reference_ink_height_pt}pt gen={generated_ink_height_pt}pt "
+            "  #{index}/sourceIndex={sourceIndex}->generatedSourceIndex={generatedSourceIndex}: ref={reference_ink_height_pt}pt gen={generated_ink_height_pt}pt "
             "delta={ink_height_delta_pt}pt scale={required_height_scale} sim={context_similarity} text={generated_context}".format(**row)
         )
     return "\n".join(lines) + "\n"
@@ -397,6 +541,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--reference", type=Path, default=DEFAULT_REFERENCE)
     parser.add_argument("--generated", type=Path, default=DEFAULT_GENERATED)
+    parser.add_argument("--source-report", type=Path, help="Source docx2tex report for LaTeX-key alignment.")
+    parser.add_argument("--generated-request", type=Path, help="Generated request JSON for LaTeX-key alignment.")
     parser.add_argument("--out-json", type=Path, default=DEFAULT_OUT_JSON)
     parser.add_argument("--out-text", type=Path, default=DEFAULT_OUT_TEXT)
     parser.add_argument("--magick", type=Path, default=DEFAULT_MAGICK)
@@ -490,9 +636,20 @@ def main() -> int:
     if args.measure_only == "generated":
         print(f"measured generated rows: {len(generated_rows)}")
         return 0
+    alignment_info: dict[str, Any] = {"alignment_mode": "ordinal"}
+    index_pairs: list[tuple[int, int]] | None = None
+    if args.source_report and args.generated_request:
+        index_pairs, alignment_info = build_latex_alignment(
+            args.source_report,
+            args.generated_request,
+            reference_rows,
+            generated_rows,
+        )
     report = {
         "reference": str(args.reference.resolve()),
         "generated": str(args.generated.resolve()),
+        "source_report": str(args.source_report.resolve()) if args.source_report else None,
+        "generated_request": str(args.generated_request.resolve()) if args.generated_request else None,
         "indices": sorted(selected_indexes),
         "source_indices": sorted(index + 1 for index in selected_indexes),
         "max_items": args.max_items,
@@ -500,7 +657,7 @@ def main() -> int:
         "load_generated_rows": str(args.load_generated_rows.resolve()) if args.load_generated_rows else None,
         "save_reference_rows": str(args.save_reference_rows.resolve()) if args.save_reference_rows else None,
         "save_generated_rows": str(args.save_generated_rows.resolve()) if args.save_generated_rows else None,
-        "comparison": compare_rows(reference_rows, generated_rows),
+        "comparison": compare_rows(reference_rows, generated_rows, index_pairs, alignment_info),
         "reference_rows": reference_rows,
         "generated_rows": generated_rows,
     }
