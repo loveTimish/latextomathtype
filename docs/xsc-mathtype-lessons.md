@@ -2049,3 +2049,20 @@ batch, then append any useful lesson or pitfall found in that round.
   add spaces or only widen `ExtTextOut dx`. v143 improved doc 61 width max
   `5.517pt -> 4.766pt` and aligned width avg `0.981pt -> 0.976pt`, with a small
   height avg tradeoff `0.318pt -> 0.320pt`.
+- Compact inline fractions were still a shared width/height family after the
+  readable-slot change: samples such as `48\times\frac{1}{4}=12`,
+  `EF=\frac{1}{2}(a+2a)=\frac{3}{2}a`, and
+  `S_{梯形EFCD}=\frac{7}{12}S` were slightly too wide and about `2pt` too
+  short in Magick ink. A small overall compact-inline X scale plus a 1pt wider
+  numerator/denominator slot spread moved sample ink heights to the reference
+  `21.804pt` family and improved doc 61 v144 aligned averages
+  (`width 0.976pt -> 0.919pt`, `height 0.320pt -> 0.233pt`). When reading the
+  full report, keep suspicious ordinal-key outliers separate; v144 introduced a
+  large suspicious width row, but the aligned max remained the old long-triangle
+  row and the aligned averages improved.
+- Fraction-family width scales must be mutually exclusive. A no-context review
+  caught that compact inline fractions and area-chain fractions can both match a
+  short `S_{\bigtriangleup ...}=\frac{...}{...}S_{梯形...}` formula, which would
+  multiply `0.98 * 0.965` and over-compress. Apply the area-chain scale first
+  and use the compact-inline scale only when the area-chain scale did not match;
+  keep a regression test for that intersection.

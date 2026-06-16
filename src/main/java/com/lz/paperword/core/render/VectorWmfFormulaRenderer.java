@@ -40,10 +40,11 @@ final class VectorWmfFormulaRenderer {
     private static final FontRenderContext FONT_RENDER_CONTEXT = new FontRenderContext(new AffineTransform(), true, true);
     private static final String ANSI_PREVIEW_FACE = "Times New Roman";
     private static final double COMPACT_FRACTION_SCALE = 0.78d;
-    private static final double COMPACT_FRACTION_NUMERATOR_Y_PT = 0.8d;
-    private static final double COMPACT_FRACTION_DENOMINATOR_Y_PT = 13.0d;
-    private static final double COMPACT_FRACTION_BAR_Y_PT = 13.1d;
-    private static final double COMPACT_FRACTION_HEIGHT_PT = 24.5d;
+    private static final double COMPACT_FRACTION_LAYOUT_WIDTH_SCALE = 0.965d;
+    private static final double COMPACT_FRACTION_NUMERATOR_Y_PT = -0.2d;
+    private static final double COMPACT_FRACTION_DENOMINATOR_Y_PT = 14.0d;
+    private static final double COMPACT_FRACTION_BAR_Y_PT = 13.6d;
+    private static final double COMPACT_FRACTION_HEIGHT_PT = 25.5d;
     private static final double FRACTION_NUMERATOR_Y_PT = -2.4d;
     private static final double FRACTION_DENOMINATOR_Y_PT = 11.8d;
     private static final double FRACTION_BAR_Y_PT = 12.8d;
@@ -685,6 +686,11 @@ final class VectorWmfFormulaRenderer {
         return hasScript && hasAreaToken ? FRACTION_SCRIPT_CHAIN_WIDTH_SCALE : 1.0d;
     }
 
+    static double compactInlineFractionWidthScale(String latex) {
+        return isCompactInlineFraction(stripMetricsAndStyles(latex == null ? "" : latex))
+            ? COMPACT_FRACTION_LAYOUT_WIDTH_SCALE : 1.0d;
+    }
+
     static boolean hasClosingFenceSuperscript(String latex) {
         String text = normalizeFlatLatex(normalizeTextCommands(stripMetricsAndStyles(latex == null ? "" : latex)))
             .replaceAll("\\s+", "");
@@ -895,7 +901,11 @@ final class VectorWmfFormulaRenderer {
         }
         FormulaLayout fractions = layoutFractions(text);
         if (fractions != null) {
-            return scaleLayoutX(fractions, fractionScriptChainWidthScale(latex));
+            double fractionScale = fractionScriptChainWidthScale(latex);
+            if (fractionScale >= 0.999d) {
+                fractionScale = compactInlineFractionWidthScale(latex);
+            }
+            return scaleLayoutX(fractions, fractionScale);
         }
         String flatText = normalizeFlatLatex(text);
         FormulaLayout scripts = layoutScripts(flatText);

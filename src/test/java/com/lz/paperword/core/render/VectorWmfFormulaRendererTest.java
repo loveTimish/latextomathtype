@@ -267,12 +267,21 @@ class VectorWmfFormulaRendererTest {
     @Test
     void compactInlineFractionsUseReadableTextHeightWithTightAdvance() throws IOException {
         byte[] inline = VectorWmfFormulaRenderer.render("CO=\\frac{5}{3}", 31.0d, 26.0d);
+        byte[] inlineWide = VectorWmfFormulaRenderer.render("48\\times \\frac{1}{4}=12", 50.25d, 27.75d);
         byte[] standalone = VectorWmfFormulaRenderer.render("\\frac{5}{3}", 16.0d, 26.0d);
 
         assertTrue(minSelectedFontHeightTwips(inline) >= 200,
             "compact inline fraction slots should not be forced through 8pt script fonts");
-        assertTrue(maxTextYCoordinate(inline) - minTextYCoordinate(inline) >= 12.0d * 20.0d,
+        assertTrue(maxTextYCoordinate(inline) - minTextYCoordinate(inline) >= 13.0d * 20.0d,
             "compact inline fraction should use readable numerator/denominator baseline spacing");
+        assertEquals(0.965d, VectorWmfFormulaRenderer.compactInlineFractionWidthScale("48\\times \\frac{1}{4}=12"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.compactInlineFractionWidthScale("\\frac{5}{3}"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.compactInlineFractionWidthScale("\\displaystyle\\frac{5}{3}"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.compactInlineFractionWidthScale("\\dfrac{5}{3}"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.compactInlineFractionWidthScale("\\cfrac{5}{3}"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.compactInlineFractionWidthScale("S=\\frac{\\frac{1}{2}}{3}"));
+        assertTrue(maxTextRightCoordinate(inlineWide) < 49.0d * 20.0d,
+            "compact inline fraction rows should no longer fill the whole Word box when MathType reference is narrower");
         assertTrue(textDxTotal(inline, "5") < textDxTotal(standalone, "5"),
             "compact inline fraction should preserve tight digit advance after font-height promotion");
         assertTrue(records(inline).contains(0x0325));
@@ -295,7 +304,9 @@ class VectorWmfFormulaRendererTest {
     void fractionScriptAreaChainsUseScopedWidthCompression() throws IOException {
         String areaChain = "S_{\\bigtriangleup ENF}=\\frac{9}{9+12+12+16}S_{\\text{梯形EFCD}}"
             + "=\\frac{9}{49}\\times \\frac{7}{12}S=\\frac{3}{28}S";
+        String compactAreaChain = "S_{\\bigtriangleup ABC}=\\frac{12}{12+16}S_{\\text{梯形ABCD}}";
         byte[] compressed = VectorWmfFormulaRenderer.render(areaChain, 215.25d, 27.75d);
+        byte[] compactArea = VectorWmfFormulaRenderer.render(compactAreaChain, 165.0d, 27.75d);
         byte[] compactInline = VectorWmfFormulaRenderer.render("48\\times \\frac{1}{4}=12", 50.25d, 27.75d);
 
         assertEquals(0.98d, VectorWmfFormulaRenderer.fractionScriptChainWidthScale(areaChain));
@@ -304,8 +315,13 @@ class VectorWmfFormulaRendererTest {
             "EF=\\frac{1}{2}\\left(a+2a\\right)=\\frac{3}{2}a"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.fractionScriptChainWidthScale(
             "S_{n}=\\frac{a_{1}+a_{2}+a_{3}+a_{4}+a_{5}}{5}+b^{2}"));
+        assertEquals(0.98d, VectorWmfFormulaRenderer.fractionScriptChainWidthScale(
+            compactAreaChain));
+        assertEquals(0.965d, VectorWmfFormulaRenderer.compactInlineFractionWidthScale(compactAreaChain));
         assertTrue(maxTextRightCoordinate(compressed) < 212.0d * 20.0d);
-        assertTrue(maxTextRightCoordinate(compactInline) > 49.0d * 20.0d);
+        assertTrue(maxTextRightCoordinate(compactArea) > 160.0d * 20.0d,
+            "area-chain width compression should not be multiplied by compact-inline compression");
+        assertTrue(maxTextRightCoordinate(compactInline) < 49.0d * 20.0d);
     }
 
     @Test
