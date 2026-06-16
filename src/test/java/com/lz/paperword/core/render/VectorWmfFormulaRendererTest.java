@@ -292,6 +292,23 @@ class VectorWmfFormulaRendererTest {
     }
 
     @Test
+    void fractionScriptAreaChainsUseScopedWidthCompression() throws IOException {
+        String areaChain = "S_{\\bigtriangleup ENF}=\\frac{9}{9+12+12+16}S_{\\text{梯形EFCD}}"
+            + "=\\frac{9}{49}\\times \\frac{7}{12}S=\\frac{3}{28}S";
+        byte[] compressed = VectorWmfFormulaRenderer.render(areaChain, 215.25d, 27.75d);
+        byte[] compactInline = VectorWmfFormulaRenderer.render("48\\times \\frac{1}{4}=12", 50.25d, 27.75d);
+
+        assertEquals(0.98d, VectorWmfFormulaRenderer.fractionScriptChainWidthScale(areaChain));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.fractionScriptChainWidthScale("48\\times \\frac{1}{4}=12"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.fractionScriptChainWidthScale(
+            "EF=\\frac{1}{2}\\left(a+2a\\right)=\\frac{3}{2}a"));
+        assertEquals(1.0d, VectorWmfFormulaRenderer.fractionScriptChainWidthScale(
+            "S_{n}=\\frac{a_{1}+a_{2}+a_{3}+a_{4}+a_{5}}{5}+b^{2}"));
+        assertTrue(maxTextRightCoordinate(compressed) < 212.0d * 20.0d);
+        assertTrue(maxTextRightCoordinate(compactInline) > 49.0d * 20.0d);
+    }
+
+    @Test
     void nestedInlineFractionsDoNotUseCompactFractionSlotGeometry() throws IOException {
         byte[] nested = VectorWmfFormulaRenderer.render("CO=\\frac{\\frac{1}{2}}{3}", 42.0d, 28.0d);
 

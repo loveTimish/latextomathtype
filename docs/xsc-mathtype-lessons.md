@@ -2027,3 +2027,16 @@ batch, then append any useful lesson or pitfall found in that round.
   stayed unchanged. Full comparison improved height without widening formulas:
   `aligned_ink_height_abs_delta_pt avg 0.366pt -> 0.318pt`, max
   `4.773pt -> 3.484pt`, with width avg unchanged at `1.043pt`.
+- Fraction formulas return from `layoutFractions(...)` before the generic
+  `layoutScripts(...)` branch, so `scriptRelationWidthScale(...)` cannot fix
+  fraction-heavy area chains. For doc 61, the remaining width-heavy cluster was
+  `\frac` + script/area formulas such as
+  `S_{\bigtriangleup ENF}=\frac{9}{...}...`; applying a scoped `0.98` X scale
+  to only non-nested fraction layouts with script/area tokens reduced these
+  rows while leaving compact inline fractions (`48\times\frac{1}{4}=12`) and
+  plain algebraic fractions (`EF=\frac{1}{2}(a+2a)=...`) unchanged. v142 moved
+  `aligned_ink_width_abs_delta_pt avg 1.043pt -> 0.981pt` with height avg
+  unchanged at `0.318pt`. Do not treat every long `S_` fraction as an area
+  formula; a no-context review caught that overmatch. Require explicit area
+  semantics such as `\bigtriangleup`, `\Delta`, `\Updelta`, `梯形`, or `三角形`
+  so ordinary sequences like `S_{n}=\frac{...}{...}+b^{2}` remain unscaled.

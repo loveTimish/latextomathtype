@@ -55,6 +55,7 @@ final class VectorWmfFormulaRenderer {
     private static final double SIMPLE_LINEAR_FONT_Y_SCALE = 0.92d;
     private static final double SHORT_LINEAR_EQUATION_FONT_Y_SCALE = 1.076d;
     private static final double SHORT_LINEAR_EQUATION_WIDTH_SCALE = 1.08d;
+    private static final double FRACTION_SCRIPT_CHAIN_WIDTH_SCALE = 0.98d;
     private static final double SCRIPT_FONT_HEIGHT_SCALE = 0.90d;
     private static final double SCRIPT_GLYPH_WIDTH_SCALE = 0.84d;
     private static final double STANDALONE_TWO_DIGIT_WIDTH_SCALE = 0.79d;
@@ -641,6 +642,18 @@ final class VectorWmfFormulaRenderer {
         return heightPt <= 12.1d && isShortLinearEquation(latex) ? SHORT_LINEAR_EQUATION_WIDTH_SCALE : 1.0d;
     }
 
+    static double fractionScriptChainWidthScale(String latex) {
+        String raw = stripMetricsAndStyles(latex == null ? "" : latex);
+        if (!hasFractionCommand(raw) || raw.length() <= 45 || hasNestedFraction(raw)) {
+            return 1.0d;
+        }
+        String text = normalizeFlatLatex(normalizeTextCommands(raw)).replaceAll("\\s+", "");
+        boolean hasScript = text.contains("_") || text.contains("^");
+        boolean hasAreaToken = raw.contains("\\bigtriangleup") || raw.contains("\\Delta") || raw.contains("\\Updelta")
+            || raw.contains("梯形") || raw.contains("三角形");
+        return hasScript && hasAreaToken ? FRACTION_SCRIPT_CHAIN_WIDTH_SCALE : 1.0d;
+    }
+
     static boolean hasClosingFenceSuperscript(String latex) {
         String text = normalizeFlatLatex(normalizeTextCommands(stripMetricsAndStyles(latex == null ? "" : latex)))
             .replaceAll("\\s+", "");
@@ -851,7 +864,7 @@ final class VectorWmfFormulaRenderer {
         }
         FormulaLayout fractions = layoutFractions(text);
         if (fractions != null) {
-            return fractions;
+            return scaleLayoutX(fractions, fractionScriptChainWidthScale(latex));
         }
         String flatText = normalizeFlatLatex(text);
         FormulaLayout scripts = layoutScripts(flatText);
