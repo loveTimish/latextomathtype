@@ -676,6 +676,7 @@ class VectorWmfFormulaRendererTest {
         assertTrue(firstTextDxTotal(twentyFive) < firstTextDxTotal(longNumber));
         assertEquals(firstTextDxTotal(twentyFive), firstTextDxTotal(thirtyFive));
         assertTrue(maxTextRightCoordinate(bSquared) < maxTextRightCoordinate(aSquared));
+        assertTrue(maxTextRightCoordinate(bSquared) < 172);
         assertTrue(maxTextRightCoordinate(bCubed) > maxTextRightCoordinate(bSquared));
         assertTrue(maxTextRightCoordinate(cSquared) > maxTextRightCoordinate(bSquared));
         assertTrue(maxRecordCoordinate(bd) <= 18.0d * 20.0d);
