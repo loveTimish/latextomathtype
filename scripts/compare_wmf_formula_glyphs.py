@@ -100,12 +100,40 @@ def summary_value(item: dict[str, Any], key: str) -> Any:
     return ((item.get("wmf") or {}).get("summary") or {}).get(key)
 
 
+def run_byte_count(runs: list[dict[str, Any]]) -> int:
+    return sum(int(run.get("byteCount") or 0) for run in runs)
+
+
+def run_advance_sum(runs: list[dict[str, Any]]) -> float | None:
+    values = [fnum(run.get("advanceWidthPt")) for run in runs]
+    nums = [value for value in values if value is not None]
+    if not nums:
+        return None
+    return sum(nums)
+
+
+def trust_record_width_delta(row: dict[str, Any]) -> str:
+    if not row.get("runStructureComparable"):
+        return "low_run_structure_mismatch"
+    if fnum(row.get("magickInkWidthDeltaPt")) is None:
+        return "medium_no_ink"
+    record = abs(float(row.get("recordWidthDeltaPt") or 0.0))
+    ink = abs(float(row.get("magickInkWidthDeltaPt") or 0.0))
+    if record >= 1.0 and ink <= 0.25:
+        return "low_record_only"
+    return "usable_with_visual_check"
+
+
 def item_row(source: dict[str, Any], generated: dict[str, Any]) -> dict[str, Any]:
     source_runs = ((source.get("wmf") or {}).get("runs") or [])
     generated_runs = ((generated.get("wmf") or {}).get("runs") or [])
     source_run_keys = {run_key(run) for run in source_runs}
     generated_run_keys = {run_key(run) for run in generated_runs}
-    return {
+    source_byte_count = run_byte_count(source_runs)
+    generated_byte_count = run_byte_count(generated_runs)
+    source_advance_sum = run_advance_sum(source_runs)
+    generated_advance_sum = run_advance_sum(generated_runs)
+    row = {
         "objectIndex": generated.get("objectIndex") or source.get("objectIndex"),
         "sourceFormula": source.get("formula"),
         "generatedFormula": generated.get("formula"),
@@ -119,6 +147,12 @@ def item_row(source: dict[str, Any], generated: dict[str, Any]) -> dict[str, Any
         "recordWidthDeltaPt": round3(delta(summary_value(generated, "recordWidthPt"), summary_value(source, "recordWidthPt"))),
         "recordWidthAbsDeltaPt": round3(abs_delta(summary_value(generated, "recordWidthPt"), summary_value(source, "recordWidthPt"))),
         "recordWidthRatio": round3(ratio(summary_value(generated, "recordWidthPt"), summary_value(source, "recordWidthPt"))),
+        "sourceByteCount": source_byte_count,
+        "generatedByteCount": generated_byte_count,
+        "byteCountDelta": generated_byte_count - source_byte_count,
+        "sourceAdvanceSumPt": round3(source_advance_sum),
+        "generatedAdvanceSumPt": round3(generated_advance_sum),
+        "advanceSumDeltaPt": round3(delta(generated_advance_sum, source_advance_sum)),
         "magickInkWidthDeltaPt": round3(delta(generated.get("magickInkWidthPt"), source.get("magickInkWidthPt"))),
         "magickInkWidthAbsDeltaPt": round3(abs_delta(generated.get("magickInkWidthPt"), source.get("magickInkWidthPt"))),
         "magickInkWidthRatio": round3(ratio(generated.get("magickInkWidthPt"), source.get("magickInkWidthPt"))),
@@ -131,9 +165,16 @@ def item_row(source: dict[str, Any], generated: dict[str, Any]) -> dict[str, Any
         "matchedRunKeys": len(source_run_keys & generated_run_keys),
         "missingRunKeys": len(source_run_keys - generated_run_keys),
         "extraRunKeys": len(generated_run_keys - source_run_keys),
+        "runStructureComparable": (
+            len(source_runs) == len(generated_runs)
+            and text_join(source) == text_join(generated)
+            and source_run_keys == generated_run_keys
+        ),
         "sourceContext": source.get("context"),
         "generatedContext": generated.get("context"),
     }
+    row["recordWidthTrust"] = trust_record_width_delta(row)
+    return row
 
 
 def run_rows(source: dict[str, Any], generated: dict[str, Any]) -> list[dict[str, Any]]:
@@ -161,6 +202,10 @@ def run_rows(source: dict[str, Any], generated: dict[str, Any]) -> list[dict[str
                 "rightEdgeDeltaPt": round3(delta(g.get("rightEdgePt"), s.get("rightEdgePt"))),
                 "sourceAdvancePt": s.get("advanceWidthPt"),
                 "generatedAdvancePt": g.get("advanceWidthPt"),
+                "sourceByteCount": s.get("byteCount"),
+                "generatedByteCount": g.get("byteCount"),
+                "sourceRawTextHex": s.get("rawTextHex"),
+                "generatedRawTextHex": g.get("rawTextHex"),
             }
         )
     return rows
@@ -205,6 +250,25 @@ def render_text(summary: dict[str, Any], limit: int) -> str:
                 record=row["recordWidthDeltaPt"] or 0.0,
                 ink=row.get("magickInkWidthDeltaPt"),
                 shape=row.get("shapeWidthDeltaPt"),
+                text=(row.get("generatedFormula") or row.get("generatedText") or "")[:90],
+            )
+        )
+    lines.append("")
+    lines.append("Record-only / structure mismatch risks")
+    risk_rows = [
+        row for row in summary["formulaRows"]
+        if str(row.get("recordWidthTrust") or "").startswith("low_")
+    ]
+    for row in risk_rows[:limit]:
+        lines.append(
+            "  #{idx}: trust={trust} record={record:+.3f}pt runs={sr}->{gr} bytes={sb}->{gb} text={text}".format(
+                idx=row["objectIndex"],
+                trust=row.get("recordWidthTrust"),
+                record=row.get("recordWidthDeltaPt") or 0.0,
+                sr=row.get("sourceRunCount"),
+                gr=row.get("generatedRunCount"),
+                sb=row.get("sourceByteCount"),
+                gb=row.get("generatedByteCount"),
                 text=(row.get("generatedFormula") or row.get("generatedText") or "")[:90],
             )
         )
@@ -257,6 +321,11 @@ def compare(source_path: Path, generated_path: Path, limit: int) -> dict[str, An
         "magickInkWidthDeltaPt": summarize([row.get("magickInkWidthDeltaPt") for row in rows]),
         "magickInkHeightDeltaPt": summarize([row.get("magickInkHeightDeltaPt") for row in rows]),
         "shapeWidthDeltaPt": summarize([row.get("shapeWidthDeltaPt") for row in rows]),
+        "advanceSumDeltaPt": summarize([row.get("advanceSumDeltaPt") for row in rows]),
+        "lowTrustRecordWidthCount": sum(
+            1 for row in rows if str(row.get("recordWidthTrust") or "").startswith("low_")
+        ),
+        "runStructureMismatchCount": sum(1 for row in rows if not row.get("runStructureComparable")),
         "worstRecordWidth": worst(rows, "recordWidthDeltaPt", limit),
         "worstMagickInkWidth": worst(rows, "magickInkWidthDeltaPt", limit),
         "worstMagickInkHeight": worst(rows, "magickInkHeightDeltaPt", limit),

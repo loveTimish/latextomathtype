@@ -1810,3 +1810,20 @@ batch, then append any useful lesson or pitfall found in that round.
   passing before relying on the tool for glyph-size diagnosis.
 - v134 byte-level glyph sample:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\wmf-glyph-bytes-byte-sample.csv`
+- Source MathType WMF record geometry is not structurally comparable to the
+  generated vector WMF for many formulas. In the doc 61 first-30 worst-width
+  sample, source objectIndex `15` (`S_{1}=a^{2}=1`) has `5` runs while the
+  generated WMF has `6`; objectIndex `30` has `6` source runs versus `14`
+  generated runs. Large source/generated `recordWidthDeltaPt` values in this
+  situation are diagnostic only, not a direct tuning target.
+- `scripts/compare_wmf_formula_glyphs.py` now reports
+  `runStructureComparable`, byte counts, advance-sum deltas, and
+  `recordWidthTrust`. Treat `low_run_structure_mismatch` as a stop sign for
+  renderer constants: use Word/page ink or another acceptance-level visual
+  metric before changing widths.
+- `runStructureComparable` must require identical run keys
+  `(runIndex, fontFace, text)`, not just equal run count and equal concatenated
+  text. Same joined text with different per-run fonts is still structurally
+  different and should stay low-trust.
+- v134 source/generated glyph structural diff:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\wmf-glyph-diff-source-generated-worst-first30-v3.txt`
