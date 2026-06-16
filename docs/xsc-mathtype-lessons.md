@@ -1968,3 +1968,25 @@ batch, then append any useful lesson or pitfall found in that round.
   `aligned_ink_height_abs_delta_pt avg=0.829pt`), so the next renderer work
   should target the remaining height-heavy and long-formula families rather
   than more alignment plumbing.
+- Compact inline fractions were height-heavy because their numerator and
+  denominator slots were rendered as 8pt script text inside a compact layout.
+  The better mechanism is to keep compact x placement and compressed `dx`
+  advances, but render the fraction-slot text at readable 12pt height and
+  widen the numerator/denominator baseline spacing. On doc 61 worst-height
+  samples, generated `magickInkHeightPt` moved from about `12.884pt` to
+  `19.821pt` for simple inline fractions and from `15.5pt` to `23.5pt` for
+  wide CJK ratio fractions; old residuals around `-9pt` dropped to roughly
+  `-1.1..-3.1pt` on the sampled worst rows.
+- WMF preview geometry edits must bump `LaTeXImageRenderer.CACHE_VERSION`
+  before regenerating DOCX evidence. A same-version rebuild reused old cached
+  WMF media and falsely showed no change even after renderer code changed.
+  Treat unchanged measured font heights after a renderer edit as a cache-key
+  suspect before tuning more constants.
+- Do not compact nested fractions with the simple inline-fraction slot layout.
+  `count <= 2` alone still allows constructs such as
+  `CO=\frac{\frac{1}{2}}{3}`; those need non-compact vertical geometry to
+  avoid overlapping slots.
+- When promoting compact inline fraction slots from 8pt script-sized text to
+  readable text, do not blindly force every child run to non-script. Real script
+  children inside a numerator/denominator, such as `\frac{S_{1}}{ABC}`, must
+  remain script-sized while the main slot text stays readable.

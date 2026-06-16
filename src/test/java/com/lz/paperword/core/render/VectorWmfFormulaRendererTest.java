@@ -234,6 +234,44 @@ class VectorWmfFormulaRendererTest {
     }
 
     @Test
+    void compactInlineFractionsUseReadableTextHeightWithTightAdvance() throws IOException {
+        byte[] inline = VectorWmfFormulaRenderer.render("CO=\\frac{5}{3}", 31.0d, 26.0d);
+        byte[] standalone = VectorWmfFormulaRenderer.render("\\frac{5}{3}", 16.0d, 26.0d);
+
+        assertTrue(minSelectedFontHeightTwips(inline) >= 200,
+            "compact inline fraction slots should not be forced through 8pt script fonts");
+        assertTrue(maxTextYCoordinate(inline) - minTextYCoordinate(inline) >= 12.0d * 20.0d,
+            "compact inline fraction should use readable numerator/denominator baseline spacing");
+        assertTrue(textDxTotal(inline, "5") < textDxTotal(standalone, "5"),
+            "compact inline fraction should preserve tight digit advance after font-height promotion");
+        assertTrue(records(inline).contains(0x0325));
+        assertFalse(records(inline).contains(0x0F43));
+    }
+
+    @Test
+    void nestedInlineFractionsDoNotUseCompactFractionSlotGeometry() throws IOException {
+        byte[] nested = VectorWmfFormulaRenderer.render("CO=\\frac{\\frac{1}{2}}{3}", 42.0d, 28.0d);
+
+        assertTrue(VectorWmfFormulaRenderer.canRender("CO=\\frac{\\frac{1}{2}}{3}"));
+        assertTrue(maxTextYCoordinate(nested) > 20.0d * 20.0d,
+            "nested inline fractions need non-compact vertical geometry to avoid slot overlap");
+        assertTrue(records(nested).contains(0x0325));
+        assertFalse(records(nested).contains(0x0F43));
+    }
+
+    @Test
+    void compactInlineFractionPreservesRealScriptChildren() throws IOException {
+        byte[] wmf = VectorWmfFormulaRenderer.render("CO=\\frac{S_{1}}{ABC}", 46.0d, 28.0d);
+
+        assertTrue(textFontHeightTwips(wmf, "S") >= 200,
+            "main numerator text should use readable compact fraction height");
+        assertTrue(textFontHeightTwips(wmf, "1") < 200,
+            "real script children inside compact fraction slots should remain script-sized");
+        assertTrue(records(wmf).contains(0x0325));
+        assertFalse(records(wmf).contains(0x0F43));
+    }
+
+    @Test
     void longLinearFractionSeriesCanRenderAsVectorTextAndLines() throws IOException {
         String latex = "\\left(\\frac{1}{2}+\\frac{1}{3}+\\frac{1}{4}+\\cdots +\\frac{1}{20}\\right)"
             + "+\\left(\\frac{2}{3}+\\frac{2}{4}+\\frac{2}{5}+\\cdots +\\frac{2}{20}\\right)"
@@ -996,6 +1034,75 @@ class VectorWmfFormulaRendererTest {
         return 0;
     }
 
+    private static int textDxTotal(byte[] data, String asciiText) {
+        byte[] expected = asciiText.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        while (offset + 6 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x0A32 && offset + 14 <= data.length) {
+                int count = word(data, offset + 10);
+                int textOffset = offset + 14;
+                if (count == expected.length && bytesEqual(data, textOffset, expected)) {
+                    int dxOffset = textOffset + count + (count & 1);
+                    int dxTotal = 0;
+                    while (dxOffset + 2 <= offset + sizeWords * 2) {
+                        dxTotal += word(data, dxOffset);
+                        dxOffset += 2;
+                    }
+                    return dxTotal;
+                }
+            }
+            offset += sizeWords * 2;
+        }
+        return 0;
+    }
+
+    private static int textFontHeightTwips(byte[] data, String asciiText) {
+        byte[] expected = asciiText.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        List<Integer> fontHeights = new ArrayList<>();
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        int selected = -1;
+        while (offset + 6 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x02FB && offset + 8 <= data.length) {
+                fontHeights.add(Math.abs(signedWord(data, offset + 6)));
+            } else if (function == 0x012D && offset + 8 <= data.length) {
+                selected = word(data, offset + 6);
+            } else if (function == 0x0A32 && offset + 14 <= data.length) {
+                int count = word(data, offset + 10);
+                int textOffset = offset + 14;
+                if (selected >= 0 && selected < fontHeights.size()
+                    && count == expected.length && bytesEqual(data, textOffset, expected)) {
+                    return fontHeights.get(selected);
+                }
+            }
+            offset += sizeWords * 2;
+        }
+        return 0;
+    }
+
+    private static boolean bytesEqual(byte[] data, int offset, byte[] expected) {
+        if (offset < 0 || offset + expected.length > data.length) {
+            return false;
+        }
+        for (int i = 0; i < expected.length; i++) {
+            if (data[offset + i] != expected[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static int firstTextAverageDx(byte[] data) {
         int offset = hasPlaceableHeader(data) ? 22 : 0;
         offset += 18;
@@ -1045,6 +1152,30 @@ class VectorWmfFormulaRendererTest {
             offset += sizeWords * 2;
         }
         return total;
+    }
+
+    private static int minSelectedFontHeightTwips(byte[] data) {
+        List<Integer> fontHeights = new ArrayList<>();
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        int selected = -1;
+        int min = Integer.MAX_VALUE;
+        while (offset + 6 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x02FB && offset + 8 <= data.length) {
+                fontHeights.add(Math.abs(signedWord(data, offset + 6)));
+            } else if (function == 0x012D && offset + 8 <= data.length) {
+                selected = word(data, offset + 6);
+            } else if (function == 0x0A32 && selected >= 0 && selected < fontHeights.size()) {
+                min = Math.min(min, fontHeights.get(selected));
+            }
+            offset += sizeWords * 2;
+        }
+        return min == Integer.MAX_VALUE ? 0 : min;
     }
 
     private static int maxTextRightCoordinate(byte[] data) {

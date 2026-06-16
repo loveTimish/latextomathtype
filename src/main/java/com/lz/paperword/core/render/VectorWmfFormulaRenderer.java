@@ -40,6 +40,10 @@ final class VectorWmfFormulaRenderer {
     private static final FontRenderContext FONT_RENDER_CONTEXT = new FontRenderContext(new AffineTransform(), true, true);
     private static final String ANSI_PREVIEW_FACE = "Times New Roman";
     private static final double COMPACT_FRACTION_SCALE = 0.78d;
+    private static final double COMPACT_FRACTION_NUMERATOR_Y_PT = 0.8d;
+    private static final double COMPACT_FRACTION_DENOMINATOR_Y_PT = 13.0d;
+    private static final double COMPACT_FRACTION_BAR_Y_PT = 13.1d;
+    private static final double COMPACT_FRACTION_HEIGHT_PT = 24.5d;
     private static final Font TIMES_FONT = new Font(ANSI_PREVIEW_FACE, Font.PLAIN, 12);
     private static final Font SYMBOL_FONT = new Font("Symbol", Font.PLAIN, 12);
     private static final Font CJK_FONT = new Font("SimSun", Font.PLAIN, 12);
@@ -1181,11 +1185,14 @@ final class VectorWmfFormulaRenderer {
             double fractionWidth = fractionContentWidth + fractionPad;
             double fractionX = x + 1.0d;
             if (compactInlineFraction) {
-                appendScaledLayout(placed, lines, numerator, COMPACT_FRACTION_SCALE,
-                    fractionX + (fractionWidth - numeratorWidth * COMPACT_FRACTION_SCALE) / 2.0d, 2.0d, true);
-                appendScaledLayout(placed, lines, denominator, COMPACT_FRACTION_SCALE,
-                    fractionX + (fractionWidth - denominatorWidth * COMPACT_FRACTION_SCALE) / 2.0d, 9.5d, true);
-                lines.add(new LineSegment(fractionX, 10.0d, fractionX + fractionWidth, 10.0d));
+                appendCompactInlineFractionLayout(placed, lines, numerator,
+                    fractionX + (fractionWidth - numeratorWidth * COMPACT_FRACTION_SCALE) / 2.0d,
+                    COMPACT_FRACTION_NUMERATOR_Y_PT);
+                appendCompactInlineFractionLayout(placed, lines, denominator,
+                    fractionX + (fractionWidth - denominatorWidth * COMPACT_FRACTION_SCALE) / 2.0d,
+                    COMPACT_FRACTION_DENOMINATOR_Y_PT);
+                lines.add(new LineSegment(fractionX, COMPACT_FRACTION_BAR_Y_PT,
+                    fractionX + fractionWidth, COMPACT_FRACTION_BAR_Y_PT));
             } else {
                 appendLayout(placed, lines, numerator, fractionX + (fractionWidth - numeratorWidth) / 2.0d, -2.0d);
                 appendLayout(placed, lines, denominator, fractionX + (fractionWidth - denominatorWidth) / 2.0d, 10.9d);
@@ -1196,7 +1203,8 @@ final class VectorWmfFormulaRenderer {
             cursor = denominatorEnd + 1;
         }
         return sawFraction && !placed.isEmpty()
-            ? new FormulaLayout(placed, lines, Math.max(x, 1.0d), compactInlineFraction ? 17.2d : 25.5d)
+            ? new FormulaLayout(placed, lines, Math.max(x, 1.0d),
+                compactInlineFraction ? COMPACT_FRACTION_HEIGHT_PT : 25.5d)
             : null;
     }
 
@@ -1214,7 +1222,35 @@ final class VectorWmfFormulaRenderer {
             count++;
             cursor += 5;
         }
-        return count <= 2 && text.length() <= 80 && hasInlineFractionContext(text);
+        return count <= 2 && text.length() <= 80 && !hasNestedFraction(text) && hasInlineFractionContext(text);
+    }
+
+    private static boolean hasNestedFraction(String text) {
+        int cursor = 0;
+        while ((cursor = text.indexOf("\\frac", cursor)) >= 0) {
+            int numeratorStart = skipWhitespaceForward(text, cursor + 5);
+            if (numeratorStart >= text.length() || text.charAt(numeratorStart) != '{') {
+                return false;
+            }
+            int numeratorEnd = findGroupEnd(text, numeratorStart);
+            if (numeratorEnd < 0) {
+                return false;
+            }
+            int denominatorStart = skipWhitespaceForward(text, numeratorEnd + 1);
+            if (denominatorStart >= text.length() || text.charAt(denominatorStart) != '{') {
+                return false;
+            }
+            int denominatorEnd = findGroupEnd(text, denominatorStart);
+            if (denominatorEnd < 0) {
+                return false;
+            }
+            if (text.substring(numeratorStart + 1, numeratorEnd).contains("\\frac")
+                || text.substring(denominatorStart + 1, denominatorEnd).contains("\\frac")) {
+                return true;
+            }
+            cursor = denominatorEnd + 1;
+        }
+        return false;
     }
 
     private static boolean hasInlineFractionContext(String text) {
@@ -1407,6 +1443,21 @@ final class VectorWmfFormulaRenderer {
         for (LineSegment line : layout.lines()) {
             lines.add(new LineSegment(dx + line.x1Pt() * scale, dy + line.y1Pt() * scale,
                 dx + line.x2Pt() * scale, dy + line.y2Pt() * scale));
+        }
+    }
+
+    private static void appendCompactInlineFractionLayout(List<PlacedText> placed, List<LineSegment> lines,
+        FormulaLayout layout, double dx, double dy) {
+        for (PlacedText run : layout.runs()) {
+            placed.add(new PlacedText(run.text(), run.cjk(), run.script(), run.display(),
+                dx + run.xPt() * COMPACT_FRACTION_SCALE, dy + run.baselinePt() * COMPACT_FRACTION_SCALE,
+                run.widthScale() * COMPACT_FRACTION_SCALE));
+        }
+        for (LineSegment line : layout.lines()) {
+            lines.add(new LineSegment(dx + line.x1Pt() * COMPACT_FRACTION_SCALE,
+                dy + line.y1Pt() * COMPACT_FRACTION_SCALE,
+                dx + line.x2Pt() * COMPACT_FRACTION_SCALE,
+                dy + line.y2Pt() * COMPACT_FRACTION_SCALE));
         }
     }
 
