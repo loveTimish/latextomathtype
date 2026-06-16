@@ -1430,3 +1430,90 @@ batch, then append any useful lesson or pitfall found in that round.
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v126-exact-s1-relation-width\formula-preview-ink-source-vs-v126-first30.json`
 - v126 aligned physical metrics:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v126-exact-s1-relation-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- v127 continues the repeated parenthesized-power equation tuning after v124.
+  Lowering `EQUATION_PAREN_POWER_WIDTH_SCALE` from `0.913` to `0.910` moves
+  sourceIndex `18` visible ink width residual from v126 `+0.248pt` to
+  `+0.198pt` without changing height. The scope remains
+  `repeatedEquationParenPower(...)`: the formula must contain `=` and at least
+  two closing-fence superscript segments, so single equations such as
+  `S=\left(a+b\right)^2=9` stay out of this local compression path.
+- v127 on doc 61 first-30 ink versus v126: width average improved from
+  `0.103pt` to `0.102pt`, p90 improved from `0.226pt` to `0.214pt`, and max
+  improved from `0.248pt` to `0.244pt`. Height average, p90, and max stayed
+  `0.075pt`, `0.112pt`, and `0.127pt`.
+- v127 tightens the regression test threshold for repeated parenthesized-power
+  equations from `leftRightEquation * 1.46` to `* 1.455`, still relative rather
+  than exact so future small calibration is possible while avoiding a return to
+  the wider v124/v126 state.
+- v127 structural and physical gates still passed on doc 61: `520` valid
+  MathType OLE, `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE,
+  zero bitmap WMF, zero WMF LaTeX leaks, zero review-required suspicious WMF
+  text, ordinal target WMF width/height `520/520` within 1%, and ordinal
+  target shape width/height `520/520` within 1%.
+- v127 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v127-repeated-paren-equation-width\xsc测试集完整重建_61.docx`
+- v127 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v127-repeated-paren-equation-width\leak-scan-61.json`
+- v127 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v127-repeated-paren-equation-width\wmf-report-61.json`
+- v127 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v127-repeated-paren-equation-width\formula-preview-ink-source-vs-v127-first30.json`
+- v127 aligned physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v127-repeated-paren-equation-width\pair-metrics-aligned\4-3-4 蝴蝶模型_summary.json`
+- Added `scripts/measure_wmf_formula_glyphs.py` as the next diagnostic wheel.
+  It reads a DOCX, maps each formula object to its WMF preview, parses
+  placeable header, `SetWindowExt`, `CreateFontIndirect`, `SelectObject`,
+  `ExtTextOut`, `TextOut`, and `Polyline`, and can optionally render the
+  preview media with ImageMagick to measure real ink bbox. Keep the distinction
+  explicit: `ExtTextOut` `dx[]` is record-level advance/layout geometry, not
+  proof that Word-visible ink changed.
+- The glyph tool reports three layers per formula: outer box metrics
+  (`v:shape`, `w:dxaOrig/w:dyaOrig`, WMF placeable/window extents), run metrics
+  (`fontFace`, `fontHeightPt`, `fontWidthPt`, `charset`, `xPt`, `baselinePt`,
+  `advanceWidthPt`, `rightEdgePt`, and per-character left/right/dx), and optional
+  ImageMagick preview-media ink metrics
+  (`magickInkLeft/Top/Right/Bottom/Width/HeightPt`). Use it with the existing
+  source-vs-generated ink comparison when deciding whether a width change is
+  visual or only record-level.
+- First v127 glyph run on doc 61 indexes `5,7,9,15,18` shows why this tool is
+  needed. For sourceIndex `18`, `recordWidth=109.1pt` and ImageMagick preview
+  ink is `107.5pt` wide under fixed `-density 144`; the record runs are
+  continuous and show no artificial spacing. For sourceIndex `15`,
+  `recordWidth=47.1pt` but ImageMagick preview ink is `43.229pt` wide, so
+  further tuning cannot rely on total `dx` alone; font width/height and real
+  renderer ink must be checked together.
+- v127 glyph outputs:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v127-repeated-paren-equation-width\wmf-glyph-metrics-5-7-9-15-18.json`
+- v127 glyph text summary:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v127-repeated-paren-equation-width\wmf-glyph-metrics-5-7-9-15-18.txt`
+- v127 glyph CSV exports:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v127-repeated-paren-equation-width\wmf-glyph-runs-5-7-9-15-18.csv`
+  and
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v127-repeated-paren-equation-width\wmf-glyph-chars-5-7-9-15-18.csv`
+- No-context review caught an important measurement pitfall: generated WMFs use
+  about `20` logical units per point, but official/source MathType WMFs can use
+  different `SetWindowExt` units. The glyph tool now derives separate X/Y
+  `unitsPerPt` from `SetWindowExt` and the WMF placeable physical size when
+  available, falling back to `20` only when the physical scale is missing. Do
+  not compare source-run advances before checking the reported unit scale.
+- Source WMF record metrics can still exceed the visible box even after unit
+  scaling because official MathType previews may contain overlapping or
+  alternate-font text runs. Treat source WMF run metrics as diagnostic evidence,
+  not as an acceptance target by themselves; use ink/page render metrics for the
+  final visual judgment.
+- The glyph tool now keeps a real WMF object table: font, pen, brush, palette,
+  and region creation all occupy object indexes; `DeleteObject` frees indexes;
+  `SelectObject` updates the active font only when the selected object is a
+  font. This avoids shifting font handles when official/source WMFs create pens
+  or brushes before fonts.
+- `ExtTextOut` parsing now handles optional `ETO_OPAQUE` / `ETO_CLIPPED`
+  rectangles before reading text and `dx[]`. Without this, clipped official WMF
+  text records can shift the parsed raw text and every per-character advance.
+- ImageMagick WMF ink measurement is explicitly named `magickInk*` and rendered
+  with fixed `-density 144 -background white -alpha remove -alpha off`. This is
+  an automated preview-media diagnostic, not Word/GDI truth; use Word/page ink
+  checks before treating it as final visual evidence.
+- `scripts/measure_wmf_formula_glyphs.py --with-ink` depends on both ImageMagick
+  and Pillow. The script reports `pillowAvailable` and per-formula
+  `magickInkError`; use `--require-magick-ink` when a run must fail instead of
+  silently producing record-only diagnostics.

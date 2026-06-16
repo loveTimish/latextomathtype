@@ -553,7 +553,7 @@ class VectorWmfFormulaRendererTest {
         assertTrue(totalTextDx(ratioFormula) > totalTextDx(upperSubscript) * 6);
         assertTrue(maxTextRightCoordinate(leftRightEquation) > maxTextRightCoordinate(upperSubscript) * 6);
         assertTrue(maxTextRightCoordinate(repeatedLeftRightEquation) < 2200);
-        assertTrue(totalTextDx(repeatedLeftRightEquation) < totalTextDx(leftRightEquation) * 1.46d);
+        assertTrue(totalTextDx(repeatedLeftRightEquation) < totalTextDx(leftRightEquation) * 1.455d);
         assertTrue(totalTextDx(repeatedLeftRightEquation) < 2200);
         assertTrue(maxRecordCoordinate(upperSubscript) <= 12.0d * 20.0d);
         assertTrue(maxRecordCoordinate(lowerSuperscript) <= 12.75d * 20.0d);
