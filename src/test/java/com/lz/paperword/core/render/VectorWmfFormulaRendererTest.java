@@ -664,10 +664,12 @@ class VectorWmfFormulaRendererTest {
         byte[] cSquared = VectorWmfFormulaRenderer.render("c^{2}", 9.75d, 15.75d);
 
         assertTrue(createFontWidths(singleS).get(0) > 0);
+        assertEquals(100, createFontWidths(singleS).get(0));
         assertEquals(0, createFontWidths(singleA).get(0));
         assertEquals(0, createFontWidths(scriptS).get(0));
         assertEquals(0, createFontWidths(scriptS3).get(0));
         assertTrue(firstTextDxTotal(singleS) > firstTextDxTotal(singleA));
+        assertTrue(maxTextRightCoordinate(singleS) < 10.5d * 20.0d);
         assertTrue(totalTextDx(scriptS) < totalTextDx(scriptA1));
         assertTrue(totalTextDx(scriptS3) > totalTextDx(scriptS));
         assertTrue(firstTextDxTotal(bd) > firstTextDxTotal(ab));

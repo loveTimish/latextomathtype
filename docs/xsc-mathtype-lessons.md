@@ -1693,3 +1693,35 @@ batch, then append any useful lesson or pitfall found in that round.
   compactness but still allow the exact `0.908` backslide to `0.910`; the test
   now caps the repeated equation `maxTextRightCoordinate` below `2189` logical
   units, which is above the v131 value and below the v130/backslide value.
+- v132 revisits standalone `S` after it became the first-30 worst width
+  residual again. Lowering `STANDALONE_SINGLE_S_WIDTH_SCALE` from `1.10` to
+  `1.065` reduced doc 61 sourceIndex `3` visible Word/page ink from v131
+  `+0.189pt` to below the worst-width list; first-30 width average improved
+  from `0.085pt` to `0.079pt`, p90 from `0.164pt` to `0.153pt`, and max from
+  `0.189pt` to `0.181pt`. Height metrics stayed unchanged.
+- v132 confirms the old v83/v84 lesson still holds: ImageMagick ink did not
+  move for standalone `S`, while Word/page ink did, so do not use
+  `magickInkWidthPt` as the final signal for tiny single-glyph calibration.
+  The v131-to-v132 glyph diff showed only objectIndex `3` moving materially:
+  record width `-0.350pt`, sampled `S_{1}` relation formulas, `S_{2}=2`,
+  parenthesized powers, `b^{2}`, `b=2`, `CD`, `25`, `35`, and triangle-chain
+  relations stayed at `0.000pt` record-width delta.
+- v132 structural gates on doc 61 still passed: `520` valid MathType OLE,
+  `520` vector WMF, zero visible LaTeX leaks, zero invalid OLE, zero bitmap WMF,
+  zero WMF LaTeX leaks, and zero review-required suspicious WMF text.
+- v132 target physical metrics on doc 61 still passed when aligned with
+  `full-61.request.json`: target WMF width `520/520` within 1% with max error
+  `0.178%`, target WMF height `520/520` within 1% with max error `0.177%`,
+  and target shape width/height both `520/520` within 1% with max error `0`.
+- v132 sample:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v132-standalone-s-width\xsc测试集完整重建_61.docx`
+- v132 leak scan:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v132-standalone-s-width\leak-scan-61.json`
+- v132 WMF report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v132-standalone-s-width\wmf-report-61.json`
+- v132 first-30 ink report:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v132-standalone-s-width\formula-preview-ink-source-vs-v132-first30.json`
+- v132 target physical metrics:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v132-standalone-s-width\pair-metrics-target\4-3-4 蝴蝶模型_summary.json`
+- v132 glyph diff:
+  `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v132-standalone-s-width\wmf-glyph-diff-v131-v132-worst-first30.json`
