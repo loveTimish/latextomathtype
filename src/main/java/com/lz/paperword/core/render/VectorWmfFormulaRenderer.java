@@ -31,7 +31,7 @@ final class VectorWmfFormulaRenderer {
     private static final int ANSI_CHARSET = 0;
     private static final int SYMBOL_CHARSET = 2;
     private static final int GB2312_CHARSET = 134;
-    private static final int PEN_OBJECT_INDEX = 9;
+    private static final int PEN_OBJECT_INDEX = 12;
     private static final double LEFT_MARGIN_PT = 0.12d;
     private static final double TOP_MARGIN_PT = 0.20d;
     private static final String TEXT_WIDTH_SCALE_PROP = "paperword.wmf.textWidth.scale";
@@ -50,6 +50,7 @@ final class VectorWmfFormulaRenderer {
     private static final double FRACTION_BAR_Y_PT = 12.8d;
     private static final double FRACTION_HEIGHT_PT = 26.2d;
     private static final Font TIMES_FONT = new Font(ANSI_PREVIEW_FACE, Font.PLAIN, 12);
+    private static final Font TIMES_ITALIC_FONT = new Font(ANSI_PREVIEW_FACE, Font.ITALIC, 12);
     private static final Font SYMBOL_FONT = new Font("Symbol", Font.PLAIN, 12);
     private static final Font CJK_FONT = new Font("SimSun", Font.PLAIN, 12);
     private static final double SHORT_GEOMETRY_LABEL_WIDTH_SCALE = 0.90d;
@@ -109,6 +110,10 @@ final class VectorWmfFormulaRenderer {
     private static final Pattern TEXT_COMMAND_PATTERN = Pattern.compile(
         "\\\\(?:mathrm|mathbf|mathit|textit|textbf|emph|text|boldsymbol)\\s*\\{\\s*([^{}]*)\\s*}"
     );
+    private static final List<String> UPRIGHT_STYLE_COMMANDS = List.of("\\textnormal", "\\mathrm", "\\textrm",
+        "\\text");
+    private static final List<String> ITALIC_STYLE_COMMANDS = List.of("\\mathit", "\\textit", "\\emph");
+    private static final List<String> MATH_STYLE_COMMANDS = List.of("\\boldsymbol", "\\mathbf", "\\textbf");
 
     private VectorWmfFormulaRenderer() {
     }
@@ -167,10 +172,10 @@ final class VectorWmfFormulaRenderer {
             writeWord(out, 0);
         }); // SetTextColor black
         builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
-            12.0d * fontYScale * relationFontYScale * previewScale.y(), ANSI_CHARSET, regularFontWidthScale));
+            12.0d * fontYScale * relationFontYScale * previewScale.y(), ANSI_CHARSET, regularFontWidthScale, false));
         builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
             8.0d * shortScriptHeightScale * fontYScale * relationFontYScale * previewScale.y(), ANSI_CHARSET,
-            shortScriptWidthScale));
+            shortScriptWidthScale, false));
         builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
             22.0d * previewScale.y(), ANSI_CHARSET));
         builder.record(0x02FB, out -> writeFont(out, "Symbol",
@@ -185,6 +190,13 @@ final class VectorWmfFormulaRenderer {
             8.0d * shortScriptHeightScale * fontYScale * relationFontYScale * previewScale.y(), GB2312_CHARSET,
             shortScriptWidthScale));
         builder.record(0x02FB, out -> writeFont(out, "SimSun", 22.0d * previewScale.y(), GB2312_CHARSET));
+        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
+            12.0d * fontYScale * relationFontYScale * previewScale.y(), ANSI_CHARSET, regularFontWidthScale, true));
+        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
+            8.0d * shortScriptHeightScale * fontYScale * relationFontYScale * previewScale.y(), ANSI_CHARSET,
+            shortScriptWidthScale, true));
+        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
+            22.0d * previewScale.y(), ANSI_CHARSET, 1.0d, true));
         builder.record(0x02FA, VectorWmfFormulaRenderer::writeBlackPen); // CreatePen
         builder.record(0x012D, out -> writeWord(out, 0)); // SelectObject
 
@@ -203,8 +215,8 @@ final class VectorWmfFormulaRenderer {
         for (PlacedText run : layout.runs()) {
             final int runBaseline = toTwips(TOP_MARGIN_PT + offsetY + run.baselinePt() * previewScale.y());
             double segmentX = run.xPt();
-            for (EncodedText segment : encodeText(run.text(), run.cjk())) {
-                int fontIndex = fontIndex(segment.kind(), run.script(), run.display());
+            for (EncodedText segment : encodeText(run.text(), run.cjk(), run.mathItalic())) {
+                int fontIndex = fontIndex(segment.kind(), segment.italic(), run.script(), run.display());
                 if (fontIndex != selectedFont) {
                     final int selectFontIndex = fontIndex;
                     builder.record(0x012D, out -> writeWord(out, selectFontIndex));
@@ -233,16 +245,16 @@ final class VectorWmfFormulaRenderer {
             char ch = text.charAt(i);
             boolean cjk = isCjk(String.valueOf(ch));
             if (!current.isEmpty() && cjk != currentCjk) {
-                out.add(new TextRun(current.toString(), currentCjk));
+                out.add(new TextRun(current.toString(), currentCjk, false));
                 current.setLength(0);
             }
             current.append(ch);
             currentCjk = cjk;
         }
         if (!current.isEmpty()) {
-            out.add(new TextRun(current.toString(), currentCjk));
+            out.add(new TextRun(current.toString(), currentCjk, false));
         }
-        return out.isEmpty() ? List.of(new TextRun(" ", false)) : out;
+        return out.isEmpty() ? List.of(new TextRun(" ", false, false)) : out;
     }
 
     private static String fallbackPlainText(String latex) {
@@ -831,7 +843,8 @@ final class VectorWmfFormulaRenderer {
         }
         String text = LaTeXParser.preNormalizeLatex(stripMetricsAndStyles(latex)).trim();
         if (text.isBlank()) {
-            return new FormulaLayout(List.of(new PlacedText(" ", false, false, false, 0.0d, 9.6d)), List.of(), 4.0d, 13.0d);
+            return new FormulaLayout(List.of(new PlacedText(" ", false, false, false, false, 0.0d, 9.6d)),
+                List.of(), 4.0d, 13.0d);
         }
         text = normalizeSpacingCommands(text);
         text = normalizeHorizontalBraceAnnotations(text);
@@ -939,7 +952,6 @@ final class VectorWmfFormulaRenderer {
 
     private static List<TextRun> tokenizeFlat(String text) {
         text = normalizeFlatLatex(text);
-        text = normalizeTextCommands(text);
         if (text.contains("\\begin") || text.contains("\\frac") || text.contains("\\sqrt")
             || text.contains("\\over") || text.contains("^")) {
             return null;
@@ -952,11 +964,21 @@ final class VectorWmfFormulaRenderer {
                 continue;
             }
             if (ch == '\\') {
+                StyleCommand style = readStyleCommand(text, i);
+                if (style != null) {
+                    List<TextRun> styleRuns = tokenizeFlat(style.text());
+                    if (styleRuns == null) {
+                        return null;
+                    }
+                    out.addAll(withMathItalic(styleRuns, style.mathItalic()));
+                    i = style.end();
+                    continue;
+                }
                 Command command = readCommand(text, i);
                 if (command == null) {
                     return null;
                 }
-                out.add(new TextRun(command.text(), isCjk(command.text())));
+                out.add(new TextRun(command.text(), isCjk(command.text()), true));
                 i = command.end();
                 continue;
             }
@@ -972,10 +994,46 @@ final class VectorWmfFormulaRenderer {
                     end++;
                 }
             }
-            out.add(new TextRun(text.substring(i, end), cjk));
+            out.add(new TextRun(text.substring(i, end), cjk, true));
             i = end;
         }
         return out.isEmpty() ? null : out;
+    }
+
+    private static StyleCommand readStyleCommand(String text, int index) {
+        StyleCommand style = readStyleCommand(text, index, UPRIGHT_STYLE_COMMANDS, false);
+        if (style != null) {
+            return style;
+        }
+        style = readStyleCommand(text, index, ITALIC_STYLE_COMMANDS, true);
+        if (style != null) {
+            return style;
+        }
+        return readStyleCommand(text, index, MATH_STYLE_COMMANDS, true);
+    }
+
+    private static StyleCommand readStyleCommand(String text, int index, List<String> commands, boolean mathItalic) {
+        String command = matchingCommandAt(text, index, commands);
+        if (command == null) {
+            return null;
+        }
+        int groupStart = skipWhitespaceForward(text, index + command.length());
+        if (groupStart >= text.length() || text.charAt(groupStart) != '{') {
+            return null;
+        }
+        int groupEnd = findGroupEnd(text, groupStart);
+        if (groupEnd < 0) {
+            return null;
+        }
+        return new StyleCommand(text.substring(groupStart + 1, groupEnd).trim(), mathItalic, groupEnd + 1);
+    }
+
+    private static List<TextRun> withMathItalic(List<TextRun> runs, boolean mathItalic) {
+        List<TextRun> out = new ArrayList<>(runs.size());
+        for (TextRun run : runs) {
+            out.add(new TextRun(run.text(), run.cjk(), mathItalic && run.mathItalic()));
+        }
+        return out;
     }
 
     private static FormulaLayout layoutFlatRuns(List<TextRun> runs) {
@@ -984,7 +1042,8 @@ final class VectorWmfFormulaRenderer {
         double baseline = 9.6d;
         for (TextRun run : runs) {
             x += leadingMathSpacingPt(run, false);
-            placed.add(new PlacedText(run.text(), run.cjk(), false, false, x, baseline, runWidthScale(run, false)));
+            placed.add(new PlacedText(run.text(), run.cjk(), run.mathItalic(), false, false, x, baseline,
+                runWidthScale(run, false)));
             x += estimatedRunWidthPt(run) + trailingMathSpacingPt(run, false);
         }
         return new FormulaLayout(placed, Math.max(x, 1.0d), 13.0d);
@@ -1086,10 +1145,11 @@ final class VectorWmfFormulaRenderer {
         for (int i = startIndex; i < placed.size(); i++) {
             PlacedText run = placed.get(i);
             double x = anchor + (run.xPt() - anchor) * scale;
-            PlacedText scaled = new PlacedText(run.text(), run.cjk(), run.script(), run.display(), x,
-                run.baselinePt(), run.widthScale() * scale);
+            PlacedText scaled = new PlacedText(run.text(), run.cjk(), run.mathItalic(), run.script(), run.display(),
+                x, run.baselinePt(), run.widthScale() * scale);
             placed.set(i, scaled);
-            right = Math.max(right, x + scaledRunWidthPt(new TextRun(run.text(), run.cjk()), run.script()) * scale);
+            right = Math.max(right,
+                x + scaledRunWidthPt(new TextRun(run.text(), run.cjk(), run.mathItalic()), run.script()) * scale);
         }
         return new SegmentScale(right);
     }
@@ -1126,7 +1186,7 @@ final class VectorWmfFormulaRenderer {
         }
         List<PlacedText> runs = new ArrayList<>(layout.runs().size());
         for (PlacedText run : layout.runs()) {
-            runs.add(new PlacedText(run.text(), run.cjk(), run.script(), run.display(),
+            runs.add(new PlacedText(run.text(), run.cjk(), run.mathItalic(), run.script(), run.display(),
                 run.xPt() * scale, run.baselinePt(), run.widthScale() * scale));
         }
         List<LineSegment> lines = new ArrayList<>(layout.lines().size());
@@ -1382,7 +1442,8 @@ final class VectorWmfFormulaRenderer {
 
     private static FormulaLayout layoutFractionPart(String text) {
         if (text == null || text.isBlank()) {
-            return new FormulaLayout(List.of(new PlacedText(" ", false, false, false, 0.0d, 9.6d)), List.of(), 4.0d, 13.0d);
+            return new FormulaLayout(List.of(new PlacedText(" ", false, false, false, false, 0.0d, 9.6d)),
+                List.of(), 4.0d, 13.0d);
         }
         text = normalizeTextCommands(text);
         FormulaLayout arrows = layoutXArrowFragments(text);
@@ -1490,7 +1551,7 @@ final class VectorWmfFormulaRenderer {
     private static FormulaLayout layoutSingleXArrow(String label, boolean leftArrow) {
         List<TextRun> labelRuns = tokenizeFlat(normalizeTextCommands(label));
         if (labelRuns == null) {
-            labelRuns = List.of(new TextRun(label == null ? "" : label.trim(), true));
+            labelRuns = List.of(new TextRun(label == null ? "" : label.trim(), true, false));
         }
         double labelWidth = Math.max(0.0d, estimatedWidthPt(labelRuns));
         double width = Math.max(13.0d, labelWidth + 5.0d);
@@ -1513,7 +1574,8 @@ final class VectorWmfFormulaRenderer {
     private static void appendLayout(List<PlacedText> placed, List<LineSegment> lines, FormulaLayout layout,
         double dx, double dy) {
         for (PlacedText run : layout.runs()) {
-            placed.add(new PlacedText(run.text(), run.cjk(), run.script(), run.display(), run.xPt() + dx,
+            placed.add(new PlacedText(run.text(), run.cjk(), run.mathItalic(), run.script(), run.display(),
+                run.xPt() + dx,
                 run.baselinePt() + dy));
         }
         for (LineSegment line : layout.lines()) {
@@ -1529,7 +1591,7 @@ final class VectorWmfFormulaRenderer {
     private static void appendScaledLayout(List<PlacedText> placed, List<LineSegment> lines, FormulaLayout layout,
         double scale, double dx, double dy, boolean script) {
         for (PlacedText run : layout.runs()) {
-            placed.add(new PlacedText(run.text(), run.cjk(), script || run.script(), run.display(),
+            placed.add(new PlacedText(run.text(), run.cjk(), run.mathItalic(), script || run.script(), run.display(),
                 dx + run.xPt() * scale, dy + run.baselinePt() * scale));
         }
         for (LineSegment line : layout.lines()) {
@@ -1541,7 +1603,7 @@ final class VectorWmfFormulaRenderer {
     private static void appendCompactInlineFractionLayout(List<PlacedText> placed, List<LineSegment> lines,
         FormulaLayout layout, double dx, double dy) {
         for (PlacedText run : layout.runs()) {
-            placed.add(new PlacedText(run.text(), run.cjk(), run.script(), run.display(),
+            placed.add(new PlacedText(run.text(), run.cjk(), run.mathItalic(), run.script(), run.display(),
                 dx + run.xPt() * COMPACT_FRACTION_SCALE, dy + run.baselinePt() * COMPACT_FRACTION_SCALE,
                 run.widthScale() * COMPACT_FRACTION_SCALE));
         }
@@ -1560,7 +1622,7 @@ final class VectorWmfFormulaRenderer {
         }
         List<PlacedText> placed = new ArrayList<>();
         double braceBaseline = Math.max(16.0d, Math.min(inner.heightPt() - 1.0d, inner.heightPt() * 0.72d));
-        placed.add(new PlacedText("{", false, false, true, 0.0d, braceBaseline));
+        placed.add(new PlacedText("{", false, false, false, true, 0.0d, braceBaseline));
         List<LineSegment> lines = new ArrayList<>();
         appendLayout(placed, lines, inner, 7.0d, 0.0d);
         return new FormulaLayout(placed, lines, inner.widthPt() + 8.5d, inner.heightPt());
@@ -1644,10 +1706,10 @@ final class VectorWmfFormulaRenderer {
         }
         List<PlacedText> placed = new ArrayList<>();
         double braceBaseline = Math.max(16.0d, Math.min(inner.heightPt() - 1.0d, inner.heightPt() * 0.72d));
-        placed.add(new PlacedText("(", false, false, true, 0.0d, braceBaseline));
+        placed.add(new PlacedText("(", false, false, false, true, 0.0d, braceBaseline));
         List<LineSegment> lines = new ArrayList<>();
         appendLayout(placed, lines, inner, 7.0d, 0.0d);
-        placed.add(new PlacedText(")", false, false, true, inner.widthPt() + 7.5d, braceBaseline));
+        placed.add(new PlacedText(")", false, false, false, true, inner.widthPt() + 7.5d, braceBaseline));
         return new FormulaLayout(placed, lines, inner.widthPt() + 16.0d, inner.heightPt());
     }
 
@@ -1801,7 +1863,7 @@ final class VectorWmfFormulaRenderer {
         }
         double height = Math.max(13.0d, 2.5d + rows.size() * rowHeight);
         if (placed.isEmpty()) {
-            placed.add(new PlacedText(" ", false, false, false, 0.0d, 9.6d));
+            placed.add(new PlacedText(" ", false, false, false, false, 0.0d, 9.6d));
         }
         return new FormulaLayout(placed, lines, width, height);
     }
@@ -2784,7 +2846,7 @@ final class VectorWmfFormulaRenderer {
         double cursor = x;
         for (TextRun run : runs) {
             cursor += leadingMathSpacingPt(run, script);
-            placed.add(new PlacedText(run.text(), run.cjk(), script, false, cursor, baseline,
+            placed.add(new PlacedText(run.text(), run.cjk(), run.mathItalic(), script, false, cursor, baseline,
                 runWidthScale(run, script)));
             cursor += scaledRunWidthPt(run, script) + trailingMathSpacingPt(run, script);
         }
@@ -2996,13 +3058,13 @@ final class VectorWmfFormulaRenderer {
             return measureTextPt(CJK_FONT, run.text(), 12.0d);
         }
         double width = 0d;
-        for (EncodedText segment : encodeText(run.text(), false)) {
+        for (EncodedText segment : encodeText(run.text(), false, run.mathItalic())) {
             width += segment.widthPt();
         }
         return width;
     }
 
-    private static List<EncodedText> encodeText(String text, boolean cjk) {
+    private static List<EncodedText> encodeText(String text, boolean cjk, boolean mathItalic) {
         if (text == null || text.isEmpty()) {
             return List.of();
         }
@@ -3014,8 +3076,10 @@ final class VectorWmfFormulaRenderer {
             EncodableChar encodable = encodableChar(codePoint, cjk);
             TextKind kind = encodable.kind();
             String output = encodable.text();
-            if (activeKind != null && activeKind != kind) {
-                addEncodedSegment(segments, activeKind, active.toString());
+            boolean activeItalic = mathItalic && activeKind == TextKind.ANSI && isItalicLetterRun(active.toString());
+            boolean outputItalic = mathItalic && kind == TextKind.ANSI && isItalicLetterRun(output);
+            if (activeKind != null && (activeKind != kind || activeItalic != outputItalic)) {
+                addEncodedSegment(segments, activeKind, active.toString(), mathItalic);
                 active.setLength(0);
             }
             activeKind = kind;
@@ -3023,20 +3087,37 @@ final class VectorWmfFormulaRenderer {
             offset += Character.charCount(codePoint);
         }
         if (activeKind != null && active.length() > 0) {
-            addEncodedSegment(segments, activeKind, active.toString());
+            addEncodedSegment(segments, activeKind, active.toString(), mathItalic);
         }
         return segments;
     }
 
-    private static void addEncodedSegment(List<EncodedText> segments, TextKind kind, String text) {
+    private static void addEncodedSegment(List<EncodedText> segments, TextKind kind, String text,
+        boolean mathItalic) {
         Charset charset = kind == TextKind.CJK ? GBK : WINDOWS_1252;
         byte[] bytes = text.getBytes(charset);
         Font font = switch (kind) {
-            case ANSI -> TIMES_FONT;
+            case ANSI -> mathItalic && isItalicLetterRun(text) ? TIMES_ITALIC_FONT : TIMES_FONT;
             case SYMBOL -> SYMBOL_FONT;
             case CJK -> CJK_FONT;
         };
-        segments.add(new EncodedText(kind, text, bytes, measureTextPt(font, text, 12.0d)));
+        segments.add(new EncodedText(kind, text, bytes, measureTextPt(font, text, 12.0d),
+            mathItalic && isItalicLetterRun(text)));
+    }
+
+    private static boolean isItalicLetterRun(String text) {
+        if (text == null || text.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < text.length();) {
+            int codePoint = text.codePointAt(i);
+            if (!Character.isLetter(codePoint)
+                || Character.UnicodeScript.of(codePoint) != Character.UnicodeScript.LATIN) {
+                return false;
+            }
+            i += Character.charCount(codePoint);
+        }
+        return true;
     }
 
     private static EncodableChar encodableChar(int codePoint, boolean forceCjk) {
@@ -3158,10 +3239,10 @@ final class VectorWmfFormulaRenderer {
         return sized.getStringBounds(text, FONT_RENDER_CONTEXT).getWidth() * 72.0d / 96.0d;
     }
 
-    private static int fontIndex(TextKind kind, boolean script, boolean display) {
+    private static int fontIndex(TextKind kind, boolean italic, boolean script, boolean display) {
         int sizeIndex = display ? 2 : (script ? 1 : 0);
         return switch (kind) {
-            case ANSI -> sizeIndex;
+            case ANSI -> italic ? 9 + sizeIndex : sizeIndex;
             case SYMBOL -> 3 + sizeIndex;
             case CJK -> 6 + sizeIndex;
         };
@@ -3224,7 +3305,7 @@ final class VectorWmfFormulaRenderer {
             return null;
         }
         Font font = switch (segment.kind()) {
-            case ANSI -> TIMES_FONT;
+            case ANSI -> segment.italic() ? TIMES_ITALIC_FONT : TIMES_FONT;
             case SYMBOL -> SYMBOL_FONT;
             case CJK -> CJK_FONT;
         };
@@ -3283,18 +3364,23 @@ final class VectorWmfFormulaRenderer {
     }
 
     private static void writeFont(ByteArrayOutputStream out, String face, double sizePt, int charset) throws IOException {
-        writeFont(out, face, sizePt, charset, 1.0d);
+        writeFont(out, face, sizePt, charset, 1.0d, false);
     }
 
     private static void writeFont(ByteArrayOutputStream out, String face, double sizePt, int charset,
         double widthScale) throws IOException {
+        writeFont(out, face, sizePt, charset, widthScale, false);
+    }
+
+    private static void writeFont(ByteArrayOutputStream out, String face, double sizePt, int charset,
+        double widthScale, boolean italic) throws IOException {
         writeShort(out, -toTwips(sizePt));
         writeShort(out, Math.abs(widthScale - 1.0d) > 0.001d
             ? Math.max(1, toTwips(sizePt * widthScale * 0.45d)) : 0);
         writeShort(out, 0);
         writeShort(out, 0);
         writeWord(out, 400);
-        out.write(0); // italic
+        out.write(italic ? 1 : 0); // italic
         out.write(0); // underline
         out.write(0); // strikeout
         out.write(charset);
@@ -3364,7 +3450,10 @@ final class VectorWmfFormulaRenderer {
         writeWord(out, (int) ((value >>> 16) & 0xffff));
     }
 
-    private record TextRun(String text, boolean cjk) {
+    private record TextRun(String text, boolean cjk, boolean mathItalic) {
+    }
+
+    private record StyleCommand(String text, boolean mathItalic, int end) {
     }
 
     private enum TextKind {
@@ -3373,7 +3462,7 @@ final class VectorWmfFormulaRenderer {
         CJK
     }
 
-    private record EncodedText(TextKind kind, String text, byte[] bytes, double widthPt) {
+    private record EncodedText(TextKind kind, String text, byte[] bytes, double widthPt, boolean italic) {
     }
 
     private record PreviewScale(double x, double y) {
@@ -3385,11 +3474,11 @@ final class VectorWmfFormulaRenderer {
     private record EncodableChar(TextKind kind, String text) {
     }
 
-    private record PlacedText(String text, boolean cjk, boolean script, boolean display, double xPt,
+    private record PlacedText(String text, boolean cjk, boolean mathItalic, boolean script, boolean display, double xPt,
                               double baselinePt, double widthScale) {
-        private PlacedText(String text, boolean cjk, boolean script, boolean display, double xPt,
+        private PlacedText(String text, boolean cjk, boolean mathItalic, boolean script, boolean display, double xPt,
                            double baselinePt) {
-            this(text, cjk, script, display, xPt, baselinePt, 1.0d);
+            this(text, cjk, mathItalic, script, display, xPt, baselinePt, 1.0d);
         }
     }
 

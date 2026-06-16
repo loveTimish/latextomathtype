@@ -2066,3 +2066,24 @@ batch, then append any useful lesson or pitfall found in that round.
   multiply `0.98 * 0.965` and over-compress. Apply the area-chain scale first
   and use the compact-inline scale only when the area-chain scale did not match;
   keep a regression test for that intersection.
+- MathType-like WMF formula variables need font-style parity before more spacing
+  tweaks: Latin variable runs such as `S`, `AOB`, `AB`, `a`, and `b` should use
+  Times New Roman Italic, while digits, operators, Symbol glyphs, and CJK text
+  stay non-italic. This is a scoped font-selection change, not a reason to add
+  spaces or inflate `ExtTextOut` dx. In v145, doc 61 kept 520 valid MathType
+  OLE/WMF objects and 0 LaTeX leaks; aligned width average improved
+  `0.919pt -> 0.879pt`, aligned width max improved `4.766pt -> 4.266pt`, and
+  height average stayed effectively flat (`0.233pt -> 0.234pt`).
+- When adding WMF preview font objects, keep object indices explicit and covered
+  by tests. Adding three italic Times New Roman fonts after the original
+  ANSI/Symbol/CJK 9-font table required moving `PEN_OBJECT_INDEX` from `9` to
+  `12`; otherwise later polyline/fraction-bar drawing can select a font object
+  instead of the pen. Tests should assert both italic LOGFONT selection for
+  Latin letter records and non-italic selection for numeric-only records.
+- A no-context review caught a real style-semantics gap in the v145 italic
+  approach: the main layout path still calls `normalizeTextCommands(...)` before
+  most tokenization, so wrappers such as `\mathrm{AB}` and `\text{AB}` can be
+  flattened before WMF font selection sees them. Do not claim full LaTeX style
+  fidelity yet. The next robust fix is to preserve style metadata through
+  `TextRun` / `PlacedText` across all layout branches, instead of trying to infer
+  roman/text intent from the already-flattened characters.

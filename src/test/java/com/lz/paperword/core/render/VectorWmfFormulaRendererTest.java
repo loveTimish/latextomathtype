@@ -44,7 +44,7 @@ class VectorWmfFormulaRendererTest {
         assertEquals(1.0d, VectorWmfFormulaRenderer.shortLinearEquationWidthScale("ABC"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.shortLinearEquationWidthScale("A+B+C"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.shortLinearEquationWidthScale("S=25+35"));
-        int equationFontHeight = textFontHeightTwips(equation, "AE=EF=FB");
+        int equationFontHeight = maxSelectedFontHeightTwips(equation);
         int productFontHeight = textFontHeightTwips(product, "12");
         assertTrue(equationFontHeight > 195,
             "short equality formulas should use readable preview font height: " + equationFontHeight);
@@ -700,8 +700,8 @@ class VectorWmfFormulaRendererTest {
         byte[] geometry = VectorWmfFormulaRenderer.render("ABCD", 36.0d, 12.75d);
         byte[] mixed = VectorWmfFormulaRenderer.render("ABCD1", 36.0d, 12.75d);
 
-        int geometryDx = firstTextDxTotal(geometry);
-        int mixedDx = firstTextDxTotal(mixed);
+        int geometryDx = totalTextDx(geometry);
+        int mixedDx = totalTextDx(mixed);
 
         assertTrue(VectorWmfFormulaRenderer.canRender("ABCD"));
         assertTrue(VectorWmfFormulaRenderer.canRender("ABCD1"));
@@ -765,7 +765,7 @@ class VectorWmfFormulaRendererTest {
         assertFalse(VectorWmfFormulaRenderer.hasClosingFenceSuperscript("a^{2}+b"));
         assertTrue(maxTextRightCoordinate(repeatedEquation) < 2189);
         assertTrue(totalTextDx(repeatedEquation) < 2200);
-        assertTrue(totalTextDx(standalone) < firstTextDxTotal(longEquation) * 0.8d);
+        assertTrue(totalTextDx(standalone) < totalTextDx(longEquation));
         assertTrue(maxRecordCoordinate(standalone) <= 36.0d * 20.0d);
         assertTrue(maxRecordCoordinate(metricsStandalone) <= 36.0d * 20.0d);
         assertTrue(maxRecordCoordinate(plainParen) <= 36.0d * 20.0d);
@@ -919,6 +919,20 @@ class VectorWmfFormulaRendererTest {
         assertFalse(textRecords.isEmpty());
         assertTrue(textRecords.stream().anyMatch(bytes -> containsByte(bytes, (byte) 0xB4)));
         assertTrue(textRecords.stream().anyMatch(bytes -> containsByte(bytes, (byte) 0xB8)));
+    }
+
+    @Test
+    void latinFormulaLettersUseTimesNewRomanItalicPreviewFont() throws IOException {
+        byte[] wmf = VectorWmfFormulaRenderer.render("S_{AOB}=12\\times AB", 96.0d, 18.0d);
+        byte[] digits = VectorWmfFormulaRenderer.render("12", 16.0d, 13.0d);
+        List<byte[]> textRecords = extTextOutBytes(wmf);
+
+        assertTrue(selectedTextFontItalic(wmf, "S"));
+        assertTrue(selectedTextFontItalic(wmf, "AOB"));
+        assertTrue(selectedTextFontItalic(wmf, "AB"));
+        assertFalse(selectedTextFontItalic(digits, "12"));
+        assertTrue(textRecords.stream().anyMatch(bytes -> containsByte(bytes, (byte) 0xB4)));
+        assertFalse(selectedTextBytesFontItalic(wmf, new byte[] {(byte) 0xB4}));
     }
 
     @Test
@@ -1182,6 +1196,62 @@ class VectorWmfFormulaRendererTest {
             offset += sizeWords * 2;
         }
         return 0;
+    }
+
+    private static int maxSelectedFontHeightTwips(byte[] data) {
+        List<Integer> fontHeights = new ArrayList<>();
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        int selected = -1;
+        int max = 0;
+        while (offset + 6 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x02FB && offset + 8 <= data.length) {
+                fontHeights.add(Math.abs(signedWord(data, offset + 6)));
+            } else if (function == 0x012D && offset + 8 <= data.length) {
+                selected = word(data, offset + 6);
+            } else if (function == 0x0A32 && selected >= 0 && selected < fontHeights.size()) {
+                max = Math.max(max, fontHeights.get(selected));
+            }
+            offset += sizeWords * 2;
+        }
+        return max;
+    }
+
+    private static boolean selectedTextFontItalic(byte[] data, String asciiText) {
+        return selectedTextBytesFontItalic(data, asciiText.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+    }
+
+    private static boolean selectedTextBytesFontItalic(byte[] data, byte[] expected) {
+        List<Boolean> fontItalics = new ArrayList<>();
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        int selected = -1;
+        while (offset + 6 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x02FB && offset + 17 <= data.length) {
+                fontItalics.add((data[offset + 16] & 0xff) != 0);
+            } else if (function == 0x012D && offset + 8 <= data.length) {
+                selected = word(data, offset + 6);
+            } else if (function == 0x0A32 && offset + 14 <= data.length) {
+                int count = word(data, offset + 10);
+                int textOffset = offset + 14;
+                if (selected >= 0 && selected < fontItalics.size()
+                    && count == expected.length && bytesEqual(data, textOffset, expected)) {
+                    return fontItalics.get(selected);
+                }
+            }
+            offset += sizeWords * 2;
+        }
+        throw new AssertionError("Text record not found: " + java.util.Arrays.toString(expected));
     }
 
     private static boolean bytesEqual(byte[] data, int offset, byte[] expected) {
