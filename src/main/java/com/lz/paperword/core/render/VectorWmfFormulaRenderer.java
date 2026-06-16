@@ -73,7 +73,7 @@ final class VectorWmfFormulaRenderer {
     private static final double SCRIPT_RELATION_LONG_CHAIN_FONT_Y_SCALE = 0.890d;
     private static final double SCRIPT_RELATION_TRIANGLE_FONT_Y_SCALE = 0.887d;
     private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_FONT_Y_SCALE = 0.887d;
-    private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION = 1.107d;
+    private static final double SCRIPT_RELATION_EXACT_S1_EQUATION_WIDTH_COMPENSATION = 1.113d;
     private static final double SCRIPT_RELATION_TRIANGLE_WIDTH_COMPENSATION = 1.025d;
     private static final double SCRIPT_RELATION_LONG_CHAIN_WIDTH_COMPENSATION = 1.022d;
     private static final Pattern LEFT_RIGHT_PAREN = Pattern.compile(
