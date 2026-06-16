@@ -1881,3 +1881,15 @@ batch, then append any useful lesson or pitfall found in that round.
   explicit warning that coverage is not full-document acceptance.
 - Latest LaTeX-aligned preview ink report:
   `J:\latextomathtype\analysis\unattended-runs\20260615-tight61-72\docx\61-v134-standalone-b-squared-width\formula-preview-ink-source-vs-v134-all-latex-aligned.txt`
+- Exact LaTeX keys miss formulas when the source docx2tex report keeps style
+  wrappers such as `\mathrm{三角形...}` or `\mathrm{cm}` while the generated
+  request contains bare Chinese text or bare `cm`. A safe fallback is to use
+  `ordinal_latex_key` only for keys that are unique on both remaining sides,
+  mark the row `pair_method=ordinal_key`, and warn that those pairs are
+  diagnostic only. Do not pair duplicate collapsed keys by encounter order.
+- With exact plus unique ordinal-key fallback, doc 61 cached preview ink
+  comparison reaches `513/520` usable pairs: `495` exact plus `25` fallback,
+  with `7` source docObjectIndex gaps intentionally left unpaired. Width avg is
+  `1.084pt`, height avg is `0.863pt`, and `alignment_suspicious_count=14`.
+  The report still warns that generated request order is assumed to match DOCX
+  preview order because there is no explicit renderer object map yet.

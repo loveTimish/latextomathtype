@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from collections import Counter
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,7 @@ if str(SCRIPTS_DIR) not in sys.path:
 from compare_docx_pair_metrics import (  # noqa: E402
     latex_alignment,
     normalize_latex_key,
+    ordinal_latex_key,
     parse_request_math,
 )
 
@@ -272,10 +274,41 @@ def read_source_report_records(report_path: Path) -> list[dict[str, Any]]:
                 "reportPosition": len(records),
                 "latex": normalize_latex_key(item.get("output", "")),
                 "docObjectIndex": doc_object_index,
-                "referenceIndex": doc_object_index - 1 if doc_object_index else len(records),
+                "referenceIndex": doc_object_index - 1 if doc_object_index else None,
             }
         )
     return records
+
+
+def pair_by_key(
+    source_values: list[str],
+    generated_values: list[str],
+    source_candidates: set[int] | None = None,
+    generated_candidates: set[int] | None = None,
+) -> list[tuple[int, int]]:
+    generated_by_key: dict[str, list[int]] = {}
+    allowed_generated = generated_candidates if generated_candidates is not None else set(range(len(generated_values)))
+    allowed_source = source_candidates if source_candidates is not None else set(range(len(source_values)))
+    source_counts = Counter(source_values[index] for index in allowed_source)
+    generated_counts = Counter(generated_values[index] for index in allowed_generated)
+    for index, value in enumerate(generated_values):
+        if index in allowed_generated and source_counts[value] == 1 and generated_counts[value] == 1:
+            generated_by_key.setdefault(value, []).append(index)
+    pairs: list[tuple[int, int]] = []
+    used_generated: set[int] = set()
+    for source_index, value in enumerate(source_values):
+        if source_index not in allowed_source:
+            continue
+        if source_counts[value] != 1 or generated_counts[value] != 1:
+            continue
+        queue = generated_by_key.get(value) or []
+        while queue and queue[0] in used_generated:
+            queue.pop(0)
+        if queue:
+            generated_index = queue.pop(0)
+            used_generated.add(generated_index)
+            pairs.append((source_index, generated_index))
+    return pairs
 
 
 def build_latex_alignment(
@@ -291,19 +324,38 @@ def build_latex_alignment(
     source_latex = [record["latex"] for record in source_records]
     request_math = parse_request_math(generated_request)
     generated_latex = [item["latex"] for item in request_math]
-    pairs = latex_alignment(source_latex, generated_latex)
+    exact_pairs = latex_alignment(source_latex, generated_latex)
+    exact_source_positions = {source_position for source_position, _ in exact_pairs}
+    exact_generated_positions = {generated_position for _, generated_position in exact_pairs}
+    ordinal_source_latex = [ordinal_latex_key(value) for value in source_latex]
+    ordinal_generated_latex = [ordinal_latex_key(value) for value in generated_latex]
+    fallback_pairs = pair_by_key(
+        ordinal_source_latex,
+        ordinal_generated_latex,
+        set(range(len(source_latex))) - exact_source_positions,
+        set(range(len(generated_latex))) - exact_generated_positions,
+    )
+    pairs = exact_pairs + fallback_pairs
+    pair_methods = {pair: "exact" for pair in exact_pairs}
+    pair_methods.update({pair: "ordinal_key" for pair in fallback_pairs})
     reference_indexes = {int(row["index"]) for row in reference_rows}
     generated_indexes = {int(row["index"]) for row in generated_rows}
     usable_pairs: list[tuple[int, int]] = []
+    usable_pair_methods: dict[str, str] = {}
     for source_position, generated_position in pairs:
         if source_position >= len(source_records):
             continue
-        reference_index = int(source_records[source_position]["referenceIndex"])
+        reference_index = source_records[source_position]["referenceIndex"]
+        if reference_index is None:
+            continue
+        reference_index = int(reference_index)
         if reference_index in reference_indexes and generated_position in generated_indexes:
             usable_pairs.append((reference_index, generated_position))
+            usable_pair_methods[f"{reference_index}:{generated_position}"] = pair_methods.get((source_position, generated_position), "unknown")
     paired_source_positions = {source_position for source_position, _ in pairs}
     paired_generated_positions = {generated_position for _, generated_position in pairs}
     known_doc_indexes = [record["docObjectIndex"] for record in source_records if record["docObjectIndex"] is not None]
+    missing_doc_object_index_count = sum(1 for record in source_records if record["docObjectIndex"] is None)
     doc_index_gap_count = 0
     if known_doc_indexes:
         doc_index_gap_count = len(set(range(min(known_doc_indexes), max(known_doc_indexes) + 1)) - set(known_doc_indexes))
@@ -314,12 +366,16 @@ def build_latex_alignment(
         "reference_row_count": len(reference_rows),
         "generated_row_count": len(generated_rows),
         "latex_pair_count": len(pairs),
+        "exact_latex_pair_count": len(exact_pairs),
+        "ordinal_key_latex_pair_count": len(fallback_pairs),
         "usable_latex_pair_count": len(usable_pairs),
+        "usable_pair_methods": usable_pair_methods,
         "unpaired_source_latex_count": len(source_latex) - len(paired_source_positions),
         "unpaired_generated_latex_count": len(generated_latex) - len(paired_generated_positions),
         "source_doc_object_index_min": min(known_doc_indexes, default=None),
         "source_doc_object_index_max": max(known_doc_indexes, default=None),
         "source_doc_object_index_gaps": doc_index_gap_count,
+        "missing_doc_object_index_count": missing_doc_object_index_count,
         "unpaired_source_latex_samples": [
             {
                 "reportPosition": record["reportPosition"],
@@ -384,6 +440,7 @@ def compare_rows(
         gen = generated_by_index.get(generated_index)
         if ref is None or gen is None:
             continue
+        pair_method = (alignment_info.get("usable_pair_methods") or {}).get(f"{source_index}:{generated_index}")
         if ref.get("ink_width_pt") is None or gen.get("ink_width_pt") is None:
             paired_without_ink.append(
                 {
@@ -391,6 +448,7 @@ def compare_rows(
                     "sourceIndex": source_index + 1,
                     "generated_index": generated_index,
                     "generatedSourceIndex": generated_index + 1,
+                    "pair_method": pair_method,
                     "reference_preview_error": ref.get("preview_error"),
                     "generated_preview_error": gen.get("preview_error"),
                 }
@@ -419,6 +477,7 @@ def compare_rows(
                 "reference_index": source_index,
                 "generated_index": generated_index,
                 "generatedSourceIndex": generated_index + 1,
+                "pair_method": pair_method,
                 "reference_ink_width_pt": ref["ink_width_pt"],
                 "generated_ink_width_pt": gen["ink_width_pt"],
                 "reference_ink_height_pt": ref["ink_height_pt"],
@@ -447,6 +506,14 @@ def compare_rows(
     if alignment_mode == "latex":
         if alignment_info.get("usable_latex_pair_count") != len(reference_by_index):
             pairing_warnings.append("LaTeX alignment covers only a subset of measured reference rows; do not treat summary stats as full-document acceptance.")
+        if alignment_info.get("ordinal_key_latex_pair_count"):
+            pairing_warnings.append("Ordinal-key fallback pairs are diagnostic only because style stripping is lossy.")
+        if alignment_info.get("source_doc_object_index_gaps"):
+            pairing_warnings.append("Source docObjectIndex has gaps; remaining unpaired rows may be non-formula or filtered source objects.")
+        if alignment_info.get("missing_doc_object_index_count"):
+            pairing_warnings.append("Some source report equations lack docObjectIndex and were excluded from source row mapping.")
+        if alignment_info.get("generated_latex_count") == len(generated_by_index):
+            pairing_warnings.append("Generated request order is assumed to match generated DOCX preview order; this is not an explicit renderer object map.")
         if alignment_info.get("generated_latex_count") != len(generated_by_index):
             pairing_warnings.append("Generated request formula count differs from generated preview row count; generated positions may shift.")
     summary = {
@@ -492,9 +559,12 @@ def render_text(report: dict[str, Any]) -> str:
         f"reference_row_count: {comparison.get('reference_row_count')}",
         f"generated_row_count: {comparison.get('generated_row_count')}",
         f"latex_pair_count: {comparison.get('latex_pair_count')}",
+        f"exact_latex_pair_count: {comparison.get('exact_latex_pair_count')}",
+        f"ordinal_key_latex_pair_count: {comparison.get('ordinal_key_latex_pair_count')}",
         f"usable_latex_pair_count: {comparison.get('usable_latex_pair_count')}",
         f"source_doc_object_index_range: {comparison.get('source_doc_object_index_min')}..{comparison.get('source_doc_object_index_max')}",
         f"source_doc_object_index_gaps: {comparison.get('source_doc_object_index_gaps')}",
+        f"missing_doc_object_index_count: {comparison.get('missing_doc_object_index_count')}",
         f"paired_without_ink_count: {comparison.get('paired_without_ink_count')}",
         f"pairing_warning: {comparison.get('pairing_warning')}",
         f"aligned_paired_count: {comparison['aligned_paired_count']}",
@@ -511,27 +581,27 @@ def render_text(report: dict[str, Any]) -> str:
     ]
     for row in comparison["worst_width"][:12]:
         lines.append(
-            "  #{index}/sourceIndex={sourceIndex}->generatedSourceIndex={generatedSourceIndex}: ref={reference_ink_width_pt}pt gen={generated_ink_width_pt}pt "
+            "  #{index}/sourceIndex={sourceIndex}->generatedSourceIndex={generatedSourceIndex} method={pair_method}: ref={reference_ink_width_pt}pt gen={generated_ink_width_pt}pt "
             "delta={ink_width_delta_pt}pt scale={required_width_scale} suspicious={alignment_suspicious} "
             "sim={context_similarity} text={generated_context}".format(**row)
         )
     lines.extend(["", "Worst visible height deltas"])
     for row in comparison["worst_height"][:12]:
         lines.append(
-            "  #{index}/sourceIndex={sourceIndex}->generatedSourceIndex={generatedSourceIndex}: ref={reference_ink_height_pt}pt gen={generated_ink_height_pt}pt "
+            "  #{index}/sourceIndex={sourceIndex}->generatedSourceIndex={generatedSourceIndex} method={pair_method}: ref={reference_ink_height_pt}pt gen={generated_ink_height_pt}pt "
             "delta={ink_height_delta_pt}pt scale={required_height_scale} suspicious={alignment_suspicious} "
             "sim={context_similarity} text={generated_context}".format(**row)
         )
     lines.extend(["", "Worst aligned-looking width deltas"])
     for row in comparison["worst_aligned_width"][:12]:
         lines.append(
-            "  #{index}/sourceIndex={sourceIndex}->generatedSourceIndex={generatedSourceIndex}: ref={reference_ink_width_pt}pt gen={generated_ink_width_pt}pt "
+            "  #{index}/sourceIndex={sourceIndex}->generatedSourceIndex={generatedSourceIndex} method={pair_method}: ref={reference_ink_width_pt}pt gen={generated_ink_width_pt}pt "
             "delta={ink_width_delta_pt}pt scale={required_width_scale} sim={context_similarity} text={generated_context}".format(**row)
         )
     lines.extend(["", "Worst aligned-looking height deltas"])
     for row in comparison["worst_aligned_height"][:12]:
         lines.append(
-            "  #{index}/sourceIndex={sourceIndex}->generatedSourceIndex={generatedSourceIndex}: ref={reference_ink_height_pt}pt gen={generated_ink_height_pt}pt "
+            "  #{index}/sourceIndex={sourceIndex}->generatedSourceIndex={generatedSourceIndex} method={pair_method}: ref={reference_ink_height_pt}pt gen={generated_ink_height_pt}pt "
             "delta={ink_height_delta_pt}pt scale={required_height_scale} sim={context_similarity} text={generated_context}".format(**row)
         )
     return "\n".join(lines) + "\n"
