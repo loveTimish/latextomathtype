@@ -58,10 +58,247 @@ class VectorWmfFormulaRendererTest {
 
     @Test
     void limitedStructuredPlaceholdersCanRenderAsVectorText() {
-        assertFalse(VectorWmfFormulaRenderer.canRender("x^{\\frac{1}{2}}"));
+        assertTrue(VectorWmfFormulaRenderer.canRender("x^{\\frac{1}{2}}"));
         assertTrue(VectorWmfFormulaRenderer.canRender("\\sqrt{\\frac{1}{2}}"));
         assertTrue(VectorWmfFormulaRenderer.canRender("{\\sqrt{}}"));
+        assertFalse(VectorWmfFormulaRenderer.canRender("\\sqrt[3]{8}"),
+            "optional root indexes must not be vectorized until they are emitted in WMF");
         assertTrue(VectorWmfFormulaRenderer.canRender("\\underline{ }"));
+    }
+
+    @Test
+    void sqrtLayoutsUseStructureMetricHeightFamilies() throws IOException {
+        byte[] simpleRoot = VectorWmfFormulaRenderer.render("\\sqrt{2}", 28.0d,
+            MathTypeStructureMetrics.SQRT_HEIGHT_PT);
+        byte[] fractionRoot = VectorWmfFormulaRenderer.render("\\sqrt{1+\\frac{a}{b}}", 54.0d,
+            MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        byte[] rootInFraction = VectorWmfFormulaRenderer.render("\\frac{\\sqrt{a^{2}+b^{2}}}{2}", 54.0d,
+            MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+
+        assertFalse(records(simpleRoot).contains(0x0F43));
+        assertFalse(records(fractionRoot).contains(0x0F43));
+        assertFalse(records(rootInFraction).contains(0x0F43));
+        assertTrue(maxTextYCoordinate(simpleRoot) <= MathTypeStructureMetrics.SQRT_HEIGHT_PT * 20.0d);
+        assertTrue(maxPolylineYCoordinate(simpleRoot) <= MathTypeStructureMetrics.SQRT_HEIGHT_PT * 20.0d);
+        assertTrue(maxTextYCoordinate(fractionRoot) <= MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d);
+        assertTrue(maxPolylineYCoordinate(fractionRoot) > MathTypeStructureMetrics.SQRT_HEIGHT_PT * 20.0d,
+            "sqrt+fraction radical lines should use the taller MathType sqrt_fraction height family");
+        assertTrue(maxPolylineYCoordinate(fractionRoot) <= MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d);
+        assertEquals((int) (MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d), windowExtY(rootInFraction));
+        assertTrue(maxTextYCoordinate(rootInFraction) > MathTypeStructureMetrics.SQRT_HEIGHT_PT * 20.0d,
+            "fractions containing roots should not keep the ordinary 28pt fraction geometry");
+        assertTrue(maxTextYCoordinate(rootInFraction) <= MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d);
+        assertTrue(maxPolylineYCoordinate(rootInFraction) <= MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d);
+    }
+
+    @Test
+    void sqrtRootShapeCoordinatesComeFromStructureMetrics() throws IOException {
+        byte[] simpleRoot = VectorWmfFormulaRenderer.render("\\sqrt{2}", 28.0d,
+            MathTypeStructureMetrics.SQRT_HEIGHT_PT);
+        List<Polyline> lines = polylines(simpleRoot);
+
+        assertEquals(1, lines.size());
+        Polyline root = lines.get(0);
+        assertEquals(4, root.pointCount());
+        int rootX = root.x1();
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_HEIGHT_PT
+            * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO, root.y1());
+        int midX = root.x(1) - rootX;
+        int topX = root.x(2) - rootX;
+        double expectedMidRatio = MathTypeStructureMetrics.SQRT_CHECK_MID_X_PT
+            / MathTypeStructureMetrics.SQRT_CHECK_TOP_X_PT;
+        assertTrue(Math.abs(((double) midX / (double) topX) - expectedMidRatio) <= 0.05d,
+            "sqrt checkmark x ratio should stay metric-driven");
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_HEIGHT_PT
+            - MathTypeStructureMetrics.SQRT_BOTTOM_PAD_PT, root.y(1));
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_TOP_Y_PT, root.y(2));
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_TOP_Y_PT, root.y(3));
+        assertTrue(minTextXCoordinate(simpleRoot) - rootX >= topX);
+        assertTrue(minTextYCoordinate(simpleRoot) >= (int) Math.round(MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT
+            * 20.0d));
+    }
+
+    @Test
+    void unifiedBoxLayoutCoversCoreFormulaShapes() throws IOException {
+        String linear = "S_{\\Delta AOB}:S_{\\Delta COD}=a^{2}:b^{2}=4:9";
+        String nested = "\\frac{1+\\frac{a}{b}}{2+\\frac{c}{d}}";
+        String textHeavyFraction = "\\frac{三角形ABD的面积}{三角形CBD的面积}=\\frac{AO}{CO}";
+        String complexRoot = "\\sqrt{1+\\frac{a_{1}^{2}}{\\frac{3}{5}}}";
+
+        byte[] linearWmf = VectorWmfFormulaRenderer.render(linear, 170.0d, 18.0d);
+        byte[] nestedWmf = VectorWmfFormulaRenderer.render(nested, 82.0d, 53.0d);
+        byte[] textHeavyWmf = VectorWmfFormulaRenderer.render(textHeavyFraction, 160.0d,
+            MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT);
+        byte[] complexRootWmf = VectorWmfFormulaRenderer.render(complexRoot, 82.0d, 62.0d);
+
+        assertTrue(records(linearWmf).contains(0x0A32));
+        assertTrue(records(nestedWmf).contains(0x0325));
+        assertTrue(records(nestedWmf).contains(0x0A32));
+        assertTrue(records(textHeavyWmf).contains(0x0A32));
+        assertTrue(records(complexRootWmf).contains(0x0325));
+        assertTrue(records(complexRootWmf).contains(0x0A32));
+        assertFalse(records(linearWmf).contains(0x0F43));
+        assertFalse(records(nestedWmf).contains(0x0F43));
+        assertFalse(records(textHeavyWmf).contains(0x0F43));
+        assertFalse(records(complexRootWmf).contains(0x0F43));
+        assertEquals((int) (MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT * 20.0d),
+            windowExtY(textHeavyWmf));
+        assertTrue(maxTextYCoordinate(textHeavyWmf) > 18.0d * 20.0d,
+            "text-heavy fractions should not be compressed into the old 18pt inline profile");
+        assertTrue(maxTextYCoordinate(textHeavyWmf) <= MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT * 20.0d);
+        assertTrue(maxTextYCoordinate(nestedWmf) > 30.0d * 20.0d,
+            "nested fractions should use the tall MathType height family, not compact unified-box spacing");
+    }
+
+    @Test
+    void textHeavyFractionsUseSourceHeightFamily() throws IOException {
+        String standalone = "\\frac{三角形ABD的面积}{三角形CBD的面积}";
+        String mixed = "\\frac{三角形ABD的面积}{三角形CBD的面积}=\\frac{AO}{CO}";
+
+        byte[] standaloneWmf = VectorWmfFormulaRenderer.render(standalone, 112.0d,
+            MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT);
+        byte[] mixedWmf = VectorWmfFormulaRenderer.render(mixed, 160.0d,
+            MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT);
+
+        assertEquals((int) (MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT * 20.0d),
+            windowExtY(standaloneWmf));
+        assertEquals((int) (MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT * 20.0d), windowExtY(mixedWmf));
+        assertTrue(records(standaloneWmf).contains(0x0325));
+        assertTrue(records(mixedWmf).contains(0x0325));
+        assertFalse(records(standaloneWmf).contains(0x0F43));
+        assertFalse(records(mixedWmf).contains(0x0F43));
+        assertTrue(maxTextYCoordinate(standaloneWmf) > 18.0d * 20.0d);
+        assertTrue(maxTextYCoordinate(mixedWmf) > 18.0d * 20.0d,
+            "text-heavy mixed fractions must not route through compact inline fraction geometry");
+        assertTrue(maxTextYCoordinate(standaloneWmf) <= MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT * 20.0d);
+        assertTrue(maxTextYCoordinate(mixedWmf) <= MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT * 20.0d);
+        assertTrue(maxPolylineYCoordinate(standaloneWmf) <= MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT * 20.0d);
+        assertTrue(maxPolylineYCoordinate(mixedWmf) <= MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT * 20.0d);
+    }
+
+    @Test
+    void standardGlyphModelKeepsScriptsAndInlineFractionsOnOneSizeLadder() throws IOException {
+        String scriptRelation = "S_{\\Delta AOB}:S_{\\Delta COD}=a^{2}:b^{2}=4:9";
+        String shortScript = "a_{1}^{2}+b_{2}^{3}=c^{2}";
+        String inlineFraction = "AO=1,\\ CO=\\frac{5}{3}";
+        String complexRoot = "\\sqrt{1+\\frac{a_{1}^{2}}{\\frac{3}{5}}}";
+
+        byte[] relationWmf = VectorWmfFormulaRenderer.render(scriptRelation, 170.0d, 18.0d);
+        byte[] shortScriptWmf = VectorWmfFormulaRenderer.render(shortScript, 85.0d, 18.0d);
+        byte[] fractionWmf = VectorWmfFormulaRenderer.render(inlineFraction, 70.0d, 26.0d);
+
+        assertTrue(VectorWmfFormulaRenderer.standardGlyphModel(scriptRelation));
+        assertTrue(VectorWmfFormulaRenderer.standardGlyphModel(shortScript));
+        assertTrue(VectorWmfFormulaRenderer.standardGlyphModel(inlineFraction));
+        assertFalse(VectorWmfFormulaRenderer.standardGlyphModel("\\dfrac{a_{1}}{b}"));
+        assertFalse(VectorWmfFormulaRenderer.standardGlyphModel("\\frac{a_{1}}{\\frac{3}{5}}"));
+        assertFalse(VectorWmfFormulaRenderer.standardGlyphModel(complexRoot));
+        assertFalse(VectorWmfFormulaRenderer.standardGlyphModel(
+            "\\frac{三角形ABD的面积}{三角形CBD的面积}=\\frac{AO}{CO}"));
+        assertTrue(textFontHeightTwips(relationWmf, "S") >= 185);
+        assertTrue(textFontHeightTwips(relationWmf, "AOB") >= 135,
+            "script glyphs should not be double-shrunk below the standard ratio");
+        assertTrue(textFontHeightTwips(shortScriptWmf, "1") >= 135);
+        assertTrue(textFontHeightTwips(fractionWmf, "AO") >= 200);
+        assertTrue(textFontHeightTwips(fractionWmf, "5") >= 150);
+    }
+
+    @Test
+    void standardGlyphAdvanceDoesNotMultiplyVerticalScaleIntoWidth() throws IOException {
+        String scriptRelation = "S_{\\Delta AOB}:S_{\\Delta COD}=a^{2}:b^{2}=4:9";
+
+        byte[] normalHeight = VectorWmfFormulaRenderer.render(scriptRelation, 170.0d, 18.0d);
+        byte[] tallBox = VectorWmfFormulaRenderer.render(scriptRelation, 170.0d, 27.0d);
+
+        assertTrue(VectorWmfFormulaRenderer.standardGlyphModel(scriptRelation));
+        assertEquals(textFontHeightTwips(normalHeight, "S"), textFontHeightTwips(tallBox, "S"));
+        assertFalse(records(normalHeight).contains(0x0F43));
+        assertFalse(records(tallBox).contains(0x0F43));
+        assertTrue(maxTextRightCoordinate(tallBox) < maxTextRightCoordinate(normalHeight) * 1.25d,
+            "standard glyph advance should not multiply y scale into width");
+    }
+
+    @Test
+    void scriptFractionLayoutsPreserveChildWidthScaleWhenAppended() throws IOException {
+        byte[] scriptFraction = VectorWmfFormulaRenderer.render("x^{\\frac{a_{1}^{2}}{2}}", 82.0d,
+            MathTypeStructureMetrics.SCRIPT_FRACTION_HEIGHT_PT);
+        byte[] pureScriptFractions = VectorWmfFormulaRenderer.render(
+            "x^{\\frac{1}{2}}+a^{\\frac{2}{3}}", 82.0d,
+            MathTypeStructureMetrics.SCRIPT_FRACTION_HEIGHT_PT);
+        byte[] mixedScriptFraction = VectorWmfFormulaRenderer.render(
+            "S_{\\frac{1}{4}\\mathrm{圆}}=\\frac{1}{4}\\pi r^{2}", 92.0d,
+            MathTypeStructureMetrics.SCRIPT_FRACTION_MIXED_HEIGHT_PT);
+        byte[] nestedWithScriptFraction = VectorWmfFormulaRenderer.render("\\frac{x^{\\frac{1}{2}}}{2}", 48.0d,
+            MathTypeStructureMetrics.NESTED_FRACTION_HEIGHT_PT);
+        byte[] standalone = VectorWmfFormulaRenderer.render("a_{1}^{2}", 38.0d, 13.0d);
+
+        assertTrue(VectorWmfFormulaRenderer.canRender("\\frac{x^{\\frac{1}{2}}}{2}"));
+        assertFalse(records(scriptFraction).contains(0x0325),
+            "script-slot fractions should stay on the slash/unified path, not display stacked bars");
+        assertFalse(records(pureScriptFractions).contains(0x0325));
+        assertTrue(records(mixedScriptFraction).contains(0x0325),
+            "mixed script_fraction formulas still contain a top-level ordinary fraction");
+        assertTrue(records(nestedWithScriptFraction).contains(0x0325),
+            "script-slot fractions inside a display fraction should stay on the nested display-fraction path");
+        assertFalse(records(scriptFraction).contains(0x0F43));
+        assertFalse(records(pureScriptFractions).contains(0x0F43));
+        assertFalse(records(mixedScriptFraction).contains(0x0F43));
+        assertEquals((int) (MathTypeStructureMetrics.SCRIPT_FRACTION_HEIGHT_PT * 20.0d),
+            windowExtY(scriptFraction));
+        assertEquals((int) (MathTypeStructureMetrics.SCRIPT_FRACTION_HEIGHT_PT * 20.0d),
+            windowExtY(pureScriptFractions));
+        assertEquals((int) (MathTypeStructureMetrics.SCRIPT_FRACTION_MIXED_HEIGHT_PT * 20.0d),
+            windowExtY(mixedScriptFraction));
+        assertEquals((int) (MathTypeStructureMetrics.NESTED_FRACTION_HEIGHT_PT * 20.0d),
+            windowExtY(nestedWithScriptFraction));
+        assertTrue(textDxTotal(scriptFraction, "a") < textDxTotal(standalone, "a"),
+            "script fraction child script run should keep widthScale when appended");
+        assertTrue(maxTextYCoordinate(scriptFraction) <= MathTypeStructureMetrics.SCRIPT_FRACTION_HEIGHT_PT * 20.0d);
+        assertTrue(maxTextYCoordinate(pureScriptFractions)
+            <= MathTypeStructureMetrics.SCRIPT_FRACTION_HEIGHT_PT * 20.0d);
+        assertTrue(maxTextYCoordinate(mixedScriptFraction)
+            <= MathTypeStructureMetrics.SCRIPT_FRACTION_MIXED_HEIGHT_PT * 20.0d);
+        assertTrue(maxPolylineYCoordinate(nestedWithScriptFraction)
+            >= MathTypeStructureMetrics.NESTED_FRACTION_ABOVE_PT * 20.0d,
+            "top-level display fractions containing script-slot fractions must not be recast as script_fraction_mixed");
+        assertTrue(maxTextRightCoordinate(scriptFraction) <= 82.0d * 20.0d);
+    }
+
+    @Test
+    void nestedFractionsStayOnTallDisplayFractionPath() throws IOException {
+        byte[] nested = VectorWmfFormulaRenderer.render("\\frac{1+a_{1}^{2}}{2+\\frac{3}{5}}", 82.0d,
+            MathTypeStructureMetrics.NESTED_FRACTION_HEIGHT_PT);
+
+        assertTrue(records(nested).contains(0x0325));
+        assertFalse(records(nested).contains(0x0F43));
+        assertEquals((int) (MathTypeStructureMetrics.NESTED_FRACTION_HEIGHT_PT * 20.0d), windowExtY(nested));
+        assertTrue(maxPolylineYCoordinate(nested) >= MathTypeStructureMetrics.NESTED_FRACTION_ABOVE_PT * 20.0d,
+            "outer nested fraction bar should use the source-seeded nested fraction split");
+        assertTrue(maxTextYCoordinate(nested) > 40.0d * 20.0d,
+            "nested display fractions should distribute denominator content through the tall source family");
+        assertTrue(maxTextYCoordinate(nested) <= MathTypeStructureMetrics.NESTED_FRACTION_HEIGHT_PT * 20.0d);
+        assertTrue(maxTextRightCoordinate(nested) <= 82.0d * 20.0d);
+    }
+
+    @Test
+    void displayFractionCommandsUseVectorFractionGeometry() throws IOException {
+        byte[] dfrac = VectorWmfFormulaRenderer.render("\\dfrac{1}{2}", 18.0d, 28.0d);
+        byte[] cfrac = VectorWmfFormulaRenderer.render("\\cfrac{a}{b}", 22.0d, 28.0d);
+
+        assertTrue(records(dfrac).contains(0x0325));
+        assertTrue(records(cfrac).contains(0x0325));
+        assertFalse(records(dfrac).contains(0x0F43));
+        assertFalse(records(cfrac).contains(0x0F43));
+        assertTrue(maxTextYCoordinate(dfrac) > 18.0d * 20.0d,
+            "display fraction commands should not be squeezed into a linear 13pt profile");
+    }
+
+    @Test
+    void fractionScannerRequiresLatexCommandBoundary() {
+        assertFalse(VectorWmfFormulaRenderer.canRender("\\fraction{x}"),
+            "command prefixes such as \\fraction must not be parsed as \\frac");
+        assertFalse(VectorWmfFormulaRenderer.canRender("\\dfraction{x}"),
+            "display-style fraction scanner must also require a command boundary");
     }
 
     @Test
@@ -71,6 +308,11 @@ class VectorWmfFormulaRendererTest {
 
         assertTrue(records.contains(0x0A32));
         assertFalse(records.contains(0x0F43));
+
+        byte[] twoRowArray = VectorWmfFormulaRenderer.render("\\begin{array}{c}1\\\\2\\end{array}", 16.0d,
+            MathTypeStructureMetrics.ARRAY_SOURCE_HEIGHT_PT);
+        assertEquals((int) (MathTypeStructureMetrics.ARRAY_SOURCE_HEIGHT_PT * 20.0d), windowExtY(twoRowArray));
+        assertTrue(maxTextYCoordinate(twoRowArray) <= MathTypeStructureMetrics.ARRAY_SOURCE_HEIGHT_PT * 20.0d);
     }
 
     @Test
@@ -268,6 +510,7 @@ class VectorWmfFormulaRendererTest {
     void compactInlineFractionsUseReadableTextHeightWithTightAdvance() throws IOException {
         byte[] inline = VectorWmfFormulaRenderer.render("CO=\\frac{5}{3}", 31.0d, 26.0d);
         byte[] inlineWide = VectorWmfFormulaRenderer.render("48\\times \\frac{1}{4}=12", 50.25d, 27.75d);
+        byte[] contextualCfrac = VectorWmfFormulaRenderer.render("x=\\cfrac{a}{b}", 34.0d, 28.0d);
         byte[] standalone = VectorWmfFormulaRenderer.render("\\frac{5}{3}", 16.0d, 26.0d);
 
         assertTrue(minSelectedFontHeightTwips(inline) >= 200,
@@ -280,6 +523,8 @@ class VectorWmfFormulaRendererTest {
         assertEquals(1.0d, VectorWmfFormulaRenderer.compactInlineFractionWidthScale("\\dfrac{5}{3}"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.compactInlineFractionWidthScale("\\cfrac{5}{3}"));
         assertEquals(1.0d, VectorWmfFormulaRenderer.compactInlineFractionWidthScale("S=\\frac{\\frac{1}{2}}{3}"));
+        assertTrue(maxTextYCoordinate(contextualCfrac) > 20.0d * 20.0d,
+            "contextual \\cfrac should keep display-style fraction geometry, not compact inline spacing");
         assertTrue(maxTextRightCoordinate(inlineWide) < 49.0d * 20.0d,
             "compact inline fraction rows should no longer fill the whole Word box when MathType reference is narrower");
         assertTrue(textDxTotal(inline, "5") < textDxTotal(standalone, "5"),
@@ -510,6 +755,27 @@ class VectorWmfFormulaRendererTest {
         assertTrue(records.contains(0x0325));
         assertTrue(records.contains(0x0A32));
         assertFalse(records.contains(0x0F43));
+    }
+
+    @Test
+    void accentLayoutsUseSourceHeightFamily() throws IOException {
+        byte[] overline = VectorWmfFormulaRenderer.render("\\overline{AB}", 24.0d,
+            MathTypeStructureMetrics.ACCENT_HEIGHT_PT);
+        byte[] underline = VectorWmfFormulaRenderer.render("\\underline{AB}", 24.0d,
+            MathTypeStructureMetrics.ACCENT_HEIGHT_PT);
+
+        assertTrue(VectorWmfFormulaRenderer.canRender("\\overline{AB}"));
+        assertTrue(VectorWmfFormulaRenderer.canRender("\\underline{AB}"));
+        assertEquals((int) (MathTypeStructureMetrics.ACCENT_HEIGHT_PT * 20.0d), windowExtY(overline));
+        assertEquals((int) (MathTypeStructureMetrics.ACCENT_HEIGHT_PT * 20.0d), windowExtY(underline));
+        assertTrue(records(overline).contains(0x0325));
+        assertTrue(records(underline).contains(0x0325));
+        assertFalse(records(overline).contains(0x0F43));
+        assertFalse(records(underline).contains(0x0F43));
+        assertTrue(maxPolylineYCoordinate(overline) <= MathTypeStructureMetrics.ACCENT_HEIGHT_PT * 20.0d);
+        assertTrue(maxPolylineYCoordinate(underline) <= MathTypeStructureMetrics.ACCENT_HEIGHT_PT * 20.0d);
+        assertTrue(maxTextYCoordinate(overline) <= MathTypeStructureMetrics.ACCENT_HEIGHT_PT * 20.0d);
+        assertTrue(maxTextYCoordinate(underline) <= MathTypeStructureMetrics.ACCENT_HEIGHT_PT * 20.0d);
     }
 
     @Test
@@ -1384,6 +1650,105 @@ class VectorWmfFormulaRendererTest {
             offset += sizeWords * 2;
         }
         return max;
+    }
+
+    private static int maxPolylineYCoordinate(byte[] data) {
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        int max = 0;
+        while (offset + 6 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x0325 && offset + 8 <= data.length) {
+                int pointCount = word(data, offset + 6);
+                for (int i = 0; i < pointCount && offset + 10 + i * 4 <= data.length; i++) {
+                    max = Math.max(max, word(data, offset + 10 + i * 4));
+                }
+            }
+            offset += sizeWords * 2;
+        }
+        return max;
+    }
+
+    private static List<Polyline> polylines(byte[] data) {
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        List<Polyline> out = new ArrayList<>();
+        while (offset + 18 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x0325 && offset + 8 <= data.length) {
+                int pointCount = word(data, offset + 6);
+                int[] points = new int[pointCount * 2];
+                for (int i = 0; i < pointCount && offset + 10 + i * 4 <= data.length; i++) {
+                    points[i * 2] = word(data, offset + 8 + i * 4);
+                    points[i * 2 + 1] = word(data, offset + 10 + i * 4);
+                }
+                out.add(new Polyline(points));
+            }
+            offset += sizeWords * 2;
+        }
+        return out;
+    }
+
+    private record Polyline(int[] points) {
+        int pointCount() {
+            return points.length / 2;
+        }
+
+        int x1() {
+            return points[0];
+        }
+
+        int y1() {
+            return points[1];
+        }
+
+        int x2() {
+            return points[points.length - 2];
+        }
+
+        int y2() {
+            return points[points.length - 1];
+        }
+
+        int x(int index) {
+            return points[index * 2];
+        }
+
+        int y(int index) {
+            return points[index * 2 + 1];
+        }
+    }
+
+    private static void assertCloseTwips(double expectedPt, int actualTwips) {
+        int expectedTwips = (int) Math.round(expectedPt * 20.0d);
+        assertTrue(Math.abs(actualTwips - expectedTwips) <= 8,
+            "expected " + expectedTwips + " twips, got " + actualTwips);
+    }
+
+    private static int minTextXCoordinate(byte[] data) {
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        int min = Integer.MAX_VALUE;
+        while (offset + 6 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x0A32 && offset + 14 <= data.length) {
+                min = Math.min(min, word(data, offset + 8));
+            }
+            offset += sizeWords * 2;
+        }
+        return min == Integer.MAX_VALUE ? 0 : min;
     }
 
     private static int minTextYCoordinate(byte[] data) {

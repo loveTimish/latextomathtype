@@ -2087,3 +2087,610 @@ batch, then append any useful lesson or pitfall found in that round.
   fidelity yet. The next robust fix is to preserve style metadata through
   `TextRun` / `PlacedText` across all layout branches, instead of trying to infer
   roman/text intent from the already-flattened characters.
+- Unified formula layout must be introduced as a guarded path, not a broad
+  replacement. A no-context review caught that letting every `\sqrt` enter the
+  unified parser bypassed the calibrated `layoutSqrt(...)` path and would also
+  silently drop optional root indexes such as `\sqrt[3]{8}`. Keep simple roots
+  on the old path until the unified parser explicitly emits root indexes.
+- Text-heavy CJK ratios should usually be content-split, not forced into one
+  MathType fraction object. A full `\frac{三角形ABD的面积}{三角形CBD的面积}` preview
+  either becomes too tall or too small after Word object scaling; the readable
+  K12-style form is ordinary Chinese text plus small formula objects such as
+  `$ABD$`, `$CBD$`, and `$\frac{AO}{CO}$`.
+- Preview cache version must be bumped whenever WMF layout or preview box
+  metrics change. v146 initially appeared unchanged in Word/PDF because
+  `CACHE_VERSION` still pointed at v145 and reused old WMF previews; visual QA
+  is not trustworthy until the cache key is invalidated.
+- Formula layout needs a single standard glyph anchor before any scale tuning.
+  For the Q1-style families, use one base glyph size and derive scripts,
+  display symbols, and compact inline fraction slots from that anchor. Do not
+  let the font object size and the `ExtTextOut` advance both apply unrelated
+  shrink factors to the same script run, or scripts will end up too small even
+  when the preview box looks reasonable. Cache version bumps must follow any
+  such glyph-scale change so Word does not reuse stale WMF previews.
+- Keep the unified box model scoped until each structure is calibrated. A
+  no-context review caught that routing text-heavy fractions and complex
+  roots through the same unified parser can create a semantic downgrade:
+  `\frac{三角形ABD的面积}{...}` becomes a slash fraction, and
+  `\sqrt{1+\frac{a_{1}^{2}}{\frac{3}{5}}}` can be hard-compressed by height
+  scaling. The current safer rule is: standard glyph anchoring covers common
+  script/inline-fraction families, unified box covers controllable nested
+  ordinary fractions, while text-heavy fractions and roots stay on their
+  established vector paths until source/ink calibration exists for them.
+- For the standard glyph ladder, use source WMF `10.5pt` as the base font
+  anchor and a visual script ratio (`0.78` in the current build) as a separate
+  renderer choice. Do not confuse that visual ratio with the source record
+  script ratio (`~0.577`), because the latter does not directly map to Word ink.
+  Also keep `ExtTextOut` advance ratios independent from vertical
+  `previewScale.y()`, or non-square target boxes can create width drift.
+- `\dfrac` and `\cfrac` must be included anywhere the renderer estimates
+  fraction physical height, depth, nesting, or preview class. Counting only
+  `\frac` makes display fractions look like linear formulas and invites Word
+  to squeeze them into a 13pt box.
+- The source-WMF parameter table must report coverage, not just numbers. In the
+  current 67-470 corpus, `linear`, `script`, `fraction`, and `accent` are
+  usable; `nested_fraction` and `text_fraction` are thin; `sqrt`,
+  `sqrt_fraction`, `script_fraction`, and `array` are missing. Missing samples
+  should appear as `sampleStatus=missing` with a conservative renderer action,
+  otherwise future work can mistake "no row" for "no special handling needed".
+- `\dfrac` and `\cfrac` support must be end-to-end. Updating only
+  `LaTeXImageRenderer` height/depth estimation is not enough: the vector WMF
+  layout path (`layoutFractions`, compact/nested detection, `tokenizeFlat`
+  guards, and inline-context scanning) must also use the shared fraction-command
+  scanner. A regression should assert these commands produce vector fraction
+  bars and no DIB fallback.
+- Fraction-command scanners must require a LaTeX command boundary after
+  `\frac`, `\dfrac`, and `\cfrac`. Plain substring scans can misclassify
+  command prefixes such as `\fraction` as real fractions, which then pollutes
+  both the source-WMF parameter table and the renderer height/layout route.
+- Nested-fraction classification must compare all supported fraction commands
+  together, not only same-command nesting. A `\frac{1+\dfrac{a}{b}}{2}` shape
+  is still a nested fraction for source statistics and renderer height-family
+  selection.
+- `\cfrac` must follow the same display-style routing as `\dfrac` in compact
+  inline checks. It is easy to include it in the shared fraction scanner but
+  forget old explicit exclusions, which squeezes contextual formulas such as
+  `x=\cfrac{a}{b}` into compact inline fraction spacing.
+- Source structure classification must keep every renderer-supported
+  array-like environment out of scalar buckets. Include `alignedat`, `gathered`,
+  `pmatrix`, `bmatrix`, and `cases` with `array`, or formulas that contain both
+  arrays and fractions/scripts will poison scalar parameter tables.
+- Separate numeric WMF parameter samples from global source-report coverage.
+  A structure may have no usable WMF rows in the active numbered corpus but
+  still have source-report candidates elsewhere. Report `coverageCount`
+  separately and do not use coverage-only samples as renderer constants until
+  their source DOCX WMF has been joined and inspected.
+- After array-like classification was aligned with the renderer, the 67-470
+  corpus produced 9 actual `array` WMF rows at 33pt height; these were
+  previously hidden inside scalar buckets. `sqrt` and `sqrt_fraction` still had
+  zero global source-report coverage in the available reports, so radicals
+  remain generated-candidate/old-path territory until real MathType source
+  samples are found.
+- Do not blindly change `scaleLayoutX` to return a scaled layout width. In this
+  renderer the stored layout width is also the later `previewScale` denominator;
+  keeping the old width preserves the intended local horizontal compression.
+  Changing it to the scaled width cancels or reverses several existing width
+  corrections and made standalone script/paren-power tests fail.
+
+### 2026-06-16 Word/MathType reference extraction
+
+- Added `scripts/extract_word_mathtype_reference.ps1` as a first-pass reference extractor. It opens a DOCX through Word COM, records every inline OLE object's ProgID, width, height, range positions, exports a Word PDF, and can open one `Equation.DSMT4` object in MathType for a screenshot.
+- The sample run on `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate.docx` produced `analysis/trace-runs/20260616-unified-box-candidate/word-reference/word-mathtype-reference.json`, `word-reference.pdf`, and `mathtype-formula-2.png`; it found `19` MathType OLE objects.
+- ImageMagick PDF rendering failed on this machine because Ghostscript (`gswin64c.exe`) was missing. Do not treat that as a Word export failure; the PDF was created successfully by Word COM.
+- MathType editor screenshot for formula index `2` showed the formula body is large and natural inside MathType, while Word's inline object box for that formula is `60.75 x 26.25 pt`. Use this split to diagnose whether a defect is in the OLE/MTEF body, WMF preview ink, or Word display box.
+
+### 2026-06-16 Reference extraction UI minimization
+
+- `scripts/extract_word_mathtype_reference.ps1` now defaults to `Word.Application.Visible = $false`, `ScreenUpdating = $false`, and `DisplayAlerts = 0`.
+- Added `-NoMathTypeUi` so reference extraction can run with no Word UI and no MathType popup. In that mode the script still records OLE sizes, exports the Word PDF, and skips the spotcheck screenshot.
+- MathType popup suppression is only partial when an actual `OLEFormat.Edit()` spotcheck is requested; that path still needs a visible editor window by design.
+- Script-slot fractions such as `x^{\frac{1}{2}}` should not reuse the normal
+  stacked fraction box. The stacked form placed the numerator baseline near
+  `1.2pt` inside a `26.3pt` WMF and Word clipped it into broken dots/short
+  strokes. In script context, parse grouped `\frac` with script metadata and use
+  a slash fraction (`1/2`) on the same script-size ladder. Bump
+  `LaTeXImageRenderer.CACHE_VERSION` after this kind of parser/layout change;
+  otherwise DOCX generation can silently reuse stale WMF previews.
+- Nested display fractions need their own physical height family. A formula like
+  `\frac{1+\frac{a}{b}}{2+\frac{c}{d}}=...` can put the lowest denominator
+  baseline around `25.15pt`; if the Word shape remains the single-fraction
+  `26.3pt` family, the result looks cramped or clipped. Treat nested fractions
+  separately from both script fractions and text-heavy slash ratios.
+- Do not tune WMF layout from visual inspection first. Build a source-WMF
+  structure corpus: read MathType source WMF records, join each object to the
+  source-report LaTeX, classify by structure, then summarize font height,
+  script ratio, record advance, baseline span, object height, and margins. The
+  first helper for this is `scripts/aggregate_wmf_structure_metrics.py`; use it
+  to derive per-structure constants before changing renderer code.
+- Source report alignment must be trusted by `docObjectIndex`, not by silent
+  ordinal fallback. Some reports have object gaps, and ordinal joins can put
+  the wrong LaTeX structure on a WMF object, poisoning per-structure constants.
+- The current source-WMF corpus gives stable seed values for common structures:
+  main MathType preview font is about `10.5pt`, script record font ratio is
+  about `0.577`, dominant linear boxes are `12.75-13pt`, dominant script boxes
+  are `16pt`, dominant ordinary fraction boxes are `28pt`, and observed nested
+  fraction boxes cluster around `53-60pt`. Treat these as renderer seed
+  families, not final visual acceptance.
+- Source MathType WMFs in the current corpus use record `0x0626` heavily and
+  expose zero parsed `META_POLYLINE` records, so `horizontalLineCenterRatio`
+  and line width fields are diagnostic-null for now. Do not infer that fractions
+  or radicals have no bars; add `0x0626` parsing or ink-bbox evidence before
+  using line geometry as a renderer parameter.
+- Source WMF text baselines are often anchored at `0`, so `baselineCenterRatio`
+  and crude `topMarginPt` are not safe Word-box placement parameters. Use
+  physical height buckets and rendered ink/Word PDF checks for vertical
+  placement until a better baseline model exists.
+- After deriving source-WMF candidates, the validation loop is: apply a scoped
+  renderer change, bump `LaTeXImageRenderer.CACHE_VERSION`, regenerate DOCX,
+  inspect WMF records, compare rendered ink/Word PDF, and spot-check Word object
+  boxes. The source statistics reduce blind tuning; they do not replace visual
+  and physical-size verification.
+
+### 2026-06-17 Word TeXToggle source WMF references
+
+- Word 16 COM can run MathType's Word macro `MTCommand_TeXToggle` in hidden
+  mode. Selecting TeX text such as `$\\sqrt{1+\\frac{a_1}{b}}$` and running that
+  macro produced a real `Equation.DSMT4` inline OLE with an official MathType
+  WMF preview, without opening the MathType editor UI.
+- Added `scripts/generate_word_mathtype_tex_reference.ps1` to generate small
+  official-reference DOCX files from explicit TeX formulas and a matching
+  source-report JSON. This is the preferred path for missing structures such as
+  radicals before changing renderer constants.
+- `C:\Program Files (x86)\MathType\Office Support\BlankEqn.doc` converts to a
+  DOCX with one empty MathType OLE, but the converted preview has zero text runs.
+  It is useful only as an installation/object sanity check, not as a structure
+  calibration sample.
+- The first hidden TeXToggle sample
+  `analysis/wmf-structure-metrics/word-mathtype-tex-reference.docx` matched all
+  six generated formulas to source-report objects with zero skipped unmapped
+  WMFs. Seed physical heights were: symbol/linear `14.25pt`, script `18.75pt`,
+  ordinary fraction `30.75pt`, nested fraction `60pt`, sqrt `18pt`, and
+  sqrt+fraction `35.25pt`.
+- Official MathType source WMFs generated by TeXToggle use a 12pt main font and
+  about `0.583` script font ratio in this sample. This differs from some older
+  corpus-derived `10.5pt` preview seeds, so prefer structure-specific sample
+  provenance over a single global font constant.
+- Parameter aggregation must skip WMF objects that have no source-report or no
+  `docObjectIndex` mapping. Treating those objects as empty LaTeX silently
+  classifies them as `linear` and pollutes standard glyph parameters. Report
+  skipped unmapped WMFs separately from missing source DOCX files.
+- The standard glyph renderer path should not absorb display or nested fractions
+  just because they contain scripts. Only compact inline fractions may share the
+  standard glyph ladder; display/nested/script-fraction formulas should route to
+  the fraction or unified-box layout families.
+
+### 2026-06-17 TeXToggle expansion and trust checks
+
+- `scripts/generate_word_mathtype_tex_reference.ps1` must verify each macro
+  conversion against Word's actual `InlineShapes` collection. A fixed sleep plus
+  assumed `docObjectIndex = formula ordinal` is not trustworthy: if
+  `MTCommand_TeXToggle` fails or inserts an unexpected object, the source-report
+  would look valid and poison the parameter table. The script now requires each
+  formula to add exactly one `Equation.DSMT4` object and writes the actual
+  `inlineShapeIndex`, `formulaIndex`, `ProgID`, width, and height.
+- The expanded hidden-Word TeXToggle sample has 22 formulas and verified
+  `22/22` `Equation.DSMT4` objects. It covers symbol/linear, script,
+  script-fraction, ordinary fraction, display fraction, nested fraction, sqrt,
+  sqrt+fraction, and optional root examples.
+- `scripts/aggregate_wmf_structure_metrics.py` now supports
+  `--extra-docx-source-report DOCX=SOURCE_REPORT`, so the main XSC source corpus
+  can be merged with generated official MathType reference samples. The combined
+  report `analysis/wmf-structure-metrics/combined-xsc-tex-toggle-summary.txt`
+  had `4404` mapped formulas and `0` skipped unmapped WMFs in this run.
+- Combined source seeds should be read by provenance. XSC corpus values dominate
+  common structures (`linear`, `script`, `fraction`, `accent`, `array`), while
+  TeXToggle fills structures missing from XSC (`script_fraction`, `sqrt`,
+  `sqrt_fraction`). Current combined seed buckets include `sqrt` at `18pt`
+  (with one optional-root sample at `20.25pt`) and `sqrt_fraction` at `35.25pt`.
+- Root-containing formulas must be classified before generic fraction families
+  for preview physical height. A formula like `\sqrt{1+\frac{a}{b}}` should use
+  the `sqrt_fraction` family around `35.25pt`, not the nested-fraction `53-60pt`
+  family, because the vector renderer deliberately keeps roots outside the
+  generic unified-box fraction path.
+- Do not route true nested display fractions through the compact unified-box
+  path until that parser has its own tall fraction metrics. A no-context review
+  caught that `layoutUnifiedBox(...)` accepted `hasNestedFraction(text)` while
+  `FractionFormulaBox` still used compact inline heights around `13.0+10.8pt`;
+  this contradicts the source-WMF nested-fraction family around `53.25/60pt`.
+  Keep script-slot fractions such as `x^{\frac{1}{2}}` on the slash/unified
+  path, but route nested display fractions through the tall display-fraction
+  path.
+- If a structure seed height was already set from MathType source statistics,
+  avoid applying a later generic visual multiplier to that same height. v156
+  removed the blanket `\sqrt` `heightScale *= 1.16` because `sqrt` and
+  `sqrt_fraction` were already seeded at `18.0pt` and `35.25pt`; keeping the
+  multiplier would drift them to about `20.9pt` and `40.9pt`.
+- v156 generated
+  `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate-20260617-014359.docx`.
+  Word COM extraction found `19` InlineShapes and `19` `Equation.DSMT4` OLE
+  objects. `scan_docx_latex_leaks.py` reported `0` visible LaTeX leaks and
+  `19` valid MathType OLE objects; `wmf_record_report.py` reported `19` vector
+  WMFs, `0` bitmap WMFs, `0` StretchDIB records, and `0` WMF LaTeX leaks.
+- v157 introduced `MathTypeStructureMetrics` as the Java-side seed table for
+  source-WMF structure constants. `LaTeXImageRenderer.estimateVectorHeightPt`
+  now reads linear/script/fraction/nested-fraction/text-fraction/sqrt/
+  sqrt-fraction/array/accent heights from that table, and
+  `VectorWmfFormulaRenderer` uses it for standard glyph font size/script ratio
+  and ordinary/compact fraction height families. This is not the full final
+  parameter-table integration yet; many local placement constants still need
+  later source/ink-backed migration.
+- A no-context v157 review found the important split: outer Word shape height
+  can be source-seeded while internal WMF ink geometry still uses old local
+  constants. The first correction was to move ordinary stacked fraction height
+  from the old `26.2pt` constant to the source-WMF `28.0pt` seed and make the
+  unified fraction box split that same family into above/below metrics. Do not
+  broaden `layoutUnifiedBox`; keep it limited to script-slot fractions until
+  nested display fraction geometry has its own tall parser model.
+- v157 generated
+  `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate-20260617-014933.docx`.
+  Word COM extraction found `19` InlineShapes and `19` `Equation.DSMT4` OLE
+  objects. `scan_docx_latex_leaks.py` reported `0` visible LaTeX leaks and
+  `19` valid MathType OLE objects; `wmf_record_report.py` reported `19` vector
+  WMFs, `0` bitmap WMFs, `0` StretchDIB records, and `0` WMF LaTeX leaks.
+  `git ls-files src/main/java/com/lz/paperword/core/render/MathTypeStructureMetrics.java`
+  was empty at this point, so remember to include this new source file when
+  staging/committing.
+- A no-context v158/v159 review caught a real source-table integration gap:
+  `\frac{\sqrt{a^{2}+b^{2}}}{2}` was estimated as the `sqrt_fraction`
+  `35.25pt` family by `LaTeXImageRenderer`, but `layoutFractions(...)` still
+  placed the internal WMF as an ordinary `28pt` fraction. This is the
+  problematic "source-seeded outer box, old internal geometry" class. v159
+  routes non-compact fractions containing `\sqrt` to the `sqrt_fraction`
+  height family inside `VectorWmfFormulaRenderer` as well.
+- WMF polyline tests must read `META_POLYLINE` point y coordinates at
+  `offset+10` and `offset+14`, not `offset+8` and `offset+12`. The latter are x
+  coordinates and can make radical-line height assertions meaningless.
+- Do not require text baselines in `\sqrt{1+\frac{a}{b}}` to exceed the
+  `18pt` simple-root family just to prove `sqrt_fraction` routing. The radical
+  line/overall window height is the better structural assertion; text baselines
+  may remain within the old range while the root enclosure correctly grows.
+- v159 generated
+  `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate-20260617-015812.docx`.
+  Word COM extraction found `19` InlineShapes and `19` `Equation.DSMT4` OLE
+  objects. `scan_docx_latex_leaks.py` reported `0` visible LaTeX leaks and
+  `19` valid MathType OLE objects; `wmf_record_report.py` reported `19` vector
+  WMFs, `0` bitmap WMFs, `0` StretchDIB records, and `0` WMF LaTeX leaks.
+- The `script_fraction` source bucket is still thin (`24.0pt/33.75pt`), and
+  current renderer policy remains "slash fraction only inside script context."
+  Do not blindly map `x^{\frac{1}{2}}` to ordinary fraction height; give it a
+  separate calibration pass once script-slot source/ink evidence is stronger.
+- v160 adds a narrow Java seed for `script_fraction` height families:
+  pure script-slot fractions such as `x^{\frac{1}{2}}+a^{\frac{2}{3}}` use the
+  TeXToggle `24.0pt` family, while mixed formulas with both a script-slot
+  fraction and a top-level ordinary fraction such as
+  `S_{\frac{1}{4}\mathrm{圆}}=\frac{1}{4}\pi r^{2}` use the `33.75pt` family.
+  This is intentionally a height-family classifier, not a broad internal
+  spacing calibration.
+- Do not treat every formula containing both scripts and fractions as
+  `script_fraction`. The safe v160 classifier requires a fraction inside a
+  script group; it only uses the pure `24.0pt` family when there is no
+  top-level fraction command. Ordinary `\frac{1}{2}` remains on the ordinary
+  fraction family, and nested display fractions still keep their separate tall
+  family.
+- v160 generated
+  `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate-20260617-020512.docx`.
+  Word COM extraction found `19` InlineShapes and `19` `Equation.DSMT4` OLE
+  objects. `scan_docx_latex_leaks.py` reported `0` visible LaTeX leaks and
+  `19` valid MathType OLE objects; `wmf_record_report.py` reported `19` vector
+  WMFs, `0` bitmap WMFs, `0` StretchDIB records, and `0` WMF LaTeX leaks.
+- A no-context v161 review caught a broad parameter-table contract problem:
+  `estimateVectorHeightPt(...)` returned source-seeded heights from
+  `MathTypeStructureMetrics`, but `calibratePreviewMetrics(...)` then applied
+  legacy `heightScale` multipliers. Examples included ordinary fractions
+  shrinking from `28.0pt` to `26.32pt`, text-heavy fractions getting `0.62x`,
+  and arrays receiving old line-count multipliers. This contradicts the rule
+  that source-seeded physical heights should not be scaled again.
+- v161 keeps legacy width calibration but guards source-seeded physical heights
+  from second scaling. Covered seeded families are array, fraction,
+  nested_fraction, text_fraction, sqrt, sqrt_fraction, script_fraction, script,
+  and accent. Old height multipliers remain only for non-table fallback shapes.
+  Regression tests now call `calibratePreviewMetrics(...)` by reflection and
+  assert final height still equals the structure seed for ordinary fraction,
+  nested fraction, text-heavy fraction, sqrt, sqrt_fraction, root-in-fraction,
+  pure script_fraction, mixed script_fraction, array, and accent.
+- v161 generated
+  `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate-20260617-021324.docx`.
+  Word COM extraction found `19` InlineShapes and `19` `Equation.DSMT4` OLE
+  objects. `scan_docx_latex_leaks.py` reported `0` visible LaTeX leaks and
+  `19` valid MathType OLE objects; `wmf_record_report.py` reported `19` vector
+  WMFs, `0` bitmap WMFs, `0` StretchDIB records, and `0` WMF LaTeX leaks.
+  The report listed `4` suspicious script-text samples with
+  `requiresReview=false`, so they remain diagnostic encoding samples rather
+  than a leak failure.
+- A no-context v162 review caught that `estimateVectorHeightPt`,
+  source-seeded-height guarding, and preview width class selection still had
+  parallel structure classifiers. This made `MathTypeStructureMetrics`
+  less reusable and allowed future structures to be wired into one path but not
+  another. v162 introduces `MathTypeStructureMetrics.Family` and
+  `FamilyMetrics`, then makes `LaTeXImageRenderer.classifyStructureFamily(...)`
+  the single query used for estimated height, source-seeded-height guarding,
+  and preview class.
+- Keep the structure-family contract covered by tests. The v162 contract test
+  asserts `family`, `heightPt`, `sourceSeededHeight`, and `previewClass` for
+  linear, script, pure script_fraction, mixed script_fraction, ordinary
+  fraction, nested_fraction, text_fraction, sqrt, sqrt_fraction, root-in-
+  fraction, array row count, and accent. This is the guard against collapsing
+  `sqrt_fraction` into generic `sqrt` or `script_fraction` into generic
+  `fraction` when adding future parameters.
+- v162 generated
+  `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate-20260617-021818.docx`.
+  Word COM extraction found `19` InlineShapes and `19` `Equation.DSMT4` OLE
+  objects. `scan_docx_latex_leaks.py` reported `0` visible LaTeX leaks and
+  `19` valid MathType OLE objects; `wmf_record_report.py` reported `19` vector
+  WMFs, `0` bitmap WMFs, `0` StretchDIB records, and `0` WMF LaTeX leaks.
+- v164 wired the source-WMF `array` height family into both explicit arrays and
+  renderer-supported array-like environments (`aligned`, `alignedat`,
+  `gathered`, `matrix`, `pmatrix`, `bmatrix`, and `cases`). A no-context review
+  caught that classifying only `\begin{array}` lets `cases/aligned` fall back to
+  scalar height families even though `VectorWmfFormulaRenderer` renders them as
+  array layouts.
+- For array-like source heights, count top-level rows from the first array-like
+  body instead of splitting the whole LaTeX string on every `\\`. A raw split
+  can count nested array/cases line breaks and create a mismatch between the
+  Word shape height and `layoutArray(...)` internals.
+- `MathTypeStructureMetrics.ARRAY_SOURCE_HEIGHT_PT` is now the 33pt two-row
+  source family, with `ARRAY_ROW_HEIGHT_PT` at 16.5pt. Keep future array tuning
+  anchored to this source family before changing local row spacing.
+- If Word COM reference extraction times out while exporting PDF or closing
+  Word, run a narrower OLE-only check before judging the candidate invalid. For
+  `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate-20260617-023121.docx`,
+  the minimal COM check found `InlineShapes=19` and `Equation.DSMT4=19` after
+  clearing hidden no-title `WINWORD` processes left by the timed-out extraction.
+- v165 moved plain accent internals one step closer to the source table:
+  `layoutOverline(...)` and `layoutUnderline(...)` now use
+  `MathTypeStructureMetrics.ACCENT_HEIGHT_PT` for their internal layout height,
+  with overline/underline line placement constants kept in the same metrics
+  class. This avoids the old split where the Word shape used the 15.75pt
+  source family but the WMF internals still used 13-14pt local boxes.
+- Add internal WMF tests for every source-seeded family as it is migrated. The
+  v165 accent test renders `\overline{AB}` and `\underline{AB}` at 15.75pt and
+  asserts `windowExtY`, polyline y, text y, vector content, and no DIB fallback.
+  Outer `LaTeXImageRenderer` height tests alone are not enough.
+- v165 generated
+  `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate-20260617-024209.docx`.
+  `scan_docx_latex_leaks.py` reported `0` visible LaTeX leaks, `19` WMF media,
+  and `19` valid MathType OLE objects. `wmf_record_report.py` reported `19`
+  vector WMFs, `0` bitmap WMFs, `0` StretchDIB records, and `0` WMF LaTeX
+  leaks. A minimal Word COM check found `InlineShapes=19` and
+  `Equation.DSMT4=19`.
+- v166 moved text-heavy fractions onto their own source-seeded internal WMF
+  family. `LaTeXImageRenderer` already classified `text_fraction` as `30pt`,
+  but `VectorWmfFormulaRenderer.layoutFractions(...)` still rendered it through
+  ordinary/compact fraction geometry. Keep the ordinary `28pt` fraction shape
+  centered inside the `30pt` text-fraction family until source `0x0626` or ink
+  data gives better numerator/bar/denominator offsets.
+- `isCompactInlineFraction(...)` must exclude `hasTextHeavyFraction(...)`.
+  Mixed formulas such as
+  `\frac{三角形ABD的面积}{三角形CBD的面积}=\frac{AO}{CO}` contain a small inline
+  fraction, but the visible dominant structure is still the text-heavy
+  fraction. Letting compact routing win recreates the old cramped 18pt profile.
+- v166 generated
+  `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate-20260617-024818.docx`.
+  `scan_docx_latex_leaks.py` reported `0` visible LaTeX leaks, `19` WMF media,
+  and `19` valid MathType OLE objects. `wmf_record_report.py` reported `19`
+  vector WMFs, `0` bitmap WMFs, `0` StretchDIB records, and `0` WMF LaTeX
+  leaks. A minimal Word COM check found `InlineShapes=19` and
+  `Equation.DSMT4=19`.
+- v167 moved true nested display fractions onto the `nested_fraction` internal
+  WMF height family. Before the change, rendering
+  `\frac{1+\frac{a}{b}}{2+\frac{c}{d}}` in a 53.25pt box still put the deepest
+  text around 35pt and the lowest bar around 27pt, leaving the source-seeded
+  lower half mostly empty. `layoutFractions(...)` now uses a nested branch
+  separate from compact, sqrt_fraction, and text_fraction.
+- The current nested split is intentionally conservative: outer nested
+  fractions use `NESTED_FRACTION_ABOVE_PT=30pt` and the source total
+  `53.25pt`, while inner fractions keep the ordinary recursive model. This
+  fixes the "outer shape tall, internal ink ordinary" mismatch without
+  pretending source `0x0626` line geometry has been decoded.
+- v167 generated
+  `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate-20260617-025308.docx`.
+  `scan_docx_latex_leaks.py` reported `0` visible LaTeX leaks, `19` WMF media,
+  and `19` valid MathType OLE objects. `wmf_record_report.py` reported `19`
+  vector WMFs, `0` bitmap WMFs, `0` StretchDIB records, and `0` WMF LaTeX
+  leaks. A minimal Word COM check found `InlineShapes=19` and
+  `Equation.DSMT4=19`.
+- v168 keeps script-slot fractions as slash fractions. Do not "fix" pure
+  `script_fraction` by turning `x^{\frac{1}{2}}` into a stacked display
+  fraction; earlier Word clipping showed the slash policy is intentional for
+  script context. The source-table integration point is the unified-box
+  `FormulaLayout.heightPt()`, not the script-slot fraction drawing semantics.
+- `VectorWmfFormulaRenderer.layoutUnifiedBox(...)` now pins pure script-slot
+  fractions to `SCRIPT_FRACTION_HEIGHT_PT=24pt` and mixed script-slot plus
+  top-level fraction formulas to `SCRIPT_FRACTION_MIXED_HEIGHT_PT=33.75pt`.
+  This mirrors `LaTeXImageRenderer` classification while preserving the
+  existing forced-slash child fraction behavior.
+- v168 generated
+  `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate-20260617-030322.docx`.
+  `scan_docx_latex_leaks.py` reported `0` visible LaTeX leaks, `19` WMF media,
+  and `19` valid MathType OLE objects. `wmf_record_report.py` reported `19`
+  vector WMFs, `0` bitmap WMFs, `0` StretchDIB records, and `0` WMF LaTeX
+  leaks. A minimal Word COM check found `InlineShapes=19` and
+  `Equation.DSMT4=19`.
+- A no-context v168 review caught a real classifier mismatch: the vector
+  renderer's original `hasFractionInsideScript(...)` used a depth-blind script
+  operator scan, while `LaTeXImageRenderer` only treats top-level script slots
+  as `script_fraction`. Without the fix,
+  `\frac{x^{\frac{1}{2}}}{2}` could be misread as `script_fraction_mixed` or
+  fail to render after correcting the route. Use a depth-aware top-level script
+  scanner for source-family classification, and let `layoutFractionPart(...)`
+  call `layoutUnifiedBox(...)` so display-fraction children such as
+  `x^{\frac{1}{2}}` still render as slash script-slot fractions inside the
+  correct outer display/nested fraction path.
+- v169 moved the remaining simple-root WMF geometry constants into
+  `MathTypeStructureMetrics`: root body x/y offset, width pad, checkmark
+  x-points, top y, bottom pad, and left descent ratios. This does not claim a
+  new visual calibration; it makes `layoutSqrt(...)` and `SqrtFormulaBox` share
+  the same parameter-table entry points before later source/ink tuning.
+- Root-line tests should not assert absolute x coordinates after final preview
+  fitting. `fitLayoutToTarget(...)` can add left padding or scale x distances.
+  The reliable invariant is the root checkmark's relative shape ratio plus y
+  placement within a small twip tolerance. v169 added
+  `sqrtRootShapeCoordinatesComeFromStructureMetrics()` for that.
+- v169 generated
+  `analysis/trace-runs/20260616-unified-box-candidate/unified-box-formula-candidate-20260617-031105.docx`.
+  `scan_docx_latex_leaks.py` reported `0` visible LaTeX leaks, `19` WMF media,
+  and `19` valid MathType OLE objects. `wmf_record_report.py` reported `19`
+  vector WMFs, `0` bitmap WMFs, `0` StretchDIB records, and `0` WMF LaTeX
+  leaks. A minimal Word COM check found `InlineShapes=19` and
+  `Equation.DSMT4=19`.
+- v170 fixed the Python source-WMF parameter chain to match the Java structure
+  family contract for script-slot fractions. `script_fraction` (`24pt`) and
+  `script_fraction_mixed` (`33.75pt`) are now separate candidate buckets; do not
+  merge them when copying source seeds into `MathTypeStructureMetrics`.
+- `aggregate_wmf_structure_metrics.py` must scan only top-level script slots
+  when deciding `script_fraction` / `script_fraction_mixed`. A nested/display
+  fraction such as `\frac{x^{\frac{1}{2}}}{2}` remains `nested_fraction`, not
+  mixed script-fraction. This mirrors the depth-aware Java scanner and prevents
+  display fractions from being polluted by child script-slot fractions.
+- Candidate reports now distinguish directly usable renderer fields from
+  missing parameters. `dominantHeightPt`, `mainFontPt`, and source
+  `scriptRatio` can seed families, but bar/radical geometry, text-heavy
+  numerator/denominator baselines, root index placement, array spacing, and
+  script-slot/top-level baseline relationships still need `0x0626` decoding or
+  rendered ink evidence.
+- `sourceScriptFontRatio` is a source WMF record ratio, not the same thing as
+  the Java visual script ratio. Keep `VISUAL_SCRIPT_FONT_RATIO` ink-validated;
+  do not replace it blindly with the source `0.577/0.583` ratio.
+- `coverageCount` in parameter candidates is discovery-only. Calibration
+  strength comes from mapped WMF `count`, not source-report-only coverage. The
+  regenerated combined report used the broad `--source-report-root analysis`
+  root and restored `4404` mapped formulas with `0` skipped unmapped WMFs; a
+  narrower source-report root gave `811` skipped rows and should not be treated
+  as the final corpus.
+- v171 wired ImageMagick ink bbox into
+  `scripts/aggregate_wmf_structure_metrics.py`. Use `--with-ink` explicitly and
+  use `--require-magick-ink` for calibration claims; the aggregate script must
+  fail if any formula has `magickInkError`, because `inspect_docx(...)` bypasses
+  the CLI-only failure check in `measure_wmf_formula_glyphs.py`.
+- System Python may not have Pillow. For ink aggregation, use the bundled
+  Python path from Codex desktop:
+  `C:\Users\11703\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe`.
+  With system Python, `--require-magick-ink` now fails fast on
+  `pillow_not_available` instead of writing an empty ink report.
+- Empty rendered ink is not a successful measurement. Aggregation excludes
+  `inkCount=0` from `magickInkWidthPt`, `magickInkHeightPt`, and ink ratio
+  stats, and reports `magickBlankInkCount` separately so blank renders cannot
+  silently pull medians toward zero.
+- Ink ratios in the aggregate report are visible ink divided by the Word shape
+  canvas, not WMF placeable/window units. Keep comparing `shapeWidthPt`,
+  `wmfPlaceableWidthPt`, and Word spot checks before copying ink ratios into
+  renderer constants.
+- The TeXToggle expanded sample now produces a usable ink candidate report at
+  `analysis/wmf-structure-metrics/word-mathtype-tex-reference-expanded-ink-summary.json`.
+  The validation run had `22` formulas, `22` ink samples, `0` ink errors, and
+  `0` blank ink samples; structures such as `script`, `fraction`, `sqrt`, and
+  `sqrt_fraction` expose `magickInkWidthRatio`, `magickInkHeightRatio`, and
+  `magickInkCenterYRatio` plus per-structure ink sample counts.
+- v172 added `MathTypeStructureMetrics.SourceSampleMetrics` and `InkMetrics` as
+  the Java-side read point for source/ink evidence. These values are calibration
+  evidence, not automatic layout transforms: thin TeXToggle samples such as
+  `script_fraction` (`n=1`) and `nested_fraction` (`n=2`) must not directly
+  drive glyph scaling without Word spot checks and broader corpus support.
+- Keep `sourceSampleMetrics(...)` separate from `metrics(...)`. `metrics(...)`
+  is the active height contract used by `LaTeXImageRenderer` and
+  `VectorWmfFormulaRenderer`; `sourceSampleMetrics(...)` records provenance
+  fields such as source main font, source script ratio, ink width/height ratio,
+  ink centerY ratio, and ink sample count for future per-structure tuning.
+- The current ink ratios are most useful for comparing generated previews
+  against official source WMFs by structure. They should be used to decide the
+  next targeted geometry change, not copied blindly into `previewScale`, font
+  width, or `ExtTextOut dx`.
+- v173 added `--out-candidates-java` to
+  `scripts/aggregate_wmf_structure_metrics.py`. It writes a reviewable Java
+  switch fragment such as
+  `analysis/wmf-structure-metrics/word-mathtype-tex-reference-expanded-ink-source-sample-metrics.javafrag`
+  so `MathTypeStructureMetrics.sourceSampleMetrics(...)` can be refreshed from
+  candidate JSON instead of hand-copying numbers.
+- Treat the generated Java fragment as evidence, not as an automatic patch. The
+  TeXToggle-only sample proposes candidate heights such as ordinary fraction
+  `30.75pt` and nested fraction `60pt`, while the active renderer contract may
+  intentionally stay on combined/XSC-backed heights such as `28pt` and
+  `53.25pt`. Review provenance and Word spot checks before syncing active
+  heights.
+- `SourceSampleMetrics.candidateHeightPt` is named deliberately. It records the
+  source candidate height from a report; the active renderer height remains
+  `MathTypeStructureMetrics.metrics(...)`. Do not infer that every candidate
+  height should immediately replace the active height family.
+- v174 fixed the first concrete candidate/active-height mismatch in the Java
+  evidence table. `SourceSampleMetrics.candidateHeightPt` now records the
+  TeXToggle source candidate height for structures such as script `18.75pt`,
+  ordinary fraction `30.75pt`, and nested fraction `60pt`, while
+  `metrics(...)` keeps the active renderer heights (`16pt`, `28pt`, `53.25pt`)
+  until broader source/Word evidence justifies changing rendered output.
+- Tests should assert both values when they intentionally differ. This keeps the
+  parameter table honest: source evidence can disagree with active rendering
+  without silently becoming either stale documentation or an unreviewed visual
+  change.
+- v175 extended `scripts/compare_wmf_formula_glyphs.py` from object-index-only
+  comparison into a structure-aware diff tool. Use `--pair-by formula-key` when
+  comparing source MathType WMFs against generated WMFs from the same formula
+  list; it now reports per-structure ink width/height deltas, record-width
+  deltas, low-trust record-only cases, and worst examples.
+- Generated-vs-source comparison needs a generated DOCX built from the same
+  formula corpus, not the separate 19-formula unified-box demo. v175 added
+  `GeneratedMathTypeTexReferenceDocxTest` to build a current-renderer DOCX and
+  request JSON from
+  `analysis/wmf-structure-metrics/word-mathtype-tex-reference-expanded.source-report.json`.
+- Current renderer comparability gaps are explicit: the MTEF/OLE path rejected
+  `\dfrac` / `\cfrac`, so the analysis generator normalizes them to `\frac`;
+  strict self-vector WMF still rejects indexed roots such as `\sqrt[3]{8}=2`,
+  so those are skipped for now rather than mixed into size calibration.
+- First same-formula source-vs-generated diff artifact:
+  `analysis/wmf-structure-metrics/generated-word-mathtype-tex-reference-expanded/generated-vs-source-20260617-034550-diff.txt`.
+  It paired 20 formulas by formula key with zero missing pairs. Structure
+  averages showed linear formulas much too narrow (`inkW_avg=-14.162pt`),
+  simple sqrt too narrow (`inkW_avg=-10.646pt`), script_fraction too wide and
+  too short (`inkW_avg=+14.266pt`, `inkH_avg=-8.5pt`), ordinary fraction width
+  roughly near source but height short (`inkW_avg=-0.57pt`,
+  `inkH_avg=-3.303pt`), and nested_fraction too wide but shorter
+  (`inkW_avg=+11.118pt`, `inkH_avg=-5.28pt`).
+- Treat record-width deltas from source MathType WMFs cautiously in this diff:
+  official source WMFs often group text into different runs than the generated
+  self-written WMF. v175's diff labels many rows `low_run_structure_mismatch`;
+  for next renderer changes, prioritize same-formula ink bbox deltas and use
+  record/run rows for diagnosis, not as a direct pass/fail metric.
+- v176 added source-driven preview width scale entry points for linear, sqrt,
+  and sqrt_fraction families. On the TeXToggle same-formula corpus, linear
+  average ink-width delta improved from `-14.162pt` to `-6.103pt`, and sqrt
+  improved from `-10.646pt` to `+1.469pt`. The generated artifacts were
+  `analysis/wmf-structure-metrics/generated-word-mathtype-tex-reference-expanded/generated-word-mathtype-tex-reference-expanded-20260617-085037.docx`
+  and `generated-vs-source-20260617-085037-diff.txt`.
+- Do not treat all plain `sqrt` formulas as one width class. v176 made
+  ordinary roots like `\sqrt{8}=2\sqrt{2}` and `\sqrt{x+1}` much closer, but
+  over-expanded `\sqrt{a^{2}+b^{2}}` from the source `41.274pt` ink width to
+  `52.874pt`. Root body formulas containing scripts need their own width
+  parameter.
+- v177 split script-body roots via
+  `MathTypeStructureMetrics.SQRT_SCRIPT_PREVIEW_WIDTH_SCALE`. The same
+  `\sqrt{a^{2}+b^{2}}` ink width moved from v176 `52.874pt` to `42.732pt`
+  against source `41.274pt`, while ordinary-root improvements were preserved.
+  The generated artifacts were
+  `analysis/wmf-structure-metrics/generated-word-mathtype-tex-reference-expanded/generated-word-mathtype-tex-reference-expanded-20260617-085433.docx`
+  and `generated-vs-source-20260617-085433-diff.txt`.
+- After v177, the next evidence-backed targets are no longer plain sqrt.
+  Worst same-formula ink deltas are script relation formula
+  `S_{\Delta AOB}:S_{\Delta COD}=a^{2}:b^{2}=4:9` (`-16.351pt`),
+  nested fraction `\frac{1+\frac{a}{b}}{2+\frac{c}{d}}` (`+16.227pt`),
+  mixed linear/fraction `AO=1,\ CO=\frac{5}{3}` (`-16.162pt`),
+  and script-slot fraction `x^{\frac{1}{2}}+a^{\frac{2}{3}}` (`+14.266pt`,
+  height `-8.500pt`). Handle these as separate structure classes rather than
+  by broad global width scaling.
+- v178 targets visible line quality rather than object size. Fraction bars and
+  radicals share the WMF pen, so line weight should live in
+  `MathTypeStructureMetrics.STRUCTURE_LINE_WIDTH_PT`; the first visual-quality
+  pass changed it from the old hard-coded `0.45pt` to `0.32pt`. Bump
+  `LaTeXImageRenderer.CACHE_VERSION` after this change or Word will keep old
+  cached line previews.
+- Root signs should be emitted as one continuous `META_POLYLINE` with four
+  points, not three independent two-point records. Independent root segments
+  show visible cap/joint artifacts in Word. v178 updated both `layoutSqrt(...)`
+  and `SqrtFormulaBox.emit(...)` to use a multi-point `LineSegment.polyline`.
+  The generated v178 sample
+  `analysis/wmf-structure-metrics/generated-word-mathtype-tex-reference-expanded/generated-word-mathtype-tex-reference-expanded-20260617-090452.docx`
+  stayed self-vector (`20` WMFs, `20` vectorText, `20` vectorContent,
+  `0` StretchDIB, `0` bitmap WMF). In its WMF report, simple root records such
+  as image_eq16/image_eq17 now contain one radical polyline instead of three
+  separate root-segment polylines.
+- When parsing WMF polylines in tests, read the declared point count and all
+  points. Old helpers assumed exactly two points, which would hide regressions
+  once roots, arcs, or future brackets use real multi-point paths.

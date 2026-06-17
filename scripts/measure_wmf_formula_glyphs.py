@@ -497,6 +497,7 @@ def parse_wmf(data: bytes, fallback_units_per_pt: float, shape_width_pt: float |
     polylines: list[dict[str, Any]] = []
     window_ext = None
     record_count = 0
+    record_function_counts: dict[str, int] = {}
 
     while offset + 6 <= len(data):
         size_words = u32(data, offset)
@@ -506,6 +507,8 @@ def parse_wmf(data: bytes, fallback_units_per_pt: float, shape_width_pt: float |
         end = offset + size_words * 2
         payload = data[offset + 6:end]
         record_count += 1
+        function_key = f"0x{function:04X}"
+        record_function_counts[function_key] = record_function_counts.get(function_key, 0) + 1
         if function == META_EOF:
             break
         if function == META_SETWINDOWEXT and len(payload) >= 4:
@@ -571,6 +574,7 @@ def parse_wmf(data: bytes, fallback_units_per_pt: float, shape_width_pt: float |
             "fallbackUnitsPerPt": fallback_units_per_pt,
         },
         "recordCount": record_count,
+        "recordFunctionCounts": record_function_counts,
         "objects": [objects[index] for index in sorted(objects)],
         "fonts": [objects[index] for index in sorted(objects) if objects[index].get("type") == "font"],
         "runs": runs,

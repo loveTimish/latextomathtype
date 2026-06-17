@@ -44,11 +44,39 @@ final class VectorWmfFormulaRenderer {
     private static final double COMPACT_FRACTION_NUMERATOR_Y_PT = -0.2d;
     private static final double COMPACT_FRACTION_DENOMINATOR_Y_PT = 14.0d;
     private static final double COMPACT_FRACTION_BAR_Y_PT = 13.6d;
-    private static final double COMPACT_FRACTION_HEIGHT_PT = 25.5d;
+    private static final double COMPACT_FRACTION_HEIGHT_PT =
+        MathTypeStructureMetrics.COMPACT_INLINE_FRACTION_HEIGHT_PT;
     private static final double FRACTION_NUMERATOR_Y_PT = -2.4d;
     private static final double FRACTION_DENOMINATOR_Y_PT = 11.8d;
     private static final double FRACTION_BAR_Y_PT = 12.8d;
-    private static final double FRACTION_HEIGHT_PT = 26.2d;
+    private static final double FRACTION_HEIGHT_PT = MathTypeStructureMetrics.ORDINARY_FRACTION_HEIGHT_PT;
+    private static final double TEXT_FRACTION_HEIGHT_PT = MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT;
+    private static final double TEXT_FRACTION_NUMERATOR_Y_PT =
+        FRACTION_NUMERATOR_Y_PT + MathTypeStructureMetrics.TEXT_FRACTION_VERTICAL_OFFSET_PT;
+    private static final double TEXT_FRACTION_DENOMINATOR_Y_PT =
+        FRACTION_DENOMINATOR_Y_PT + MathTypeStructureMetrics.TEXT_FRACTION_VERTICAL_OFFSET_PT;
+    private static final double TEXT_FRACTION_BAR_Y_PT =
+        FRACTION_BAR_Y_PT + MathTypeStructureMetrics.TEXT_FRACTION_VERTICAL_OFFSET_PT;
+    private static final double NESTED_FRACTION_HEIGHT_PT = MathTypeStructureMetrics.NESTED_FRACTION_HEIGHT_PT;
+    private static final double NESTED_FRACTION_NUMERATOR_Y_PT = 2.0d;
+    private static final double NESTED_FRACTION_BAR_Y_PT = MathTypeStructureMetrics.NESTED_FRACTION_ABOVE_PT;
+    private static final double NESTED_FRACTION_DENOMINATOR_Y_PT =
+        MathTypeStructureMetrics.NESTED_FRACTION_ABOVE_PT + 2.0d;
+    private static final double SCRIPT_FRACTION_HEIGHT_PT = MathTypeStructureMetrics.SCRIPT_FRACTION_HEIGHT_PT;
+    private static final double SCRIPT_FRACTION_MIXED_HEIGHT_PT =
+        MathTypeStructureMetrics.SCRIPT_FRACTION_MIXED_HEIGHT_PT;
+    private static final double SQRT_FRACTION_HEIGHT_PT = MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT;
+    private static final double SQRT_FRACTION_NUMERATOR_Y_PT = 0.0d;
+    private static final double SQRT_FRACTION_DENOMINATOR_Y_PT =
+        MathTypeStructureMetrics.SQRT_FRACTION_ABOVE_PT + 1.0d;
+    private static final double SQRT_FRACTION_BAR_Y_PT = MathTypeStructureMetrics.SQRT_FRACTION_ABOVE_PT;
+    private static final double STANDARD_GLYPH_BASE_FONT_PT = MathTypeStructureMetrics.STANDARD_MAIN_FONT_PT;
+    private static final double STANDARD_GLYPH_VISUAL_SCRIPT_RATIO =
+        MathTypeStructureMetrics.VISUAL_SCRIPT_FONT_RATIO;
+    private static final double STANDARD_GLYPH_DISPLAY_RATIO = 1.76d;
+    private static final double STANDARD_GLYPH_SCRIPT_WIDTH_SCALE =
+        MathTypeStructureMetrics.STANDARD_SCRIPT_WIDTH_SCALE;
+    private static final double UNIFIED_SCRIPT_BOX_SCALE = 0.78d;
     private static final Font TIMES_FONT = new Font(ANSI_PREVIEW_FACE, Font.PLAIN, 12);
     private static final Font TIMES_ITALIC_FONT = new Font(ANSI_PREVIEW_FACE, Font.ITALIC, 12);
     private static final Font SYMBOL_FONT = new Font("Symbol", Font.PLAIN, 12);
@@ -152,6 +180,19 @@ final class VectorWmfFormulaRenderer {
         double fontYScale = fontYScale(latex);
         double relationFontYScale = scriptRelationFontYScale(latex);
         double relationHeightWidthCompensation = scriptRelationHeightWidthCompensation(latex);
+        boolean standardGlyphModel = standardGlyphModel(latex);
+        double regularFontPt = regularFontSizePt(fontYScale, relationFontYScale, previewScale.y(), standardGlyphModel);
+        double scriptFontPt = scriptFontSizePt(regularFontPt, shortScriptHeightScale, fontYScale, relationFontYScale,
+            previewScale.y(), standardGlyphModel);
+        double displayFontPt = displayFontSizePt(previewScale.y(), standardGlyphModel);
+        double dxRegularRatio = standardGlyphModel ? STANDARD_GLYPH_BASE_FONT_PT / 12.0d : 1.0d;
+        double dxScriptRatio = standardGlyphModel
+            ? STANDARD_GLYPH_BASE_FONT_PT * STANDARD_GLYPH_VISUAL_SCRIPT_RATIO / 12.0d
+            : 8.0d / 12.0d;
+        double dxDisplayRatio = standardGlyphModel ? STANDARD_GLYPH_BASE_FONT_PT * STANDARD_GLYPH_DISPLAY_RATIO / 12.0d
+            : 22.0d / 12.0d;
+        double dxShortScriptWidthScale = standardGlyphModel ? STANDARD_GLYPH_SCRIPT_WIDTH_SCALE
+            : shortScriptWidthScale;
         double regularFontWidthScale = standaloneSingleLetterWidthScale > 1.0d ? standaloneSingleLetterWidthScale
             : 1.0d;
         WmfBuilder builder = new WmfBuilder(widthPt, heightPt);
@@ -171,43 +212,32 @@ final class VectorWmfFormulaRenderer {
             writeWord(out, 0);
             writeWord(out, 0);
         }); // SetTextColor black
-        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
-            12.0d * fontYScale * relationFontYScale * previewScale.y(), ANSI_CHARSET, regularFontWidthScale, false));
-        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
-            8.0d * shortScriptHeightScale * fontYScale * relationFontYScale * previewScale.y(), ANSI_CHARSET,
-            shortScriptWidthScale, false));
-        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
-            22.0d * previewScale.y(), ANSI_CHARSET));
-        builder.record(0x02FB, out -> writeFont(out, "Symbol",
-            12.0d * fontYScale * relationFontYScale * previewScale.y(), SYMBOL_CHARSET, regularFontWidthScale));
-        builder.record(0x02FB, out -> writeFont(out, "Symbol",
-            8.0d * shortScriptHeightScale * fontYScale * relationFontYScale * previewScale.y(), SYMBOL_CHARSET,
-            shortScriptWidthScale));
-        builder.record(0x02FB, out -> writeFont(out, "Symbol", 22.0d * previewScale.y(), SYMBOL_CHARSET));
-        builder.record(0x02FB, out -> writeFont(out, "SimSun",
-            12.0d * fontYScale * relationFontYScale * previewScale.y(), GB2312_CHARSET, regularFontWidthScale));
-        builder.record(0x02FB, out -> writeFont(out, "SimSun",
-            8.0d * shortScriptHeightScale * fontYScale * relationFontYScale * previewScale.y(), GB2312_CHARSET,
-            shortScriptWidthScale));
-        builder.record(0x02FB, out -> writeFont(out, "SimSun", 22.0d * previewScale.y(), GB2312_CHARSET));
-        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
-            12.0d * fontYScale * relationFontYScale * previewScale.y(), ANSI_CHARSET, regularFontWidthScale, true));
-        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
-            8.0d * shortScriptHeightScale * fontYScale * relationFontYScale * previewScale.y(), ANSI_CHARSET,
-            shortScriptWidthScale, true));
-        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE,
-            22.0d * previewScale.y(), ANSI_CHARSET, 1.0d, true));
+        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE, regularFontPt, ANSI_CHARSET,
+            regularFontWidthScale, false));
+        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE, scriptFontPt, ANSI_CHARSET,
+            dxShortScriptWidthScale, false));
+        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE, displayFontPt, ANSI_CHARSET));
+        builder.record(0x02FB, out -> writeFont(out, "Symbol", regularFontPt, SYMBOL_CHARSET, regularFontWidthScale));
+        builder.record(0x02FB, out -> writeFont(out, "Symbol", scriptFontPt, SYMBOL_CHARSET,
+            dxShortScriptWidthScale));
+        builder.record(0x02FB, out -> writeFont(out, "Symbol", displayFontPt, SYMBOL_CHARSET));
+        builder.record(0x02FB, out -> writeFont(out, "SimSun", regularFontPt, GB2312_CHARSET, regularFontWidthScale));
+        builder.record(0x02FB, out -> writeFont(out, "SimSun", scriptFontPt, GB2312_CHARSET,
+            dxShortScriptWidthScale));
+        builder.record(0x02FB, out -> writeFont(out, "SimSun", displayFontPt, GB2312_CHARSET));
+        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE, regularFontPt, ANSI_CHARSET,
+            regularFontWidthScale, true));
+        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE, scriptFontPt, ANSI_CHARSET,
+            dxShortScriptWidthScale, true));
+        builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE, displayFontPt, ANSI_CHARSET, 1.0d, true));
         builder.record(0x02FA, VectorWmfFormulaRenderer::writeBlackPen); // CreatePen
         builder.record(0x012D, out -> writeWord(out, 0)); // SelectObject
 
         if (!layout.lines().isEmpty()) {
             builder.record(0x012D, out -> writeWord(out, PEN_OBJECT_INDEX)); // SelectObject pen
             for (LineSegment line : layout.lines()) {
-                int x1 = toTwips(LEFT_MARGIN_PT + offsetX + line.x1Pt() * previewScale.x());
-                int y1 = toTwips(TOP_MARGIN_PT + offsetY + line.y1Pt() * previewScale.y());
-                int x2 = toTwips(LEFT_MARGIN_PT + offsetX + line.x2Pt() * previewScale.x());
-                int y2 = toTwips(TOP_MARGIN_PT + offsetY + line.y2Pt() * previewScale.y());
-                builder.record(0x0325, out -> writePolyline(out, x1, y1, x2, y2));
+                int[] points = line.toTwips(LEFT_MARGIN_PT + offsetX, TOP_MARGIN_PT + offsetY, previewScale);
+                builder.record(0x0325, out -> writePolyline(out, points));
             }
             builder.record(0x012D, out -> writeWord(out, 0));
         }
@@ -227,11 +257,13 @@ final class VectorWmfFormulaRenderer {
                 double runWidthScale = run.widthScale() * standaloneDigitWidthScale * standaloneSingleLetterWidthScale
                     * standaloneGeometryWidthScale * shortScriptEquationWidthScale * shortExactEquationWidthScale
                     * shortLinearEquationWidthScale * relationHeightWidthCompensation;
-                int[] dx = characterDxTwips(segment, run.script(), run.display(), previewScale.x(), shortScriptWidthScale,
-                    runWidthScale);
+                int[] dx = characterDxTwips(segment, run.script(), run.display(), previewScale.x(),
+                    dxShortScriptWidthScale, runWidthScale, dxRegularRatio, dxScriptRatio, dxDisplayRatio,
+                    standardGlyphModel);
                 builder.record(0x0A32, out -> writeExtTextOut(out, runX, runBaseline, bytes, dx));
-                segmentX += segment.widthPt() * sizeScale(run.script(), run.display())
-                    * (run.script() ? shortScriptWidthScale : 1.0d) * runWidthScale;
+                segmentX += segment.widthPt() * sizeScale(run.script(), run.display(), dxRegularRatio,
+                    dxScriptRatio, dxDisplayRatio, standardGlyphModel)
+                    * (run.script() ? dxShortScriptWidthScale : 1.0d) * runWidthScale;
             }
         }
         return builder.finish();
@@ -310,6 +342,59 @@ final class VectorWmfFormulaRenderer {
             xScale = Math.min(xScale, Math.max(0.05d, widthScale * heightScale));
         }
         return new PreviewScale(xScale, yScale);
+    }
+
+    static boolean standardGlyphModel(String latex) {
+        String raw = stripMetricsAndStyles(latex == null ? "" : latex);
+        if (raw.isBlank() || raw.contains("\\begin") || raw.contains("\\over") || raw.contains("\\under")
+            || raw.contains("\\boxed") || raw.contains("\\xrightarrow") || raw.contains("\\xleftarrow")
+            || raw.contains("\\overline") || raw.contains("\\underline") || raw.contains("\\overset")
+            || raw.contains("\\underset") || raw.contains("\\left") || raw.contains("\\right")) {
+            return false;
+        }
+        String text = normalizeFlatLatex(normalizeTextCommands(raw)).replaceAll("\\s+", "");
+        if (text.isEmpty() || containsCjk(text)) {
+            return false;
+        }
+        if (raw.contains("\\sqrt")) {
+            return false;
+        }
+        if (hasFractionCommand(raw)) {
+            return isCompactInlineFraction(raw);
+        }
+        if (!hasScript(text) || text.length() > 90) {
+            return false;
+        }
+        if (raw.contains("\\Delta") && !raw.contains("\\colon") && !raw.contains("\\bigtriangleup")) {
+            return true;
+        }
+        return text.contains("+") && text.matches(".*[a-zA-Z]_[{]?[0-9][}]?\\^[{]?[0-9][}]?.*");
+    }
+
+    private static boolean hasScript(String latex) {
+        String text = stripMetricsAndStyles(latex == null ? "" : latex);
+        return text.contains("^") || text.contains("_");
+    }
+
+    private static double regularFontSizePt(double fontYScale, double relationFontYScale, double previewScaleY,
+        boolean standardGlyphModel) {
+        if (standardGlyphModel) {
+            return STANDARD_GLYPH_BASE_FONT_PT * previewScaleY;
+        }
+        return 12.0d * fontYScale * relationFontYScale * previewScaleY;
+    }
+
+    private static double scriptFontSizePt(double regularFontPt, double shortScriptHeightScale, double fontYScale,
+        double relationFontYScale, double previewScaleY, boolean standardGlyphModel) {
+        if (standardGlyphModel) {
+            return regularFontPt * STANDARD_GLYPH_VISUAL_SCRIPT_RATIO;
+        }
+        return 8.0d * shortScriptHeightScale * fontYScale * relationFontYScale * previewScaleY;
+    }
+
+    private static double displayFontSizePt(double previewScaleY, boolean standardGlyphModel) {
+        return standardGlyphModel ? STANDARD_GLYPH_BASE_FONT_PT * STANDARD_GLYPH_DISPLAY_RATIO * previewScaleY
+            : 22.0d * previewScaleY;
     }
 
     private static double simpleShortScriptScale(String latex) {
@@ -769,7 +854,43 @@ final class VectorWmfFormulaRenderer {
     }
 
     private static boolean hasFractionCommand(String text) {
-        return text != null && (text.contains("\\frac") || text.contains("\\dfrac") || text.contains("\\cfrac"));
+        return nextFractionCommand(text, 0) >= 0;
+    }
+
+    private static int nextFractionCommand(String text, int cursor) {
+        if (text == null) {
+            return -1;
+        }
+        int best = -1;
+        for (String command : List.of("\\frac", "\\dfrac", "\\cfrac")) {
+            int hit = cursor;
+            while ((hit = text.indexOf(command, hit)) >= 0) {
+                if (latexCommandBoundary(text, hit + command.length())) {
+                    if (best < 0 || hit < best) {
+                        best = hit;
+                    }
+                    break;
+                }
+                hit += command.length();
+            }
+        }
+        return best;
+    }
+
+    private static int fractionCommandEnd(String text, int start) {
+        if (text == null || start < 0) {
+            return start + "\\frac".length();
+        }
+        for (String command : List.of("\\frac", "\\dfrac", "\\cfrac")) {
+            if (text.startsWith(command, start) && latexCommandBoundary(text, start + command.length())) {
+                return start + command.length();
+            }
+        }
+        return start + "\\frac".length();
+    }
+
+    private static boolean latexCommandBoundary(String text, int cursor) {
+        return cursor >= text.length() || !Character.isLetter(text.charAt(cursor));
     }
 
     private static int findFirstTopLevelScriptOperator(String text) {
@@ -888,6 +1009,10 @@ final class VectorWmfFormulaRenderer {
         if (arrows != null) {
             return arrows;
         }
+        FormulaLayout unified = layoutUnifiedBox(text);
+        if (unified != null) {
+            return unified;
+        }
         FormulaLayout sqrt = layoutSqrt(text);
         if (sqrt != null) {
             return sqrt;
@@ -942,6 +1067,738 @@ final class VectorWmfFormulaRenderer {
         return layoutFlatRuns(runs);
     }
 
+    private static FormulaLayout layoutUnifiedBox(String text) {
+        if (!isUnifiedBoxCandidate(text)) {
+            return null;
+        }
+        FormulaBox box = new UnifiedFormulaParser(text).parse();
+        if (box == null || box.widthPt() <= 0.0d) {
+            return null;
+        }
+        List<PlacedText> placed = new ArrayList<>();
+        List<LineSegment> lines = new ArrayList<>();
+        double topPad = Math.max(0.0d, 0.8d - (box.baselinePt() - box.heightAbovePt()));
+        double baseline = topPad + box.baselinePt();
+        box.emit(placed, lines, 0.0d, baseline, false);
+        double height = Math.max(13.0d, topPad + box.baselinePt() + box.heightBelowPt() + 0.8d);
+        if (hasOnlyScriptSlotFractions(text)) {
+            height = Math.max(height, SCRIPT_FRACTION_HEIGHT_PT);
+        } else if (hasFractionInsideScript(text) && hasTopLevelFraction(text)) {
+            height = Math.max(height, SCRIPT_FRACTION_MIXED_HEIGHT_PT);
+        }
+        return new FormulaLayout(placed, lines, Math.max(1.0d, box.widthPt()), height);
+    }
+
+    private static boolean isUnifiedBoxCandidate(String text) {
+        if (text == null || text.isBlank()) {
+            return false;
+        }
+        if (text.contains("\\begin") || text.contains("\\over") || text.contains("\\under")
+            || text.contains("\\boxed") || text.contains("\\cancel") || text.contains("\\xrightarrow")
+            || text.contains("\\xleftarrow") || text.contains("\\overline") || text.contains("\\arc")
+            || text.contains("\\wideparen")) {
+            return false;
+        }
+        if (!hasFractionCommand(text)) {
+            return false;
+        }
+        if (text.contains("\\sqrt") || hasTextHeavyFraction(text)) {
+            return false;
+        }
+        if (!hasFractionInsideScript(text)) {
+            return false;
+        }
+        String stripped = normalizeFlatLatex(text).replaceAll("\\s+", "");
+        return hasFractionCommand(stripped);
+    }
+
+    private static boolean hasOptionalRootIndex(String text) {
+        int cursor = 0;
+        while ((cursor = text.indexOf("\\sqrt", cursor)) >= 0) {
+            int bracket = skipWhitespaceForward(text, cursor + 5);
+            if (bracket < text.length() && text.charAt(bracket) == '[') {
+                return true;
+            }
+            cursor += 5;
+        }
+        return false;
+    }
+
+    private static boolean hasFractionInsideScript(String text) {
+        int cursor = 0;
+        while (cursor < text.length()) {
+            int op = nextTopLevelScriptOperator(text, cursor);
+            if (op < 0) {
+                return false;
+            }
+            ScriptGroup group = readScriptGroup(text, op);
+            if (group != null && hasFractionCommand(group.body())) {
+                return true;
+            }
+            cursor = group == null ? op + 1 : group.end();
+        }
+        return false;
+    }
+
+    private static int nextTopLevelScriptOperator(String text, int start) {
+        int depth = 0;
+        for (int i = Math.max(0, start); i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '\\') {
+                i = skipCommandName(text, i + 1) - 1;
+                continue;
+            }
+            if (ch == '{' || ch == '[' || ch == '(') {
+                depth++;
+            } else if (ch == '}' || ch == ']' || ch == ')') {
+                depth = Math.max(0, depth - 1);
+            } else if (depth == 0 && (ch == '^' || ch == '_')) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static boolean hasOnlyScriptSlotFractions(String text) {
+        return hasFractionCommand(text) && hasFractionInsideScript(text) && !hasTopLevelFraction(text);
+    }
+
+    private static boolean hasTopLevelFraction(String text) {
+        if (text == null || !hasFractionCommand(text)) {
+            return false;
+        }
+        int depth = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '\\') {
+                int commandEnd = skipCommandName(text, i + 1);
+                String command = text.substring(i, commandEnd);
+                if (depth == 0 && ("\\frac".equals(command) || "\\dfrac".equals(command)
+                    || "\\cfrac".equals(command))) {
+                    return true;
+                }
+                i = commandEnd - 1;
+            } else if (ch == '{' || ch == '[' || ch == '(') {
+                depth++;
+            } else if (ch == '}' || ch == ']' || ch == ')') {
+                depth = Math.max(0, depth - 1);
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasTextHeavyFraction(String text) {
+        int cursor = 0;
+        while ((cursor = nextFractionCommand(text, cursor)) >= 0) {
+            int numeratorStart = skipWhitespaceForward(text, fractionCommandEnd(text, cursor));
+            if (numeratorStart >= text.length() || text.charAt(numeratorStart) != '{') {
+                return false;
+            }
+            int numeratorEnd = findGroupEnd(text, numeratorStart);
+            if (numeratorEnd < 0) {
+                return false;
+            }
+            int denominatorStart = skipWhitespaceForward(text, numeratorEnd + 1);
+            if (denominatorStart >= text.length() || text.charAt(denominatorStart) != '{') {
+                return false;
+            }
+            int denominatorEnd = findGroupEnd(text, denominatorStart);
+            if (denominatorEnd < 0) {
+                return false;
+            }
+            String numerator = text.substring(numeratorStart + 1, numeratorEnd);
+            String denominator = text.substring(denominatorStart + 1, denominatorEnd);
+            if (isTextHeavyFractionPart(numerator) || isTextHeavyFractionPart(denominator)) {
+                return true;
+            }
+            cursor = denominatorEnd + 1;
+        }
+        return false;
+    }
+
+    private static boolean isTextHeavyFractionPart(String text) {
+        String normalized = normalizeFlatLatex(normalizeTextCommands(text == null ? "" : text))
+            .replaceAll("\\s+", "");
+        return containsCjk(normalized) && visibleAtomLength(normalized) >= 6;
+    }
+
+    private static boolean containsCjk(String text) {
+        if (text == null) {
+            return false;
+        }
+        for (int i = 0; i < text.length(); i++) {
+            if (isCjk(String.valueOf(text.charAt(i)))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private interface FormulaBox {
+        double widthPt();
+
+        double heightAbovePt();
+
+        double heightBelowPt();
+
+        double baselinePt();
+
+        boolean textHeavy();
+
+        void emit(List<PlacedText> placed, List<LineSegment> lines, double x, double baseline, boolean script);
+    }
+
+    private static final class RowFormulaBox implements FormulaBox {
+        private final List<FormulaBox> children;
+        private final double widthPt;
+        private final double abovePt;
+        private final double belowPt;
+        private final double baselinePt;
+        private final boolean textHeavy;
+
+        private RowFormulaBox(List<FormulaBox> children) {
+            this.children = List.copyOf(children);
+            double width = 0.0d;
+            double above = 0.0d;
+            double below = 0.0d;
+            boolean heavy = false;
+            for (FormulaBox child : this.children) {
+                width += child.widthPt();
+                above = Math.max(above, child.heightAbovePt());
+                below = Math.max(below, child.heightBelowPt());
+                heavy = heavy || child.textHeavy();
+            }
+            this.widthPt = width;
+            this.abovePt = Math.max(9.6d, above);
+            this.belowPt = Math.max(3.4d, below);
+            this.baselinePt = this.abovePt;
+            this.textHeavy = heavy;
+        }
+
+        @Override
+        public double widthPt() {
+            return widthPt;
+        }
+
+        @Override
+        public double heightAbovePt() {
+            return abovePt;
+        }
+
+        @Override
+        public double heightBelowPt() {
+            return belowPt;
+        }
+
+        @Override
+        public double baselinePt() {
+            return baselinePt;
+        }
+
+        @Override
+        public boolean textHeavy() {
+            return textHeavy;
+        }
+
+        @Override
+        public void emit(List<PlacedText> placed, List<LineSegment> lines, double x, double baseline, boolean script) {
+            double cursor = x;
+            for (FormulaBox child : children) {
+                child.emit(placed, lines, cursor, baseline, script);
+                cursor += child.widthPt();
+            }
+        }
+    }
+
+    private static final class TextFormulaBox implements FormulaBox {
+        private final List<TextRun> runs;
+        private final double widthPt;
+        private final boolean textHeavy;
+
+        private TextFormulaBox(List<TextRun> runs) {
+            this.runs = List.copyOf(runs);
+            this.widthPt = Math.max(0.0d, estimatedWidthPt(this.runs));
+            this.textHeavy = this.runs.stream().anyMatch(run -> run.cjk() || visibleAtomLength(run.text()) >= 6);
+        }
+
+        @Override
+        public double widthPt() {
+            return widthPt;
+        }
+
+        @Override
+        public double heightAbovePt() {
+            return 9.6d;
+        }
+
+        @Override
+        public double heightBelowPt() {
+            return 3.4d;
+        }
+
+        @Override
+        public double baselinePt() {
+            return 9.6d;
+        }
+
+        @Override
+        public boolean textHeavy() {
+            return textHeavy;
+        }
+
+        @Override
+        public void emit(List<PlacedText> placed, List<LineSegment> lines, double x, double baseline, boolean script) {
+            placeRuns(placed, runs, x, baseline, script);
+        }
+    }
+
+    private static final class ScriptFormulaBox implements FormulaBox {
+        private final FormulaBox base;
+        private final FormulaBox superscript;
+        private final FormulaBox subscript;
+        private final double widthPt;
+        private final double abovePt;
+        private final double belowPt;
+
+        private ScriptFormulaBox(FormulaBox base, FormulaBox superscript, FormulaBox subscript) {
+            this.base = base;
+            this.superscript = superscript;
+            this.subscript = subscript;
+            double scriptWidth = Math.max(superscript == null ? 0.0d : superscript.widthPt() * UNIFIED_SCRIPT_BOX_SCALE,
+                subscript == null ? 0.0d : subscript.widthPt() * UNIFIED_SCRIPT_BOX_SCALE);
+            this.widthPt = base.widthPt() + Math.max(0.0d, scriptShiftPt(base.widthPt())) + scriptWidth
+                + scriptTailPt(base.widthPt());
+            double above = base.heightAbovePt();
+            double below = base.heightBelowPt();
+            if (superscript != null) {
+                above = Math.max(above, 4.4d + superscript.heightAbovePt() * UNIFIED_SCRIPT_BOX_SCALE);
+                below = Math.max(below, Math.max(0.0d, superscript.heightBelowPt() * UNIFIED_SCRIPT_BOX_SCALE - 4.4d));
+            }
+            if (subscript != null) {
+                above = Math.max(above, Math.max(0.0d, subscript.heightAbovePt() * UNIFIED_SCRIPT_BOX_SCALE - 3.0d));
+                below = Math.max(below, 3.0d + subscript.heightBelowPt() * UNIFIED_SCRIPT_BOX_SCALE);
+            }
+            this.abovePt = above;
+            this.belowPt = below;
+        }
+
+        @Override
+        public double widthPt() {
+            return widthPt;
+        }
+
+        @Override
+        public double heightAbovePt() {
+            return abovePt;
+        }
+
+        @Override
+        public double heightBelowPt() {
+            return belowPt;
+        }
+
+        @Override
+        public double baselinePt() {
+            return abovePt;
+        }
+
+        @Override
+        public boolean textHeavy() {
+            return base.textHeavy() || (superscript != null && superscript.textHeavy())
+                || (subscript != null && subscript.textHeavy());
+        }
+
+        @Override
+        public void emit(List<PlacedText> placed, List<LineSegment> lines, double x, double baseline, boolean script) {
+            base.emit(placed, lines, x, baseline, script);
+            double scriptX = x + base.widthPt() + scriptShiftPt(base.widthPt());
+            if (superscript != null) {
+                emitScaledScript(superscript, placed, lines, scriptX, baseline - 4.4d);
+            }
+            if (subscript != null) {
+                emitScaledScript(subscript, placed, lines, scriptX, baseline + 3.0d);
+            }
+        }
+    }
+
+    private static final class FractionFormulaBox implements FormulaBox {
+        private final FormulaBox numerator;
+        private final FormulaBox denominator;
+        private final boolean slash;
+        private final double numeratorScale;
+        private final double denominatorScale;
+        private final double widthPt;
+        private final double abovePt;
+        private final double belowPt;
+
+        private FractionFormulaBox(FormulaBox numerator, FormulaBox denominator, boolean inlineContext) {
+            this(numerator, denominator, inlineContext, false);
+        }
+
+        private FractionFormulaBox(FormulaBox numerator, FormulaBox denominator, boolean inlineContext,
+            boolean forceSlash) {
+            this.numerator = numerator;
+            this.denominator = denominator;
+            this.slash = forceSlash || (inlineContext && (numerator.textHeavy() || denominator.textHeavy()));
+            this.numeratorScale = slash ? textHeavyFractionScale(numerator) : 1.0d;
+            this.denominatorScale = slash ? textHeavyFractionScale(denominator) : 1.0d;
+            if (slash) {
+                this.widthPt = numerator.widthPt() * numeratorScale + 3.2d
+                    + denominator.widthPt() * denominatorScale;
+                this.abovePt = Math.max(numerator.heightAbovePt(), denominator.heightAbovePt());
+                this.belowPt = Math.max(numerator.heightBelowPt(), denominator.heightBelowPt());
+            } else {
+                double scale = inlineContext ? COMPACT_FRACTION_SCALE : 1.0d;
+                this.widthPt = Math.max(numerator.widthPt(), denominator.widthPt()) * scale
+                    + (inlineContext ? 1.6d : 3.0d);
+                this.abovePt = inlineContext ? MathTypeStructureMetrics.COMPACT_INLINE_FRACTION_ABOVE_PT
+                    : MathTypeStructureMetrics.ORDINARY_FRACTION_ABOVE_PT;
+                this.belowPt = inlineContext ? MathTypeStructureMetrics.COMPACT_INLINE_FRACTION_BELOW_PT
+                    : MathTypeStructureMetrics.ORDINARY_FRACTION_BELOW_PT;
+            }
+        }
+
+        @Override
+        public double widthPt() {
+            return widthPt;
+        }
+
+        @Override
+        public double heightAbovePt() {
+            return abovePt;
+        }
+
+        @Override
+        public double heightBelowPt() {
+            return belowPt;
+        }
+
+        @Override
+        public double baselinePt() {
+            return abovePt;
+        }
+
+        @Override
+        public boolean textHeavy() {
+            return numerator.textHeavy() || denominator.textHeavy();
+        }
+
+        @Override
+        public void emit(List<PlacedText> placed, List<LineSegment> lines, double x, double baseline, boolean script) {
+            if (slash) {
+                emitScaled(numerator, placed, lines, numeratorScale, x, baseline, script);
+                double slashX = x + numerator.widthPt() * numeratorScale + 1.2d;
+                placeRuns(placed, List.of(new TextRun("/", false, false)), slashX, baseline, script);
+                emitScaled(denominator, placed, lines, denominatorScale, slashX + 2.0d, baseline, script);
+                return;
+            }
+            boolean compact = abovePt < 14.0d;
+            double scale = compact ? COMPACT_FRACTION_SCALE : 1.0d;
+            double numeratorWidth = numerator.widthPt() * scale;
+            double denominatorWidth = denominator.widthPt() * scale;
+            double numeratorX = x + (widthPt - numeratorWidth) / 2.0d;
+            double denominatorX = x + (widthPt - denominatorWidth) / 2.0d;
+            double barY = baseline + (compact ? 1.0d : 1.2d);
+            emitScaled(numerator, placed, lines, scale, numeratorX, baseline - (compact ? 7.1d : 9.2d), script);
+            emitScaled(denominator, placed, lines, scale, denominatorX, baseline + (compact ? 7.2d : 7.6d), script);
+            lines.add(new LineSegment(x + 0.2d, barY, x + widthPt - 0.2d, barY));
+        }
+    }
+
+    private static double textHeavyFractionScale(FormulaBox box) {
+        return box.textHeavy() ? 0.92d : 1.0d;
+    }
+
+    private static final class SqrtFormulaBox implements FormulaBox {
+        private final FormulaBox body;
+        private final double widthPt;
+        private final double abovePt;
+        private final double belowPt;
+
+        private SqrtFormulaBox(FormulaBox body) {
+            this.body = body;
+            this.widthPt = body.widthPt() + MathTypeStructureMetrics.SQRT_WIDTH_PAD_PT;
+            this.abovePt = Math.max(11.2d, body.heightAbovePt() + MathTypeStructureMetrics.SQRT_TOP_Y_PT);
+            this.belowPt = Math.max(4.0d, body.heightBelowPt() + 0.4d);
+        }
+
+        @Override
+        public double widthPt() {
+            return widthPt;
+        }
+
+        @Override
+        public double heightAbovePt() {
+            return abovePt;
+        }
+
+        @Override
+        public double heightBelowPt() {
+            return belowPt;
+        }
+
+        @Override
+        public double baselinePt() {
+            return abovePt;
+        }
+
+        @Override
+        public boolean textHeavy() {
+            return body.textHeavy();
+        }
+
+        @Override
+        public void emit(List<PlacedText> placed, List<LineSegment> lines, double x, double baseline, boolean script) {
+            double top = baseline - abovePt + MathTypeStructureMetrics.SQRT_BOX_TOP_OFFSET_PT;
+            double bottom = baseline + belowPt - MathTypeStructureMetrics.SQRT_BOTTOM_PAD_PT;
+            body.emit(placed, lines, x + MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT,
+                baseline + MathTypeStructureMetrics.SQRT_BOX_BODY_BASELINE_OFFSET_PT, script);
+            lines.add(LineSegment.polyline(
+                x, top + abovePt * MathTypeStructureMetrics.SQRT_BOX_LEFT_DESCENT_RATIO,
+                x + MathTypeStructureMetrics.SQRT_CHECK_MID_X_PT, bottom,
+                x + MathTypeStructureMetrics.SQRT_CHECK_TOP_X_PT, top,
+                x + widthPt, top
+            ));
+        }
+    }
+
+    private static void emitScaled(FormulaBox box, List<PlacedText> placed, List<LineSegment> lines, double scale,
+        double x, double baseline, boolean script) {
+        List<PlacedText> localPlaced = new ArrayList<>();
+        List<LineSegment> localLines = new ArrayList<>();
+        box.emit(localPlaced, localLines, 0.0d, 0.0d, script);
+        for (PlacedText run : localPlaced) {
+            placed.add(new PlacedText(run.text(), run.cjk(), run.mathItalic(), run.script(), run.display(),
+                x + run.xPt() * scale, baseline + run.baselinePt() * scale, run.widthScale() * scale));
+        }
+        for (LineSegment line : localLines) {
+            lines.add(new LineSegment(x + line.x1Pt() * scale, baseline + line.y1Pt() * scale,
+                x + line.x2Pt() * scale, baseline + line.y2Pt() * scale));
+        }
+    }
+
+    private static void emitScaledScript(FormulaBox box, List<PlacedText> placed, List<LineSegment> lines,
+        double x, double baseline) {
+        List<PlacedText> localPlaced = new ArrayList<>();
+        List<LineSegment> localLines = new ArrayList<>();
+        box.emit(localPlaced, localLines, 0.0d, 0.0d, true);
+        for (PlacedText run : localPlaced) {
+            placed.add(new PlacedText(run.text(), run.cjk(), run.mathItalic(), true, run.display(),
+                x + run.xPt() * UNIFIED_SCRIPT_BOX_SCALE,
+                baseline + run.baselinePt() * UNIFIED_SCRIPT_BOX_SCALE,
+                run.widthScale() * UNIFIED_SCRIPT_BOX_SCALE));
+        }
+        for (LineSegment line : localLines) {
+            lines.add(new LineSegment(x + line.x1Pt() * UNIFIED_SCRIPT_BOX_SCALE,
+                baseline + line.y1Pt() * UNIFIED_SCRIPT_BOX_SCALE,
+                x + line.x2Pt() * UNIFIED_SCRIPT_BOX_SCALE,
+                baseline + line.y2Pt() * UNIFIED_SCRIPT_BOX_SCALE));
+        }
+    }
+
+    private static final class UnifiedFormulaParser {
+        private final String text;
+        private int cursor;
+
+        private UnifiedFormulaParser(String text) {
+            this.text = normalizeFlatLatex(text == null ? "" : text);
+        }
+
+        private FormulaBox parse() {
+            FormulaBox box = parseRow('\0', true, false);
+            return box != null && skipWhitespaceForward(text, cursor) == text.length() ? box : null;
+        }
+
+        private FormulaBox parseGroup() {
+            return parseGroup(false);
+        }
+
+        private FormulaBox parseGroup(boolean scriptContext) {
+            int start = skipWhitespaceForward(text, cursor);
+            if (start >= text.length() || text.charAt(start) != '{') {
+                return null;
+            }
+            cursor = start + 1;
+            FormulaBox group = parseRow('}', true, scriptContext);
+            if (group == null || cursor >= text.length() || text.charAt(cursor) != '}') {
+                return null;
+            }
+            cursor++;
+            return group;
+        }
+
+        private FormulaBox parseRow(char stop, boolean inlineContext, boolean scriptContext) {
+            List<FormulaBox> children = new ArrayList<>();
+            StringBuilder literal = new StringBuilder();
+            while (cursor < text.length()) {
+                char ch = text.charAt(cursor);
+                if (stop != '\0' && ch == stop) {
+                    break;
+                }
+                if (stop == '\0' && ch == '}') {
+                    return null;
+                }
+                if (Character.isWhitespace(ch) || ch == '{') {
+                    if (ch == '{') {
+                        flushLiteral(children, literal);
+                        FormulaBox group = parseGroup(scriptContext);
+                        if (group == null) {
+                            return null;
+                        }
+                        children.add(parseScripts(group));
+                    } else {
+                        cursor++;
+                    }
+                    continue;
+                }
+                if (ch == '^' || ch == '_') {
+                    flushLiteral(children, literal);
+                    if (children.isEmpty()) {
+                        return null;
+                    }
+                    FormulaBox base = children.remove(children.size() - 1);
+                    FormulaBox scripted = parseScripts(base);
+                    if (scripted == base) {
+                        return null;
+                    }
+                    children.add(scripted);
+                    continue;
+                }
+                FormulaBox atom;
+                if (ch == '\\') {
+                    flushLiteral(children, literal);
+                    atom = parseCommandAtom(inlineContext, scriptContext);
+                    if (atom == null) {
+                        return null;
+                    }
+                } else {
+                    literal.append(ch);
+                    cursor++;
+                    continue;
+                }
+                children.add(parseScripts(atom));
+            }
+            flushLiteral(children, literal);
+            if (children.isEmpty()) {
+                return new TextFormulaBox(List.of(new TextRun(" ", false, false)));
+            }
+            return children.size() == 1 ? children.get(0) : new RowFormulaBox(children);
+        }
+
+        private FormulaBox parseCommandAtom(boolean inlineContext, boolean scriptContext) {
+            if (startsCommand("\\frac") || startsCommand("\\dfrac") || startsCommand("\\cfrac")) {
+                boolean display = startsCommand("\\dfrac") || startsCommand("\\cfrac");
+                cursor += display ? 6 : 5;
+                FormulaBox numerator = parseGroup();
+                FormulaBox denominator = parseGroup();
+                return numerator == null || denominator == null ? null
+                    : new FractionFormulaBox(numerator, denominator, inlineContext && !display, scriptContext);
+            }
+            if (startsCommand("\\sqrt")) {
+                cursor += 5;
+                if (skipWhitespaceForward(text, cursor) < text.length()
+                    && text.charAt(skipWhitespaceForward(text, cursor)) == '[') {
+                    int optionalEnd = findMatchingBracket(text, skipWhitespaceForward(text, cursor), '[', ']');
+                    if (optionalEnd < 0) {
+                        return null;
+                    }
+                    cursor = optionalEnd + 1;
+                }
+                FormulaBox body = parseGroup();
+                return body == null ? null : new SqrtFormulaBox(body);
+            }
+            StyleCommand style = readStyleCommand(text, cursor);
+            if (style != null) {
+                cursor = style.end();
+                List<TextRun> runs = tokenizeFlat(style.text());
+                return runs == null ? null : new TextFormulaBox(withMathItalic(runs, style.mathItalic()));
+            }
+            Command command = readCommand(text, cursor);
+            if (command == null) {
+                return null;
+            }
+            cursor = command.end();
+            return new TextFormulaBox(List.of(new TextRun(command.text(), isCjk(command.text()), true)));
+        }
+
+        private FormulaBox parseScripts(FormulaBox base) {
+            FormulaBox superscript = null;
+            FormulaBox subscript = null;
+            while (true) {
+                int op = skipWhitespaceForward(text, cursor);
+                if (op >= text.length() || (text.charAt(op) != '^' && text.charAt(op) != '_')) {
+                    break;
+                }
+                char operator = text.charAt(op);
+                cursor = op + 1;
+                FormulaBox script = parseScriptArgument();
+                if (script == null) {
+                    return base;
+                }
+                if (operator == '^') {
+                    superscript = script;
+                } else {
+                    subscript = script;
+                }
+            }
+            return superscript == null && subscript == null ? base : new ScriptFormulaBox(base, superscript, subscript);
+        }
+
+        private FormulaBox parseScriptArgument() {
+            int start = skipWhitespaceForward(text, cursor);
+            if (start >= text.length()) {
+                return null;
+            }
+            cursor = start;
+            if (text.charAt(cursor) == '{') {
+                return parseGroup(true);
+            }
+            if (text.charAt(cursor) == '\\') {
+                return parseCommandAtom(true, true);
+            }
+            char ch = text.charAt(cursor++);
+            return new TextFormulaBox(List.of(new TextRun(String.valueOf(ch), isCjk(String.valueOf(ch)), true)));
+        }
+
+        private boolean startsCommand(String command) {
+            if (!text.startsWith(command, cursor)) {
+                return false;
+            }
+            int end = cursor + command.length();
+            return end >= text.length() || !Character.isLetter(text.charAt(end));
+        }
+
+        private void flushLiteral(List<FormulaBox> children, StringBuilder literal) {
+            if (literal.isEmpty()) {
+                return;
+            }
+            List<TextRun> runs = tokenizeFlat(literal.toString());
+            if (runs != null) {
+                children.add(new TextFormulaBox(runs));
+            }
+            literal.setLength(0);
+        }
+    }
+
+    private static int findMatchingBracket(String text, int start, char open, char close) {
+        if (text == null || start < 0 || start >= text.length() || text.charAt(start) != open) {
+            return -1;
+        }
+        int depth = 0;
+        for (int i = start; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == open) {
+                depth++;
+            } else if (ch == close) {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
     private static List<TextRun> tokenize(String latex) {
         if (latex == null || latex.isBlank()) {
             return null;
@@ -952,7 +1809,7 @@ final class VectorWmfFormulaRenderer {
 
     private static List<TextRun> tokenizeFlat(String text) {
         text = normalizeFlatLatex(text);
-        if (text.contains("\\begin") || text.contains("\\frac") || text.contains("\\sqrt")
+        if (text.contains("\\begin") || hasFractionCommand(text) || text.contains("\\sqrt")
             || text.contains("\\over") || text.contains("^")) {
             return null;
         }
@@ -1277,13 +2134,17 @@ final class VectorWmfFormulaRenderer {
 
     private static FormulaLayout layoutFractions(String text) {
         boolean compactInlineFraction = isCompactInlineFraction(text);
+        boolean sqrtFractionFamily = !compactInlineFraction && text.contains("\\sqrt");
+        boolean textFractionFamily = !compactInlineFraction && !sqrtFractionFamily && hasTextHeavyFraction(text);
+        boolean nestedFractionFamily = !compactInlineFraction && !sqrtFractionFamily && !textFractionFamily
+            && hasNestedFraction(text);
         List<PlacedText> placed = new ArrayList<>();
         List<LineSegment> lines = new ArrayList<>();
         double x = 0d;
         int cursor = 0;
         boolean sawFraction = false;
         while (cursor < text.length()) {
-            int frac = text.indexOf("\\frac", cursor);
+            int frac = nextFractionCommand(text, cursor);
             if (frac < 0) {
                 String tail = text.substring(cursor);
                 if (!tail.isBlank()) {
@@ -1305,7 +2166,7 @@ final class VectorWmfFormulaRenderer {
                 appendLayout(placed, lines, prefix, x, 4.8d);
                 x += prefix.widthPt();
             }
-            int numeratorStart = skipWhitespaceForward(text, frac + 5);
+            int numeratorStart = skipWhitespaceForward(text, fractionCommandEnd(text, frac));
             if (numeratorStart >= text.length() || text.charAt(numeratorStart) != '{') {
                 return null;
             }
@@ -1344,11 +2205,20 @@ final class VectorWmfFormulaRenderer {
                 lines.add(new LineSegment(fractionX, COMPACT_FRACTION_BAR_Y_PT,
                     fractionX + fractionWidth, COMPACT_FRACTION_BAR_Y_PT));
             } else {
+                double numeratorY = sqrtFractionFamily ? SQRT_FRACTION_NUMERATOR_Y_PT
+                    : textFractionFamily ? TEXT_FRACTION_NUMERATOR_Y_PT
+                        : nestedFractionFamily ? NESTED_FRACTION_NUMERATOR_Y_PT : FRACTION_NUMERATOR_Y_PT;
+                double denominatorY = sqrtFractionFamily ? SQRT_FRACTION_DENOMINATOR_Y_PT
+                    : textFractionFamily ? TEXT_FRACTION_DENOMINATOR_Y_PT
+                        : nestedFractionFamily ? NESTED_FRACTION_DENOMINATOR_Y_PT : FRACTION_DENOMINATOR_Y_PT;
+                double barY = sqrtFractionFamily ? SQRT_FRACTION_BAR_Y_PT
+                    : textFractionFamily ? TEXT_FRACTION_BAR_Y_PT
+                        : nestedFractionFamily ? NESTED_FRACTION_BAR_Y_PT : FRACTION_BAR_Y_PT;
                 appendLayout(placed, lines, numerator, fractionX + (fractionWidth - numeratorWidth) / 2.0d,
-                    FRACTION_NUMERATOR_Y_PT);
+                    numeratorY);
                 appendLayout(placed, lines, denominator, fractionX + (fractionWidth - denominatorWidth) / 2.0d,
-                    FRACTION_DENOMINATOR_Y_PT);
-                lines.add(new LineSegment(fractionX, FRACTION_BAR_Y_PT, fractionX + fractionWidth, FRACTION_BAR_Y_PT));
+                    denominatorY);
+                lines.add(new LineSegment(fractionX, barY, fractionX + fractionWidth, barY));
             }
             x = fractionX + fractionWidth + (compactInlineFraction ? 0.8d : 1.4d);
             sawFraction = true;
@@ -1356,31 +2226,38 @@ final class VectorWmfFormulaRenderer {
         }
         return sawFraction && !placed.isEmpty()
             ? new FormulaLayout(placed, lines, Math.max(x, 1.0d),
-                compactInlineFraction ? COMPACT_FRACTION_HEIGHT_PT : FRACTION_HEIGHT_PT)
+                compactInlineFraction ? COMPACT_FRACTION_HEIGHT_PT
+                    : sqrtFractionFamily ? SQRT_FRACTION_HEIGHT_PT
+                        : textFractionFamily ? TEXT_FRACTION_HEIGHT_PT
+                            : nestedFractionFamily ? NESTED_FRACTION_HEIGHT_PT : FRACTION_HEIGHT_PT)
             : null;
     }
 
     private static boolean isCompactInlineFraction(String text) {
-        if (text == null || !text.contains("\\frac")) {
+        if (text == null || !hasFractionCommand(text)) {
             return false;
         }
         if (text.contains("\\begin") || text.contains("\\sqrt") || text.contains("\\sum")
-            || text.contains("\\displaystyle") || text.contains("\\dfrac")) {
+            || text.contains("\\displaystyle") || text.contains("\\dfrac") || text.contains("\\cfrac")) {
+            return false;
+        }
+        if (hasTextHeavyFraction(text)) {
             return false;
         }
         int count = 0;
         int cursor = 0;
-        while ((cursor = text.indexOf("\\frac", cursor)) >= 0) {
+        while ((cursor = nextFractionCommand(text, cursor)) >= 0) {
             count++;
-            cursor += 5;
+            cursor = fractionCommandEnd(text, cursor);
         }
         return count <= 2 && text.length() <= 80 && !hasNestedFraction(text) && hasInlineFractionContext(text);
     }
 
     private static boolean hasNestedFraction(String text) {
         int cursor = 0;
-        while ((cursor = text.indexOf("\\frac", cursor)) >= 0) {
-            int numeratorStart = skipWhitespaceForward(text, cursor + 5);
+        while ((cursor = nextFractionCommand(text, cursor)) >= 0) {
+            int commandEnd = fractionCommandEnd(text, cursor);
+            int numeratorStart = skipWhitespaceForward(text, commandEnd);
             if (numeratorStart >= text.length() || text.charAt(numeratorStart) != '{') {
                 return false;
             }
@@ -1396,8 +2273,8 @@ final class VectorWmfFormulaRenderer {
             if (denominatorEnd < 0) {
                 return false;
             }
-            if (text.substring(numeratorStart + 1, numeratorEnd).contains("\\frac")
-                || text.substring(denominatorStart + 1, denominatorEnd).contains("\\frac")) {
+            if (hasFractionCommand(text.substring(numeratorStart + 1, numeratorEnd))
+                || hasFractionCommand(text.substring(denominatorStart + 1, denominatorEnd))) {
                 return true;
             }
             cursor = denominatorEnd + 1;
@@ -1409,13 +2286,13 @@ final class VectorWmfFormulaRenderer {
         StringBuilder nonFractionText = new StringBuilder();
         int cursor = 0;
         while (cursor < text.length()) {
-            int frac = text.indexOf("\\frac", cursor);
+            int frac = nextFractionCommand(text, cursor);
             if (frac < 0) {
                 nonFractionText.append(text.substring(cursor));
                 break;
             }
             nonFractionText.append(text, cursor, frac);
-            int numeratorStart = skipWhitespaceForward(text, frac + 5);
+            int numeratorStart = skipWhitespaceForward(text, fractionCommandEnd(text, frac));
             if (numeratorStart >= text.length() || text.charAt(numeratorStart) != '{') {
                 return true;
             }
@@ -1463,7 +2340,11 @@ final class VectorWmfFormulaRenderer {
         if (cases != null && cases.end() == text.length()) {
             return layoutLeftBraceArray(cases.body());
         }
-        if (text.contains("\\frac")) {
+        if (hasFractionCommand(text)) {
+            FormulaLayout unified = layoutUnifiedBox(text);
+            if (unified != null) {
+                return unified;
+            }
             FormulaLayout fractions = layoutFractions(text);
             if (fractions != null) {
                 return fractions;
@@ -1490,7 +2371,9 @@ final class VectorWmfFormulaRenderer {
         List<PlacedText> placed = new ArrayList<>();
         List<LineSegment> lines = new ArrayList<>();
         double x = 0.0d;
-        double height = 16.0d;
+        boolean sqrtFraction = hasFractionCommand(text);
+        double height = sqrtFraction ? MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
+            : MathTypeStructureMetrics.SQRT_HEIGHT_PT;
         int cursor = 0;
         boolean sawArrow = false;
         while (cursor < text.length()) {
@@ -1536,7 +2419,7 @@ final class VectorWmfFormulaRenderer {
         if (text == null || text.isBlank()) {
             return new FormulaLayout(List.of(), List.of(), 0.0d, 13.0d);
         }
-        FormulaLayout fractions = text.contains("\\frac") ? layoutFractions(text) : null;
+        FormulaLayout fractions = hasFractionCommand(text) ? layoutFractions(text) : null;
         if (fractions != null) {
             return fractions;
         }
@@ -1576,7 +2459,8 @@ final class VectorWmfFormulaRenderer {
         for (PlacedText run : layout.runs()) {
             placed.add(new PlacedText(run.text(), run.cjk(), run.mathItalic(), run.script(), run.display(),
                 run.xPt() + dx,
-                run.baselinePt() + dy));
+                run.baselinePt() + dy,
+                run.widthScale()));
         }
         for (LineSegment line : layout.lines()) {
             lines.add(new LineSegment(line.x1Pt() + dx, line.y1Pt() + dy, line.x2Pt() + dx, line.y2Pt() + dy));
@@ -1592,7 +2476,8 @@ final class VectorWmfFormulaRenderer {
         double scale, double dx, double dy, boolean script) {
         for (PlacedText run : layout.runs()) {
             placed.add(new PlacedText(run.text(), run.cjk(), run.mathItalic(), script || run.script(), run.display(),
-                dx + run.xPt() * scale, dy + run.baselinePt() * scale));
+                dx + run.xPt() * scale, dy + run.baselinePt() * scale,
+                run.widthScale() * scale));
         }
         for (LineSegment line : layout.lines()) {
             lines.add(new LineSegment(dx + line.x1Pt() * scale, dy + line.y1Pt() * scale,
@@ -1806,7 +2691,7 @@ final class VectorWmfFormulaRenderer {
             for (String cell : cells) {
                 String normalized = normalizeArrayCell(cell);
                 FormulaLayout layout = normalized.isEmpty()
-                    ? new FormulaLayout(List.of(), List.of(), 0.0d, 13.0d)
+                    ? new FormulaLayout(List.of(), List.of(), 0.0d, MathTypeStructureMetrics.LINEAR_HEIGHT_PT)
                     : layoutArrayCell(normalized);
                 if (layout == null) {
                     return null;
@@ -1846,7 +2731,9 @@ final class VectorWmfFormulaRenderer {
         }
         List<PlacedText> placed = new ArrayList<>();
         List<LineSegment> lines = new ArrayList<>();
-        double rowHeight = rows.size() > 1 ? 12.0d : 13.0d;
+        double rowHeight = rows.size() > 1
+            ? MathTypeStructureMetrics.ARRAY_ROW_HEIGHT_PT
+            : MathTypeStructureMetrics.LINEAR_HEIGHT_PT;
         double width = Math.max(cursor - gap, 1.0d);
         for (int rowIndex : hlineRows) {
             double y = Math.max(1.5d, rowIndex * rowHeight - 1.2d);
@@ -1861,7 +2748,8 @@ final class VectorWmfFormulaRenderer {
                 appendLayout(placed, lines, cell, runX, y);
             }
         }
-        double height = Math.max(13.0d, 2.5d + rows.size() * rowHeight);
+        double height = Math.max(MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.ARRAY, rows.size())
+            .heightPt(), rows.size() * rowHeight);
         if (placed.isEmpty()) {
             placed.add(new PlacedText(" ", false, false, false, false, 0.0d, 9.6d));
         }
@@ -2210,8 +3098,9 @@ final class VectorWmfFormulaRenderer {
         List<LineSegment> lines = new ArrayList<>();
         appendLayout(placed, lines, inner, 0.0d, 0.0d);
         double width = Math.max(inner.widthPt(), 10.0d);
-        double height = Math.max(inner.heightPt(), 13.0d);
-        lines.add(new LineSegment(0.0d, height - 1.2d, width, height - 1.2d));
+        double height = Math.max(inner.heightPt(), MathTypeStructureMetrics.ACCENT_HEIGHT_PT);
+        double underlineY = Math.max(0.0d, height - MathTypeStructureMetrics.UNDERLINE_BOTTOM_PAD_PT);
+        lines.add(new LineSegment(0.0d, underlineY, width, underlineY));
         return new FormulaLayout(placed, lines, width, height);
     }
 
@@ -2456,7 +3345,7 @@ final class VectorWmfFormulaRenderer {
         List<LineSegment> overlines = new ArrayList<>();
         List<LineSegment> lines = new ArrayList<>();
         double x = 0.0d;
-        double height = 14.0d;
+        double height = MathTypeStructureMetrics.ACCENT_HEIGHT_PT;
         int cursor = 0;
         boolean sawOverline = false;
         while (cursor < text.length()) {
@@ -2497,7 +3386,8 @@ final class VectorWmfFormulaRenderer {
                 return null;
             }
             appendLayout(placed, lines, bodyLayout, x, 0.0d);
-            overlines.add(new LineSegment(x, 1.8d, x + bodyLayout.widthPt(), 1.8d));
+            overlines.add(new LineSegment(x, MathTypeStructureMetrics.OVERLINE_Y_PT, x + bodyLayout.widthPt(),
+                MathTypeStructureMetrics.OVERLINE_Y_PT));
             x += bodyLayout.widthPt();
             height = Math.max(height, bodyLayout.heightPt());
             sawOverline = true;
@@ -2516,7 +3406,8 @@ final class VectorWmfFormulaRenderer {
                 double scriptShift = bodyLayout.widthPt() >= 18.0d ? 0.75d : 0.55d;
                 double scriptWidth = placeRuns(placed, scriptRuns, x + scriptShift, scriptBaseline, true) - x;
                 x += Math.max(0.0d, scriptWidth);
-                height = Math.max(height, script.operator() == '^' ? 14.0d : 16.0d);
+                height = Math.max(height, script.operator() == '^' ? MathTypeStructureMetrics.ACCENT_HEIGHT_PT
+                    : Math.max(16.0d, MathTypeStructureMetrics.ACCENT_HEIGHT_PT));
                 cursor = script.end();
             }
         }
@@ -2580,12 +3471,19 @@ final class VectorWmfFormulaRenderer {
                 return null;
             }
             double rootX = x;
-            appendLayout(placed, lines, body, rootX + 6.0d, 1.2d);
-            double width = body.widthPt() + 7.0d;
-            double rootHeight = Math.max(body.heightPt() + 2.0d, 14.0d);
-            lines.add(new LineSegment(rootX, rootHeight * 0.62d, rootX + 2.0d, rootHeight - 1.0d));
-            lines.add(new LineSegment(rootX + 2.0d, rootHeight - 1.0d, rootX + 5.0d, 2.0d));
-            lines.add(new LineSegment(rootX + 5.0d, 2.0d, rootX + width, 2.0d));
+            appendLayout(placed, lines, body, rootX + MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT,
+                MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT);
+            double width = body.widthPt() + MathTypeStructureMetrics.SQRT_WIDTH_PAD_PT;
+            double seededHeight = hasFractionCommand(text.substring(groupStart + 1, groupEnd))
+                ? MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT : MathTypeStructureMetrics.SQRT_HEIGHT_PT;
+            double rootHeight = Math.max(body.heightPt() + MathTypeStructureMetrics.SQRT_TOP_Y_PT, seededHeight);
+            lines.add(LineSegment.polyline(
+                rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
+                rootX + MathTypeStructureMetrics.SQRT_CHECK_MID_X_PT,
+                rootHeight - MathTypeStructureMetrics.SQRT_BOTTOM_PAD_PT,
+                rootX + MathTypeStructureMetrics.SQRT_CHECK_TOP_X_PT, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
+                rootX + width, MathTypeStructureMetrics.SQRT_TOP_Y_PT
+            ));
             x += width;
             height = Math.max(height, rootHeight);
             sawSqrt = true;
@@ -3255,6 +4153,17 @@ final class VectorWmfFormulaRenderer {
         return script ? 8.0d / 12.0d : 1.0d;
     }
 
+    private static double sizeScale(boolean script, boolean display, double regularRatio, double scriptRatio,
+        double displayRatio, boolean standardGlyphModel) {
+        if (!standardGlyphModel) {
+            return sizeScale(script, display);
+        }
+        if (display) {
+            return displayRatio;
+        }
+        return script ? scriptRatio : regularRatio;
+    }
+
     private static double scaledRunWidthPt(TextRun run, boolean script) {
         double width = estimatedRunWidthPt(run);
         return script ? width * 0.66d : width;
@@ -3300,7 +4209,8 @@ final class VectorWmfFormulaRenderer {
     }
 
     private static int[] characterDxTwips(EncodedText segment, boolean script, boolean display, double previewScale,
-        double shortScriptScale, double runWidthScale) {
+        double shortScriptScale, double runWidthScale, double regularRatio, double scriptRatio, double displayRatio,
+        boolean standardGlyphModel) {
         if (segment.text().isEmpty() || segment.bytes().length == 0) {
             return null;
         }
@@ -3315,7 +4225,8 @@ final class VectorWmfFormulaRenderer {
         for (int offset = 0; offset < segment.text().length();) {
             int codePoint = segment.text().codePointAt(offset);
             String ch = new String(Character.toChars(codePoint));
-            double widthPt = measureTextPt(font, ch, 12.0d) * sizeScale(script, display)
+            double widthPt = measureTextPt(font, ch, 12.0d)
+                * sizeScale(script, display, regularRatio, scriptRatio, displayRatio, standardGlyphModel)
                 * (script ? shortScriptScale : 1.0d) * runWidthScale * previewScale;
             byte[] charBytes = ch.getBytes(charset);
             if (byteIndex >= dx.length) {
@@ -3349,18 +4260,17 @@ final class VectorWmfFormulaRenderer {
 
     private static void writeBlackPen(ByteArrayOutputStream out) throws IOException {
         writeWord(out, 0); // PS_SOLID
-        writeShort(out, Math.max(1, toTwips(0.45d)));
+        writeShort(out, Math.max(1, toTwips(MathTypeStructureMetrics.STRUCTURE_LINE_WIDTH_PT)));
         writeShort(out, 0);
         writeDWord(out, 0);
     }
 
-    private static void writePolyline(ByteArrayOutputStream out, int x1, int y1, int x2, int y2)
-        throws IOException {
-        writeWord(out, 2);
-        writeShort(out, x1);
-        writeShort(out, y1);
-        writeShort(out, x2);
-        writeShort(out, y2);
+    private static void writePolyline(ByteArrayOutputStream out, int[] points) throws IOException {
+        writeWord(out, points.length / 2);
+        for (int i = 0; i < points.length; i += 2) {
+            writeShort(out, points[i]);
+            writeShort(out, points[i + 1]);
+        }
     }
 
     private static void writeFont(ByteArrayOutputStream out, String face, double sizePt, int charset) throws IOException {
@@ -3482,7 +4392,42 @@ final class VectorWmfFormulaRenderer {
         }
     }
 
-    private record LineSegment(double x1Pt, double y1Pt, double x2Pt, double y2Pt) {
+    private record LineSegment(double[] pointsPt) {
+        private LineSegment(double x1Pt, double y1Pt, double x2Pt, double y2Pt) {
+            this(new double[] {x1Pt, y1Pt, x2Pt, y2Pt});
+        }
+
+        private static LineSegment polyline(double... pointsPt) {
+            if (pointsPt.length < 4 || (pointsPt.length & 1) != 0) {
+                throw new IllegalArgumentException("Line polyline requires at least two x/y points");
+            }
+            return new LineSegment(pointsPt.clone());
+        }
+
+        double x1Pt() {
+            return pointsPt[0];
+        }
+
+        double y1Pt() {
+            return pointsPt[1];
+        }
+
+        double x2Pt() {
+            return pointsPt[pointsPt.length - 2];
+        }
+
+        double y2Pt() {
+            return pointsPt[pointsPt.length - 1];
+        }
+
+        int[] toTwips(double offsetXPt, double offsetYPt, PreviewScale previewScale) {
+            int[] points = new int[pointsPt.length];
+            for (int i = 0; i < pointsPt.length; i += 2) {
+                points[i] = VectorWmfFormulaRenderer.toTwips(offsetXPt + pointsPt[i] * previewScale.x());
+                points[i + 1] = VectorWmfFormulaRenderer.toTwips(offsetYPt + pointsPt[i + 1] * previewScale.y());
+            }
+            return points;
+        }
     }
 
     private record MarkerHit(String marker, int start) {

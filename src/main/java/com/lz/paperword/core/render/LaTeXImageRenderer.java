@@ -80,9 +80,11 @@ public class LaTeXImageRenderer {
     /** 系统属性：WMF 文本宽度校准。 */
     private static final String WMF_TEXT_WIDTH_SCALE_PROP = "paperword.wmf.textWidth.scale";
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v145-times-italic-preview";
+    private static final String CACHE_VERSION = "v178-structure-line-quality";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
+    private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(
+        "array", "aligned", "alignedat", "gathered", "matrix", "pmatrix", "bmatrix", "cases");
     /** 像素到磅的换算比例。 */
     private static final float PX_PER_PT = 1.0f / 0.75f;
     /** Keep DIB-backed WMF previews reasonably sized for extremely wide vertical-layout formulas. */
@@ -513,22 +515,14 @@ public class LaTeXImageRenderer {
         if (latex.contains("\\searrow") || latex.contains("\\nearrow")) {
             return 140.0d;
         }
-        if (latex.contains("\\frac") || latex.contains("\\cdots")) {
+        if (hasFractionCommand(latex) || latex.contains("\\cdots")) {
             return 420.0d;
         }
         return 300.0d;
     }
 
     private double estimateVectorHeightPt(String latex) {
-        String text = latex == null ? "" : latex;
-        if (text.contains("\\begin{array}")) {
-            long rows = text.split("\\\\\\\\", -1).length;
-            return Math.max(18.0d, rows * 15.0d);
-        }
-        if (text.contains("\\frac")) {
-            return 28.0d;
-        }
-        return 13.0d;
+        return classifyStructureFamily(latex).heightPt();
     }
 
     private double targetDepthPt(String latex, double heightPt) {
@@ -536,7 +530,7 @@ public class LaTeXImageRenderer {
             return -1d;
         }
         String text = latex.replaceAll("\\\\pwmetrics\\{[^}]+}\\s*", "");
-        if (text.contains("\\frac")) {
+        if (hasFractionCommand(text)) {
             return Math.max(0.0d, heightPt * 0.40d);
         }
         if (text.contains("\\begin{array}") || text.contains("\\sqrt")) {
@@ -565,12 +559,16 @@ public class LaTeXImageRenderer {
     private PreviewMetrics calibratePreviewMetrics(String latex, double widthPt, double heightPt, double depthPt) {
         double widthScale = 1.0d;
         double heightScale = 1.0d;
-        boolean hasArray = latex.contains("\\begin{array}");
-        int arrayCount = countOccurrences(latex, "\\begin{array}");
+        MathTypeStructureMetrics.FamilyMetrics structure = classifyStructureFamily(latex);
+        boolean hasArray = hasArrayLikeEnvironment(latex);
+        int arrayCount = countArrayLikeEnvironments(latex);
         int lineBreaks = countOccurrences(latex, "\\\\");
-        int fractionCount = countOccurrences(latex, "\\frac");
+        int fractionCount = countFractionCommands(latex);
         boolean script = hasScript(latex);
-        String previewClass = classifyPreviewLatex(latex, hasArray, fractionCount, script);
+        boolean textHeavyFraction = hasTextHeavyFraction(latex);
+        boolean nestedFraction = hasNestedFraction(latex);
+        String previewClass = structure.previewClass();
+        boolean sourceSeededHeight = structure.sourceSeededHeight();
 
         if (hasArray) {
             if (arrayCount == 1 && lineBreaks >= 1) {
@@ -610,9 +608,15 @@ public class LaTeXImageRenderer {
                     heightScale *= 0.88d;
                 }
             }
+        } else if (textHeavyFraction) {
+            widthScale *= 1.08d;
+            heightScale *= 0.62d;
         } else if (fractionCount == 1) {
             widthScale *= 0.96d;
             heightScale *= 0.94d;
+        } else if (nestedFraction) {
+            widthScale *= 0.92d;
+            heightScale *= 1.02d;
         } else if (fractionCount > 1) {
             widthScale *= 0.90d;
             heightScale *= 0.94d;
@@ -636,12 +640,11 @@ public class LaTeXImageRenderer {
             }
         }
 
-        if (latex.contains("\\sqrt")) {
-            widthScale *= 0.92d;
-            heightScale *= 1.16d;
-        }
-        widthScale *= previewWidthClassScale(previewClass);
+        widthScale *= previewWidthClassScale(latex, structure.family(), previewClass);
 
+        if (sourceSeededHeight) {
+            heightScale = 1.0d;
+        }
         double adjustedDepth = depthPt >= 0d ? depthPt * heightScale : depthPt;
         return new PreviewMetrics(
             Math.max(widthPt * widthScale, 1.0d),
@@ -650,35 +653,58 @@ public class LaTeXImageRenderer {
         );
     }
 
-    private String classifyPreviewLatex(String latex, boolean hasArray, int fractionCount, boolean script) {
-        if (hasArray) {
-            return "array";
+    private MathTypeStructureMetrics.FamilyMetrics classifyStructureFamily(String latex) {
+        String text = latex == null ? "" : latex;
+        if (hasArrayLikeEnvironment(text)) {
+            long rows = countFirstArrayLikeTopLevelRows(text);
+            return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.ARRAY, rows);
         }
-        if (fractionCount > 0) {
-            return "fraction";
+        if (text.contains("\\sqrt")) {
+            return MathTypeStructureMetrics.metrics(hasFractionCommand(text)
+                ? MathTypeStructureMetrics.Family.SQRT_FRACTION
+                : MathTypeStructureMetrics.Family.SQRT);
         }
-        if (latex.contains("\\sqrt")) {
-            return "sqrt";
+        if (hasOnlyScriptSlotFractions(text)) {
+            return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.SCRIPT_FRACTION);
         }
-        if (script) {
-            return "script";
+        if (hasTextHeavyFraction(text)) {
+            return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.TEXT_FRACTION);
         }
-        if (latex.contains("\\overline") || latex.contains("\\underline")
-            || latex.contains("\\overset") || latex.contains("\\underset")) {
-            return "accent";
+        if (hasScriptSlotFraction(text) && hasTopLevelFraction(text)) {
+            return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.SCRIPT_FRACTION_MIXED);
         }
-        return "linear";
+        if (hasNestedFraction(text)) {
+            return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.NESTED_FRACTION);
+        }
+        if (hasFractionCommand(text)) {
+            return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.ORDINARY_FRACTION);
+        }
+        if (hasScript(text)) {
+            return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.SCRIPT);
+        }
+        if (text.contains("\\overline") || text.contains("\\underline")
+            || text.contains("\\overset") || text.contains("\\underset")) {
+            return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.ACCENT);
+        }
+        return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.LINEAR);
     }
 
-    private double previewWidthClassScale(String previewClass) {
+    private double previewWidthClassScale(String latex, MathTypeStructureMetrics.Family family, String previewClass) {
         String propertyName = "paperword.preview.width.scale." + previewClass;
-        double defaultScale = switch (previewClass) {
+        double defaultScale = switch (family) {
+            case LINEAR -> MathTypeStructureMetrics.LINEAR_PREVIEW_WIDTH_SCALE;
+            case SQRT -> hasScript(latex)
+                ? MathTypeStructureMetrics.SQRT_SCRIPT_PREVIEW_WIDTH_SCALE
+                : MathTypeStructureMetrics.SQRT_PREVIEW_WIDTH_SCALE;
+            case SQRT_FRACTION -> MathTypeStructureMetrics.SQRT_FRACTION_PREVIEW_WIDTH_SCALE;
+            default -> switch (previewClass) {
             case "array" -> 0.91d;
-            case "fraction" -> 0.88d;
-            case "sqrt" -> 0.90d;
-            case "script" -> 0.85d;
+            case "textFraction", "text_fraction" -> 1.0d;
+            case "fraction", "nested_fraction" -> 0.88d;
+            case "script", "script_fraction", "script_fraction_mixed" -> 0.85d;
             case "accent" -> 0.90d;
             default -> 0.86d;
+            };
         };
         return readDoubleProperty(propertyName, defaultScale);
     }
@@ -696,6 +722,127 @@ public class LaTeXImageRenderer {
         }
     }
 
+    private static boolean hasArrayLikeEnvironment(String latex) {
+        return countArrayLikeEnvironments(latex) > 0;
+    }
+
+    private static int countArrayLikeEnvironments(String latex) {
+        if (latex == null || latex.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        for (String env : ARRAY_LIKE_ENVIRONMENTS) {
+            count += countOccurrences(latex, "\\begin{" + env + "}");
+        }
+        return count;
+    }
+
+    private static long countFirstArrayLikeTopLevelRows(String latex) {
+        ArrayLikeBody body = firstArrayLikeBody(latex);
+        if (body == null || body.body().isBlank()) {
+            return 1L;
+        }
+        long rows = 1L;
+        int braceDepth = 0;
+        int nestedArrayDepth = 0;
+        String text = body.body();
+        for (int i = 0; i < text.length(); i++) {
+            if (startsArrayLikeBegin(text, i)) {
+                nestedArrayDepth++;
+                continue;
+            }
+            if (startsArrayLikeEnd(text, i)) {
+                nestedArrayDepth = Math.max(0, nestedArrayDepth - 1);
+                continue;
+            }
+            char ch = text.charAt(i);
+            if (ch == '\\') {
+                if (i + 1 < text.length() && text.charAt(i + 1) == '\\' && braceDepth == 0
+                    && nestedArrayDepth == 0) {
+                    rows++;
+                    i++;
+                }
+                continue;
+            }
+            if (ch == '{') {
+                braceDepth++;
+            } else if (ch == '}') {
+                braceDepth = Math.max(0, braceDepth - 1);
+            }
+        }
+        return rows;
+    }
+
+    private static ArrayLikeBody firstArrayLikeBody(String latex) {
+        if (latex == null) {
+            return null;
+        }
+        for (int i = 0; i < latex.length(); i++) {
+            String env = arrayLikeEnvironmentAt(latex, i, true);
+            if (env == null) {
+                continue;
+            }
+            int bodyStart = i + "\\begin{".length() + env.length() + 1;
+            if ("array".equals(env)) {
+                bodyStart = skipWhitespace(latex, bodyStart);
+                if (bodyStart < latex.length() && latex.charAt(bodyStart) == '{') {
+                    int columnsEnd = matchingBrace(latex, bodyStart);
+                    if (columnsEnd < 0) {
+                        return null;
+                    }
+                    bodyStart = columnsEnd + 1;
+                }
+            }
+            String endToken = "\\end{" + env + "}";
+            int depth = 1;
+            int cursor = bodyStart;
+            while (cursor < latex.length()) {
+                String nestedBegin = arrayLikeEnvironmentAt(latex, cursor, true);
+                if (nestedBegin != null) {
+                    depth++;
+                    cursor += "\\begin{".length() + nestedBegin.length() + 1;
+                    continue;
+                }
+                String nestedEnd = arrayLikeEnvironmentAt(latex, cursor, false);
+                if (nestedEnd != null) {
+                    depth--;
+                    if (depth == 0 && latex.startsWith(endToken, cursor)) {
+                        return new ArrayLikeBody(latex.substring(bodyStart, cursor));
+                    }
+                    cursor += "\\end{".length() + nestedEnd.length() + 1;
+                    continue;
+                }
+                cursor++;
+            }
+        }
+        return null;
+    }
+
+    private static boolean startsArrayLikeBegin(String latex, int index) {
+        return arrayLikeEnvironmentAt(latex, index, true) != null;
+    }
+
+    private static boolean startsArrayLikeEnd(String latex, int index) {
+        return arrayLikeEnvironmentAt(latex, index, false) != null;
+    }
+
+    private static String arrayLikeEnvironmentAt(String latex, int index, boolean begin) {
+        String prefix = begin ? "\\begin{" : "\\end{";
+        if (latex == null || !latex.startsWith(prefix, index)) {
+            return null;
+        }
+        int nameStart = index + prefix.length();
+        int nameEnd = latex.indexOf('}', nameStart);
+        if (nameEnd < 0) {
+            return null;
+        }
+        String env = latex.substring(nameStart, nameEnd);
+        return ARRAY_LIKE_ENVIRONMENTS.contains(env) ? env : null;
+    }
+
+    private record ArrayLikeBody(String body) {
+    }
+
     private static int countOccurrences(String text, String needle) {
         if (text == null || text.isEmpty() || needle == null || needle.isEmpty()) {
             return 0;
@@ -707,6 +854,253 @@ public class LaTeXImageRenderer {
             index += needle.length();
         }
         return count;
+    }
+
+    private static boolean hasFractionCommand(String latex) {
+        return nextFractionCommand(latex, 0) >= 0;
+    }
+
+    private static int countFractionCommands(String latex) {
+        int count = 0;
+        int cursor = 0;
+        while ((cursor = nextFractionCommand(latex, cursor)) >= 0) {
+            count++;
+            cursor = fractionCommandEnd(latex, cursor);
+        }
+        return count;
+    }
+
+    private static int nextFractionCommand(String latex, int cursor) {
+        if (latex == null) {
+            return -1;
+        }
+        int best = -1;
+        for (String command : List.of("\\frac", "\\dfrac", "\\cfrac")) {
+            int hit = cursor;
+            while ((hit = latex.indexOf(command, hit)) >= 0) {
+                if (latexCommandBoundary(latex, hit + command.length())) {
+                    if (best < 0 || hit < best) {
+                        best = hit;
+                    }
+                    break;
+                }
+                hit += command.length();
+            }
+        }
+        return best;
+    }
+
+    private static int fractionCommandEnd(String latex, int start) {
+        if (latex == null || start < 0) {
+            return start + "\\frac".length();
+        }
+        for (String command : List.of("\\frac", "\\dfrac", "\\cfrac")) {
+            if (latex.startsWith(command, start) && latexCommandBoundary(latex, start + command.length())) {
+                return start + command.length();
+            }
+        }
+        return start + "\\frac".length();
+    }
+
+    private static boolean latexCommandBoundary(String latex, int cursor) {
+        return cursor >= latex.length() || !Character.isLetter(latex.charAt(cursor));
+    }
+
+    private static boolean hasTextHeavyFraction(String latex) {
+        if (latex == null || !hasFractionCommand(latex)) {
+            return false;
+        }
+        int cursor = 0;
+        while ((cursor = nextFractionCommand(latex, cursor)) >= 0) {
+            int commandEnd = fractionCommandEnd(latex, cursor);
+            int numeratorStart = skipWhitespace(latex, commandEnd);
+            if (numeratorStart >= latex.length() || latex.charAt(numeratorStart) != '{') {
+                cursor = commandEnd;
+                continue;
+            }
+            int numeratorEnd = matchingBrace(latex, numeratorStart);
+            if (numeratorEnd < 0) {
+                return false;
+            }
+            int denominatorStart = skipWhitespace(latex, numeratorEnd + 1);
+            if (denominatorStart >= latex.length() || latex.charAt(denominatorStart) != '{') {
+                cursor = numeratorEnd + 1;
+                continue;
+            }
+            int denominatorEnd = matchingBrace(latex, denominatorStart);
+            if (denominatorEnd < 0) {
+                return false;
+            }
+            String numerator = latex.substring(numeratorStart + 1, numeratorEnd);
+            String denominator = latex.substring(denominatorStart + 1, denominatorEnd);
+            if (isTextHeavyFractionPart(numerator) || isTextHeavyFractionPart(denominator)) {
+                return true;
+            }
+            cursor = denominatorEnd + 1;
+        }
+        return false;
+    }
+
+    private static boolean hasNestedFraction(String latex) {
+        if (latex == null || countFractionCommands(latex) < 2) {
+            return false;
+        }
+        int cursor = 0;
+        while ((cursor = nextFractionCommand(latex, cursor)) >= 0) {
+            int commandEnd = fractionCommandEnd(latex, cursor);
+            int numeratorStart = skipWhitespace(latex, commandEnd);
+            if (numeratorStart >= latex.length() || latex.charAt(numeratorStart) != '{') {
+                cursor = commandEnd;
+                continue;
+            }
+            int numeratorEnd = matchingBrace(latex, numeratorStart);
+            if (numeratorEnd < 0) {
+                return false;
+            }
+            int denominatorStart = skipWhitespace(latex, numeratorEnd + 1);
+            if (denominatorStart >= latex.length() || latex.charAt(denominatorStart) != '{') {
+                cursor = numeratorEnd + 1;
+                continue;
+            }
+            int denominatorEnd = matchingBrace(latex, denominatorStart);
+            if (denominatorEnd < 0) {
+                return false;
+            }
+            String numerator = latex.substring(numeratorStart + 1, numeratorEnd);
+            String denominator = latex.substring(denominatorStart + 1, denominatorEnd);
+            if (hasFractionCommand(numerator) || hasFractionCommand(denominator)) {
+                return true;
+            }
+            cursor = denominatorEnd + 1;
+        }
+        return false;
+    }
+
+    private static boolean hasOnlyScriptSlotFractions(String latex) {
+        return hasFractionCommand(latex) && hasScriptSlotFraction(latex) && !hasTopLevelFraction(latex);
+    }
+
+    private static boolean hasScriptSlotFraction(String latex) {
+        if (latex == null || !hasFractionCommand(latex)) {
+            return false;
+        }
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int op = nextScriptOperator(latex, cursor);
+            if (op < 0) {
+                return false;
+            }
+            int groupStart = skipWhitespace(latex, op + 1);
+            if (groupStart >= latex.length()) {
+                return false;
+            }
+            int groupEnd;
+            String body;
+            if (latex.charAt(groupStart) == '{') {
+                groupEnd = matchingBrace(latex, groupStart);
+                if (groupEnd < 0) {
+                    return false;
+                }
+                body = latex.substring(groupStart + 1, groupEnd);
+                cursor = groupEnd + 1;
+            } else if (latex.charAt(groupStart) == '\\') {
+                int commandEnd = skipCommandName(latex, groupStart + 1);
+                body = latex.substring(groupStart, commandEnd);
+                cursor = commandEnd;
+            } else {
+                body = latex.substring(groupStart, groupStart + 1);
+                cursor = groupStart + 1;
+            }
+            if (hasFractionCommand(body)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasTopLevelFraction(String latex) {
+        if (latex == null || !hasFractionCommand(latex)) {
+            return false;
+        }
+        int depth = 0;
+        for (int i = 0; i < latex.length(); i++) {
+            char ch = latex.charAt(i);
+            if (ch == '\\') {
+                int commandEnd = skipCommandName(latex, i + 1);
+                String command = latex.substring(i, commandEnd);
+                if (depth == 0 && (command.equals("\\frac") || command.equals("\\dfrac")
+                    || command.equals("\\cfrac"))) {
+                    return true;
+                }
+                i = commandEnd - 1;
+            } else if (ch == '{' || ch == '[' || ch == '(') {
+                depth++;
+            } else if (ch == '}' || ch == ']' || ch == ')') {
+                depth = Math.max(0, depth - 1);
+            }
+        }
+        return false;
+    }
+
+    private static int nextScriptOperator(String latex, int cursor) {
+        int depth = 0;
+        for (int i = Math.max(0, cursor); i < latex.length(); i++) {
+            char ch = latex.charAt(i);
+            if (ch == '\\') {
+                i = skipCommandName(latex, i + 1) - 1;
+                continue;
+            }
+            if (ch == '{' || ch == '[' || ch == '(') {
+                depth++;
+            } else if (ch == '}' || ch == ']' || ch == ')') {
+                depth = Math.max(0, depth - 1);
+            } else if (depth == 0 && (ch == '^' || ch == '_')) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static int skipCommandName(String latex, int start) {
+        int cursor = start;
+        while (cursor < latex.length() && Character.isLetter(latex.charAt(cursor))) {
+            cursor++;
+        }
+        return cursor;
+    }
+
+    private static boolean isTextHeavyFractionPart(String text) {
+        String visible = normalizeTextForLength(text == null ? "" : text);
+        return containsCjk(visible) && visible.codePointCount(0, visible.length()) >= 6;
+    }
+
+    private static String normalizeTextForLength(String text) {
+        return text.replaceAll("\\\\(?:mathrm|mathbf|mathit|textit|textbf|emph|text|boldsymbol)\\s*\\{\\s*([^{}]*)\\s*}", "$1")
+            .replaceAll("\\\\[A-Za-z]+", "x")
+            .replaceAll("[{}\\s]", "");
+    }
+
+    private static int skipWhitespace(String text, int cursor) {
+        while (cursor < text.length() && Character.isWhitespace(text.charAt(cursor))) {
+            cursor++;
+        }
+        return cursor;
+    }
+
+    private static int matchingBrace(String text, int open) {
+        int depth = 0;
+        for (int i = open; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '{') {
+                depth++;
+            } else if (ch == '}') {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
     }
 
     /**
