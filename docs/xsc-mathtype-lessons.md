@@ -3774,3 +3774,39 @@ batch, then append any useful lesson or pitfall found in that round.
   not final acceptance: compact sqrt-fractions remain too narrow/tall, and
   deep nested roots still need a stronger root-stroke model or local
   proportion calibration.
+- v223 adds a separate ordinary nested tall-root upper profile instead of
+  further moving the main `rootPolyline` points. New metrics:
+  `SQRT_TALL_NESTED_UPPER_PROFILE_X_OFFSET_PT = -0.18pt` and
+  `SQRT_TALL_NESTED_UPPER_PROFILE_Y_OFFSET_PT = 0.22pt`; cache key:
+  `v223-nested-tall-sqrt-profile`. The profile is guarded by
+  `nestedSqrtBody && tallRoot && !compactBodyFraction`, so it targets
+  `\sqrt{x+\sqrt{y+\sqrt{z}}}`-style nested ordinary tall roots only.
+- v223 intentionally does not apply the new ordinary profile to root-in-fraction
+  or mixed sqrt+fraction cases yet. A no-context review noted that ordinary
+  tall roots inside fractions could eventually use the same profile, but v219's
+  case10 fraction-rule continuity is already a fragile pass. Keep that expansion
+  for a separate round with explicit fraction-line ownership tests.
+- v223 tests distinguish main radical polylines from three-point profile lines:
+  nested roots still have the same radical count, nested tall roots gain a
+  bounded three-point upper profile, mixed sqrt+fraction and root-in-fraction do
+  not gain the nested profile, and deep nested roots require at least two
+  nested upper profiles while keeping parent top bars covering child radicals.
+  Matching the profile by absolute twips was a trap because nested layouts are
+  translated/scaled; tests should use shape/order properties instead.
+- v223 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-042618.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v223-final.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v223-final/page-*.png`.
+  Structural reports were saved as `scan-v223-final.json`,
+  `wmf-v223-final.json`, `glyph-v223-final.json`, and
+  `glyph-v223-final.txt`; clean counts stayed `23` MathType OLE objects,
+  `23` WMF previews, zero visible LaTeX leaks, zero invalid MathType OLE, and
+  zero bitmap/StretchDIB WMFs.
+- v223 visual status: `case13-v223-final-tall-nested.png` shows a slight
+  upper-turn thickening/softening without obvious new short bars. `page2-v223-final-root-overview.png`
+  keeps case10's continuous fraction rule and case12's compact sqrt-fraction
+  behavior, and `case15-v223-final-text-mixed.png` remains intact. This is
+  still not final visual acceptance; the nested roots remain too straight and
+  likely need a fuller root-stroke model or source-driven profile calibration.

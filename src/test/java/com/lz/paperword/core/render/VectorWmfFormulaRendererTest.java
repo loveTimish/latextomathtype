@@ -115,6 +115,10 @@ class VectorWmfFormulaRendererTest {
             "mixed sqrt bodies should not receive the whole-body fraction root profile");
         assertFalse(hasCompactRootProfile(rootInFraction),
             "roots inside ordinary fractions should not receive the compact root profile");
+        assertFalse(hasNestedTallRootProfile(fractionRoot),
+            "mixed sqrt bodies should not receive the nested-root upper profile");
+        assertFalse(hasNestedTallRootProfile(rootInFraction),
+            "roots inside ordinary fractions should not receive the nested-root upper profile");
     }
 
     @Test
@@ -339,12 +343,18 @@ class VectorWmfFormulaRendererTest {
         assertEquals(1, lines.size());
         assertEquals(2, fractionLines.size());
         assertEquals(2, rootInFractionLines.size());
-        assertEquals(2, nestedOnlyLines.size());
-        assertEquals(2, nestedLines.size());
+        assertEquals(2, nestedOnlyLines.stream().filter(VectorWmfFormulaRendererTest::isRadicalPolyline).count());
+        assertEquals(2, nestedLines.stream().filter(VectorWmfFormulaRendererTest::isRadicalPolyline).count());
         assertTrue(nestedFractionLines.size() >= 3,
             "nested fraction roots may include compact radical hook strokes in addition to required bars");
-        assertTrue(nestedLines.stream().allMatch(VectorWmfFormulaRendererTest::isRadicalPolyline),
+        assertTrue(nestedLines.stream()
+                .filter(line -> line.pointCount() != 3)
+                .allMatch(VectorWmfFormulaRendererTest::isRadicalPolyline),
             "nested root radicals must keep radical polylines after layout translation");
+        assertTrue(hasNestedTallRootProfile(nestedRoot),
+            "nested tall roots should add a local upper profile to soften the mechanical single-stroke turn");
+        assertFalse(hasNestedTallRootProfile(fractionRoot),
+            "ordinary mixed sqrt+fraction roots should not get the nested-root profile");
         assertTrue(radicalTopGapTwips(nestedLines) >= Math.round(
                 MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
             "nested root top bars should have visible vertical separation");
@@ -510,7 +520,9 @@ class VectorWmfFormulaRendererTest {
         assertEquals(0, VectorWmfFormulaRenderer.sqrtCommandDepthOutsideText("\\text{\\sqrt}"));
         assertEquals(1, VectorWmfFormulaRenderer.sqrtCommandDepthOutsideText("1+\\sqrt{x}"));
         assertEquals(2, VectorWmfFormulaRenderer.sqrtCommandDepthOutsideText("x+\\sqrt{y+\\sqrt{z}}"));
-        assertEquals(2, polylines(nestedSqrt).size());
+        assertEquals(2, polylines(nestedSqrt).stream()
+            .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
+            .count());
         assertTrue(radicalTopGapTwips(polylines(nestedSqrt)) >= Math.round(
                 MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
             "structural nested sqrt should keep the extra vertical separation");
@@ -545,6 +557,11 @@ class VectorWmfFormulaRendererTest {
             "outer deep-nested root top bar should cover the middle nested body");
         assertTrue(radicals.get(1).x2() >= radicals.get(2).x2(),
             "middle deep-nested root top bar should cover the inner nested body");
+        long nestedProfileCount = lines.stream()
+            .filter(VectorWmfFormulaRendererTest::isNestedTallRootProfile)
+            .count();
+        assertTrue(nestedProfileCount >= 2,
+            "deep nested roots should add upper profile strokes for parent radicals without changing the top bars");
     }
 
     @Test
@@ -2384,6 +2401,25 @@ class VectorWmfFormulaRendererTest {
 
     private static boolean hasCompactRootProfile(byte[] data) {
         return polylines(data).stream().anyMatch(line -> line.pointCount() == 3);
+    }
+
+    private static boolean hasNestedTallRootProfile(byte[] data) {
+        return polylines(data).stream().anyMatch(VectorWmfFormulaRendererTest::isNestedTallRootProfile);
+    }
+
+    private static boolean isNestedTallRootProfile(Polyline line) {
+        if (line.pointCount() != 3) {
+            return false;
+        }
+        int firstToLastX = line.x2() - line.x1();
+        int middleToLastX = line.x2() - line.x(1);
+        int firstToLastY = line.y2() - line.y1();
+        return firstToLastX >= 40
+            && middleToLastX >= 14
+            && firstToLastX > middleToLastX
+            && firstToLastY < 0
+            && line.y1() > line.y(1)
+            && line.y(1) > line.y2();
     }
 
     private static int radicalTopY(Polyline line) {

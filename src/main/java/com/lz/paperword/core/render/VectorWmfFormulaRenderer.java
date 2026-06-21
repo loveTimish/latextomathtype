@@ -3786,6 +3786,18 @@ final class VectorWmfFormulaRenderer {
                         topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
                     ));
                 } else {
+                    if (nestedSqrtBody) {
+                        double nestedProfileX = MathTypeStructureMetrics.SQRT_TALL_NESTED_UPPER_PROFILE_X_OFFSET_PT;
+                        double nestedProfileY = MathTypeStructureMetrics.SQRT_TALL_NESTED_UPPER_PROFILE_Y_OFFSET_PT;
+                        lines.add(LineSegment.polyline(
+                            rootX + shoulderX + nestedProfileX,
+                            rootHeight * shoulderYRatio + nestedProfileY,
+                            rootX + ordinaryTopLeadX + nestedProfileX,
+                            rootHeight * ordinaryTopLeadYRatio + nestedProfileY,
+                            rootX + checkTopX + nestedProfileX,
+                            MathTypeStructureMetrics.SQRT_TOP_Y_PT + nestedProfileY
+                        ));
+                    }
                     lines.add(LineSegment.rootPolyline(
                         rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
                         rootX + lowX,
