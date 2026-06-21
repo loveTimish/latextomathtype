@@ -95,15 +95,39 @@ class VectorWmfFormulaRendererTest {
     void sqrtRootShapeCoordinatesComeFromStructureMetrics() throws IOException {
         byte[] simpleRoot = VectorWmfFormulaRenderer.render("\\sqrt{2}", 28.0d,
             MathTypeStructureMetrics.SQRT_HEIGHT_PT);
+        byte[] fractionRoot = VectorWmfFormulaRenderer.render("\\sqrt{1+\\frac{a}{b}}", 54.0d,
+            MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        byte[] rootInFraction = VectorWmfFormulaRenderer.render("\\frac{\\sqrt{a^{2}+b^{2}}}{2}", 54.0d,
+            MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
         byte[] nestedRoot = VectorWmfFormulaRenderer.render("\\sqrt{1+\\sqrt{x}}", 64.0d, 32.0d);
+        byte[] nestedFractionRoot = VectorWmfFormulaRenderer.render("\\sqrt{1+\\sqrt{\\frac{a}{b}}}", 92.0d,
+            58.0d);
         List<Polyline> lines = polylines(simpleRoot);
+        List<Polyline> fractionLines = polylines(fractionRoot);
+        List<Polyline> rootInFractionLines = polylines(rootInFraction);
         List<Polyline> nestedLines = polylines(nestedRoot);
+        List<Polyline> nestedFractionLines = polylines(nestedFractionRoot);
 
         assertEquals(1, lines.size());
+        assertEquals(2, fractionLines.size());
+        assertEquals(2, rootInFractionLines.size());
         assertEquals(2, nestedLines.size());
+        assertEquals(3, nestedFractionLines.size());
         assertTrue(nestedLines.stream().allMatch(line -> line.pointCount() == 4),
             "nested root radicals must keep all four polyline points after layout translation");
+        assertEquals(2, nestedFractionLines.stream().filter(line -> line.pointCount() == 4).count());
         Polyline root = lines.get(0);
+        Polyline tallRoot = fractionLines.stream()
+            .filter(line -> line.pointCount() == 4)
+            .findFirst()
+            .orElseThrow();
+        Polyline scaledFractionRoot = rootInFractionLines.stream()
+            .filter(line -> line.pointCount() == 4)
+            .findFirst()
+            .orElseThrow();
+        List<Polyline> tallNestedFractionRoots = nestedFractionLines.stream()
+            .filter(line -> line.pointCount() == 4)
+            .toList();
         assertEquals(4, root.pointCount());
         int rootX = root.x1();
         assertCloseTwips(MathTypeStructureMetrics.SQRT_HEIGHT_PT
@@ -116,6 +140,15 @@ class VectorWmfFormulaRendererTest {
             "sqrt checkmark x ratio should stay metric-driven");
         assertCloseTwips(MathTypeStructureMetrics.SQRT_HEIGHT_PT
             - MathTypeStructureMetrics.SQRT_BOTTOM_PAD_PT, root.y(1));
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
+            - MathTypeStructureMetrics.SQRT_TALL_BOTTOM_PAD_PT, tallRoot.y(1));
+        assertTrue(tallRoot.y(1) < (MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
+                - MathTypeStructureMetrics.SQRT_BOTTOM_PAD_PT) * 20.0d,
+            "tall roots should lift the checkmark turn instead of drawing an overlong left descender");
+        assertEquals(4, scaledFractionRoot.pointCount(),
+            "root inside a fraction should still keep the four-point radical after scaled placement");
+        assertTrue(tallNestedFractionRoots.stream().allMatch(VectorWmfFormulaRendererTest::hasLiftedTallRootTurn),
+            "nested fraction roots should also use the lifted tall-root checkmark turn");
         assertCloseTwips(MathTypeStructureMetrics.SQRT_TOP_Y_PT, root.y(2));
         assertCloseTwips(MathTypeStructureMetrics.SQRT_TOP_Y_PT, root.y(3));
         assertTrue(minTextXCoordinate(simpleRoot) - rootX >= topX);
@@ -1807,6 +1840,15 @@ class VectorWmfFormulaRendererTest {
             offset += sizeWords * 2;
         }
         return out;
+    }
+
+    private static boolean hasLiftedTallRootTurn(Polyline line) {
+        int rootHeightTwips = line.y(1) - line.y(2)
+            + (int) Math.round(MathTypeStructureMetrics.SQRT_TALL_BOTTOM_PAD_PT * 20.0d);
+        int oldTurnY = line.y(2) + rootHeightTwips
+            - (int) Math.round(MathTypeStructureMetrics.SQRT_BOTTOM_PAD_PT * 20.0d);
+        return line.y(1) <= oldTurnY - 70
+            && rootHeightTwips > (MathTypeStructureMetrics.SQRT_HEIGHT_PT + 4.0d) * 20.0d;
     }
 
     private record Polyline(int[] points) {

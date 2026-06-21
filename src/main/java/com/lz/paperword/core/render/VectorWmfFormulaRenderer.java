@@ -1553,7 +1553,8 @@ final class VectorWmfFormulaRenderer {
         @Override
         public void emit(List<PlacedText> placed, List<LineSegment> lines, double x, double baseline, boolean script) {
             double top = baseline - abovePt + MathTypeStructureMetrics.SQRT_BOX_TOP_OFFSET_PT;
-            double bottom = baseline + belowPt - MathTypeStructureMetrics.SQRT_BOTTOM_PAD_PT;
+            double rootHeight = abovePt + belowPt;
+            double bottom = baseline + belowPt - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight);
             body.emit(placed, lines, x + MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT,
                 baseline + MathTypeStructureMetrics.SQRT_BOX_BODY_BASELINE_OFFSET_PT, script);
             lines.add(LineSegment.polyline(
@@ -3552,7 +3553,7 @@ final class VectorWmfFormulaRenderer {
             lines.add(LineSegment.polyline(
                 rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
                 rootX + MathTypeStructureMetrics.SQRT_CHECK_MID_X_PT,
-                rootHeight - MathTypeStructureMetrics.SQRT_BOTTOM_PAD_PT,
+                rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
                 rootX + MathTypeStructureMetrics.SQRT_CHECK_TOP_X_PT, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
                 topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
             ));

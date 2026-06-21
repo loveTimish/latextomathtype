@@ -96,6 +96,7 @@ final class MathTypeStructureMetrics {
     static final double SQRT_CHECK_TOP_X_PT = 5.0d;
     static final double SQRT_TOP_Y_PT = 2.0d;
     static final double SQRT_BOTTOM_PAD_PT = 4.8d;
+    static final double SQRT_TALL_BOTTOM_PAD_PT = 10.5d;
     static final double SQRT_LEFT_DESCENT_RATIO = 0.52d;
     static final double SQRT_BOX_TOP_OFFSET_PT = 1.3d;
     static final double SQRT_BOX_BODY_BASELINE_OFFSET_PT = 0.2d;
@@ -107,6 +108,10 @@ final class MathTypeStructureMetrics {
     static final double ACCENT_HEIGHT_PT = 15.75d;
     static final double OVERLINE_Y_PT = 1.8d;
     static final double UNDERLINE_BOTTOM_PAD_PT = 1.2d;
+
+    static double sqrtBottomPadPt(double rootHeightPt) {
+        return rootHeightPt > SQRT_HEIGHT_PT + 4.0d ? SQRT_TALL_BOTTOM_PAD_PT : SQRT_BOTTOM_PAD_PT;
+    }
 
     static SourceSampleMetrics sourceSampleMetrics(Family family) {
         double height = metrics(family).heightPt();

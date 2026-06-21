@@ -2807,3 +2807,22 @@ batch, then append any useful lesson or pitfall found in that round.
   fractions such as trailing `AO/CO` to use text-heavy y coordinates. Compute
   text-heavy fraction y placement per `\frac{...}{...}` node, while the overall
   formula can still use the taller text-fraction height family.
+- v184 lifts only tall radical checkmark turns through
+  `MathTypeStructureMetrics.sqrtBottomPadPt(rootHeightPt)`. Keep the ordinary
+  `SQRT_BOTTOM_PAD_PT` for simple `18pt` roots, but use a larger tall-root pad
+  for `sqrt_fraction` / nested-fraction height roots. Record probes showed
+  `\sqrt{1+\frac{a}{b}}` moved the radical turn from `643twips` to `529twips`,
+  and `\sqrt{1+\sqrt{\frac{a}{b}}}` moved outer/inner fraction-root turns from
+  about `683/667twips` to `569/553twips`, while `\sqrt{x+1}` stayed unchanged.
+- v184 Word COM + Poppler visual status: page 2/page 3 show shorter descenders
+  for roots containing fractions, including `T=2\pi\sqrt{\frac{l}{g}}`, so the
+  change is a real visual improvement. It is not final acceptance. Nested roots
+  with fractions still look like crowded parallel vertical strokes; next tuning
+  should address nested-root spacing/body placement rather than further raising
+  every tall-root turn.
+- A no-context v184 review flagged that root-height thresholding is broader
+  than a named structure family and that record-coordinate tests can overclaim
+  visual repair. Keep this round's claim narrow: tall `sqrt_fraction` and
+  `sqrt_nested_fraction` turns are lifted and Word PNG shows shorter descenders,
+  but root-in-fraction and nested-root proportions still need separate visual
+  calibration. Do not describe v184 as completing radical rendering.
