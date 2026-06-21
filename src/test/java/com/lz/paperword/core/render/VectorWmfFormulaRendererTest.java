@@ -95,9 +95,14 @@ class VectorWmfFormulaRendererTest {
     void sqrtRootShapeCoordinatesComeFromStructureMetrics() throws IOException {
         byte[] simpleRoot = VectorWmfFormulaRenderer.render("\\sqrt{2}", 28.0d,
             MathTypeStructureMetrics.SQRT_HEIGHT_PT);
+        byte[] nestedRoot = VectorWmfFormulaRenderer.render("\\sqrt{1+\\sqrt{x}}", 64.0d, 32.0d);
         List<Polyline> lines = polylines(simpleRoot);
+        List<Polyline> nestedLines = polylines(nestedRoot);
 
         assertEquals(1, lines.size());
+        assertEquals(2, nestedLines.size());
+        assertTrue(nestedLines.stream().allMatch(line -> line.pointCount() == 4),
+            "nested root radicals must keep all four polyline points after layout translation");
         Polyline root = lines.get(0);
         assertEquals(4, root.pointCount());
         int rootX = root.x1();
@@ -116,6 +121,15 @@ class VectorWmfFormulaRendererTest {
         assertTrue(minTextXCoordinate(simpleRoot) - rootX >= topX);
         assertTrue(minTextYCoordinate(simpleRoot) >= (int) Math.round(MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT
             * 20.0d));
+    }
+
+    @Test
+    void scaledStructuredLayoutsPreserveRootPolylinePoints() throws IOException {
+        byte[] rootInFraction = VectorWmfFormulaRenderer.render("\\frac{\\sqrt{x}}{2}", 54.0d,
+            MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+
+        assertTrue(polylines(rootInFraction).stream().anyMatch(line -> line.pointCount() == 4),
+            "root inside a scaled fraction slot must keep the four-point radical shape");
     }
 
     @Test
@@ -685,10 +699,14 @@ class VectorWmfFormulaRendererTest {
     @Test
     void leftBraceArraysCanRenderAsVectorText() throws IOException {
         String latex = "\\left \\{ \\begin{array}{l}B=2 \\\\,s=14\\end{array} \\right.";
+        String arrayArrow = "\\begin{array}{c}2H_{2}+O_{2}\\rightarrow 2H_{2}O\\end{array}";
         byte[] wmf = VectorWmfFormulaRenderer.render(latex, 42.0d, 28.0d);
+        byte[] arrowWmf = VectorWmfFormulaRenderer.render(arrayArrow, 132.0d, 24.0d);
         List<Integer> records = records(wmf);
+        List<Integer> arrowRecords = records(arrowWmf);
 
         assertTrue(VectorWmfFormulaRenderer.canRender(latex));
+        assertTrue(VectorWmfFormulaRenderer.canRender(arrayArrow));
         assertTrue(VectorWmfFormulaRenderer.canRender("\\begin{cases} b=1\\\\ c=1 \\end{cases}"));
         assertTrue(VectorWmfFormulaRenderer.canRender(
             "\\begin{cases} x=1\\\\ y=3 \\end{cases} ,\\begin{cases} x=6\\\\ y=1 \\end{cases}"
@@ -699,7 +717,9 @@ class VectorWmfFormulaRendererTest {
         ));
         assertTrue(records.contains(0x02FB));
         assertTrue(records.contains(0x0A32));
+        assertTrue(arrowRecords.contains(0x0325));
         assertFalse(records.contains(0x0F43));
+        assertFalse(arrowRecords.contains(0x0F43));
     }
 
     @Test
@@ -1185,6 +1205,26 @@ class VectorWmfFormulaRendererTest {
         assertFalse(textRecords.isEmpty());
         assertTrue(textRecords.stream().anyMatch(bytes -> containsByte(bytes, (byte) 0xB4)));
         assertTrue(textRecords.stream().anyMatch(bytes -> containsByte(bytes, (byte) 0xB8)));
+    }
+
+    @Test
+    void rightArrowUsesVectorLineInWmfPreview() throws IOException {
+        byte[] wmf = VectorWmfFormulaRenderer.render("2H_{2}+O_{2}\\rightarrow 2H_{2}O", 132.0d, 18.0d);
+        List<byte[]> textRecords = extTextOutBytes(wmf);
+        List<Integer> records = records(wmf);
+
+        assertTrue(VectorWmfFormulaRenderer.canRender("2H_{2}+O_{2}\\rightarrow 2H_{2}O"));
+        assertTrue(records.contains(0x0325));
+        assertFalse(textRecords.stream().anyMatch(VectorWmfFormulaRendererTest::containsQuestionMark));
+    }
+
+    @Test
+    void shortArrowCommandDoesNotMatchLongerCommandPrefix() throws IOException {
+        byte[] wmf = VectorWmfFormulaRenderer.render("\\text{to}+A", 42.0d, 15.0d);
+        List<Integer> records = records(wmf);
+
+        assertTrue(VectorWmfFormulaRenderer.canRender("\\text{to}+A"));
+        assertFalse(records.contains(0x0325));
     }
 
     @Test

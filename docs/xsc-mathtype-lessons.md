@@ -55,6 +55,42 @@ batch, then append any useful lesson or pitfall found in that round.
 
 ## Lessons
 
+### Formula Golden Corpus
+
+- 2026-06-21 added `src/test/resources/formula-golden-corpus.tsv`,
+  `FormulaGoldenCorpusTest`, `FormulaGoldenCorpusDocxTest`, and
+  `docs/formula-golden-corpus.md` as the first self-written WMF box-model
+  corpus. Required families now include linear, script, geometry labels,
+  ordinary/inline/nested fractions, simple/script/fraction/nested radicals,
+  arrays, text-mixed CJK fractions, physics, chemistry, and a derivative
+  fraction.
+- Golden corpus record thresholds should not assume a one-to-one mapping
+  between semantic children and `ExtTextOut` or `Polyline` records. For
+  `\sqrt{1+\sqrt{\frac{a}{b}}}`, the current renderer correctly emits vector
+  text/structure without bitmap fallback using `3` text records and `3`
+  polylines, not the initially guessed `4` and `4`.
+- Current golden DOCX artifact:
+  `analysis/formula-golden-corpus/formula-golden-corpus-latest.docx`.
+  Validation on 2026-06-21 showed `23` required-corpus MathType
+  `Equation.DSMT4` OLE objects, `23` vector WMF previews, zero visible LaTeX
+  leaks, zero `StretchDIB`, and zero bitmap WMFs. The optional `\sum`
+  large-operator case remains a recorded corpus gap.
+- No-context review caught two important false-confidence risks: the DOCX test
+  originally covered only a hard-coded subset of the TSV, and local WMF bitmap
+  detection missed `BitBlt`/`SetDIBitsToDevice`. The fixed gate now loads all
+  required TSV cases into the DOCX sample, checks `v:imagedata` and
+  `o:OLEObject` counts, and shares the broader bitmap function set.
+- Do not mark golden corpus complete from JUnit/record gates alone. On
+  2026-06-21 LibreOffice was installed with `winget`, but `render_docx.py`
+  still hung on this DOCX; Word COM export to
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export.pdf` plus
+  Poppler PNG render exposed visual failures in
+  `analysis/formula-golden-corpus/word-rendered/page-*.png`. Failures included
+  extra trailing short bars, root/fraction bars drifting or collapsing,
+  nested roots compressed into unreadable shapes, CJK text fractions split
+  apart, and chemistry reaction arrows missing/flattened. Current status:
+  structural/OLE/vector-WMF gate passes, visual acceptance fails.
+
 ### OLE and WMF Basics
 
 - Passing size metrics alone is not enough. The document can have correct OLE
@@ -2694,3 +2730,57 @@ batch, then append any useful lesson or pitfall found in that round.
 - When parsing WMF polylines in tests, read the declared point count and all
   points. Old helpers assumed exactly two points, which would hide regressions
   once roots, arcs, or future brackets use real multi-point paths.
+- v181 fixed two visual-quality issues exposed by the golden corpus Word/PNG
+  gate. First, `appendScaledLayout(...)` and compact-fraction scaling must
+  preserve all `LineSegment` polyline points; reducing a four-point radical to
+  its first and last point makes nested roots collapse into stray lines. Second,
+  ordinary `\rightarrow` / `\to` should use self-written polyline arrows rather
+  than Symbol-font glyph fallback, because Word/PDF rendered the Symbol right
+  arrow byte as a short dash even after WMF records contained the expected
+  symbol byte. The regenerated golden corpus kept `23` valid MathType OLE,
+  `23` vector WMFs, zero LaTeX leaks, zero StretchDIB/bitmap WMFs, and page 4
+  showed a visible arrow in the chemistry reaction. Visual acceptance still
+  fails overall: nested radicals, radicals containing fractions, text-heavy CJK
+  fractions, nested fraction proportions, and chemistry spacing still need
+  structure-specific layout work.
+- A no-context v181 review caught that preserving polyline points only in
+  scaled append paths was incomplete. Plain `appendLayout(...)` is also used by
+  nested radicals, so it must translate all `LineSegment` points rather than
+  rebuilding a two-point segment from x1/y1/x2/y2. The follow-up test now
+  asserts `\sqrt{1+\sqrt{x}}` emits two four-point radical polylines, and the
+  golden corpus records `maxPolylinePointCount`. The same review also caught
+  that simple arrows inside array cells need the new self-drawn arrow path, and
+  that `chemistry-equation-01` should require `3` polyline records so a
+  `\rightarrow` regression cannot pass as text-only WMF.
+- v182 fixed another polyline-preservation hole in the unified formula box
+  path. `emitScaled(...)`, `emitScaledScript(...)`, and `scaleLayoutX(...)`
+  previously rebuilt structure lines from only x1/y1/x2/y2, which would discard
+  intermediate points for four-point radical signs whenever the structure was
+  placed in a scaled fraction slot, script slot, or horizontally compressed
+  layout. Use `LineSegment.scaled(...)` and `LineSegment.scaledX(...)` for
+  these transforms so future multi-point roots/arrows/brackets survive.
+- v182 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-latest.docx`.
+  `scan_docx_latex_leaks.py` still reported `23` MathType
+  `Equation.DSMT4` OLE objects, `23` WMF previews, and zero visible LaTeX
+  leaks. `wmf_record_report.py` still reported `23` vector WMFs, zero
+  `StretchDIB`, zero bitmap records, and zero WMF LaTeX leaks. Word COM export
+  plus Poppler PNG render refreshed
+  `analysis/formula-golden-corpus/word-rendered/page-1.png` through
+  `page-4.png`.
+- v182 visual status is still not acceptable. Page 2 shows that roots no longer
+  collapse into stray two-point lines, but ordinary and nested radicals remain
+  too thin/tall and nested-root proportions are cramped. Page 3 shows
+  `text_mixed` CJK fractions still look like two stacked text lines rather than
+  a proper long fraction with a visible centered bar. Page 4 keeps the
+  chemistry arrow visible, but chemistry spacing and style remain unnatural.
+- A no-context v182 review caught three gate/geometry gaps. First,
+  `layoutVerticalExtentPt(...)` must compute line bounds from every polyline
+  point, because a radical's deepest point is usually an intermediate point,
+  not y1/y2. Second, corpus validation should count four-point radical
+  polylines against the actual number of `\sqrt` commands, not merely check
+  `maxPolylinePointCount >= 4`. Third, `FormulaGoldenCorpusDocxTest` must apply
+  the TSV structure thresholds to the embedded WMFs as well; OLE/vector-text
+  counts alone can pass text-only or collapsed-radical previews. The DOCX gate
+  should not compare embedded WMF dimensions to TSV display-box dimensions,
+  because `DocxBuilder` recalibrates the actual object size by structure family.

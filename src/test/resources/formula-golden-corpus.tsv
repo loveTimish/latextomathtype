@@ -1,0 +1,29 @@
+id	subject	family	expectation	widthPt	heightPt	minTextRecords	minPolylineRecords	latex
+k12-linear-01	k12	linear	required	72	14	1	0	a+b=c
+k12-script-01	k12	script	required	92	18	2	0	a_{1}^{2}+b_{2}^{3}=c^{2}
+k12-geometry-label-01	k12	geometry_label	required	170	18	4	0	S_{\Delta AOB}:S_{\Delta COD}=a^{2}:b^{2}=4:9
+k12-inline-fraction-01	k12	inline_fraction	required	74	26	2	1	AO=1,\ CO=\frac{5}{3}
+k12-fraction-01	k12	fraction	required	48	28	2	1	\frac{a+b}{c+d}
+k12-nested-fraction-01	k12	nested_fraction	required	86	53	4	3	\frac{1+\frac{a}{b}}{2+\frac{c}{d}}
+k12-sqrt-simple-01	k12	sqrt_simple	required	38	19	1	1	\sqrt{x+1}
+k12-sqrt-script-01	k12	sqrt_script	required	56	21	2	1	\sqrt{a^{2}+b^{2}}
+k12-sqrt-fraction-01	k12	sqrt_fraction	required	70	41	3	2	\sqrt{1+\frac{a}{b}}
+k12-fraction-sqrt-01	k12	fraction_sqrt	required	70	41	3	2	\frac{\sqrt{a^{2}+b^{2}}}{2}
+k12-sqrt-nested-01	k12	sqrt_nested	required	64	32	2	2	\sqrt{1+\sqrt{x}}
+k12-sqrt-nested-fraction-01	k12	sqrt_nested_fraction	required	92	58	3	3	\sqrt{1+\sqrt{\frac{a}{b}}}
+k12-sqrt-deep-nested-01	k12	sqrt_nested	required	108	64	3	3	\sqrt{x+\sqrt{y+\sqrt{z}}}
+k12-array-01	k12	matrix_array	required	82	42	4	0	\begin{array}{c}x+y=1\\x-y=2\end{array}
+k12-text-mixed-01	k12	text_mixed	required	160	44	4	2	\frac{三角形ABD的面积}{三角形CBD的面积}=\frac{AO}{CO}
+physics-linear-01	physics	linear	required	42	14	1	0	F=ma
+physics-script-01	physics	script	required	92	18	2	0	x=v_{0}t+\frac{1}{2}at^{2}
+physics-root-fraction-01	physics	sqrt_fraction	required	86	42	3	2	T=2\pi\sqrt{\frac{l}{g}}
+physics-fraction-01	physics	fraction	required	72	28	2	1	E_{k}=\frac{1}{2}mv^{2}
+chemistry-subscript-01	chemistry	chemistry	required	44	16	2	0	H_{2}O
+chemistry-ion-01	chemistry	chemistry	required	112	18	4	0	Ca^{2+}+CO_{3}^{2-}
+chemistry-equation-01	chemistry	chemistry	required	132	18	4	3	2H_{2}+O_{2}\rightarrow 2H_{2}O
+chemistry-fraction-01	chemistry	fraction	optional	120	34	4	1	K_{a}=\frac{[H^{+}][A^{-}]}{[HA]}
+higher-derivative-01	higher_math	fraction	required	62	28	2	1	\frac{dy}{dx}
+higher-limit-01	higher_math	large_operator	optional	112	32	2	1	\lim_{x\to0}\frac{\sin x}{x}=1
+higher-sum-01	higher_math	large_operator	optional	128	34	3	1	\sum_{i=1}^{n}i=\frac{n(n+1)}{2}
+higher-integral-01	higher_math	large_operator	optional	92	22	1	0	\int_{0}^{1}x^{2}dx
+higher-matrix-01	higher_math	matrix_array	optional	70	46	4	0	\begin{pmatrix}a&b\\c&d\end{pmatrix}

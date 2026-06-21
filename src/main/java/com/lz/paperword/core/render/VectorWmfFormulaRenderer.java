@@ -44,11 +44,13 @@ final class VectorWmfFormulaRenderer {
     private static final double COMPACT_FRACTION_NUMERATOR_Y_PT = -0.2d;
     private static final double COMPACT_FRACTION_DENOMINATOR_Y_PT = 14.0d;
     private static final double COMPACT_FRACTION_BAR_Y_PT = 13.6d;
+    private static final double COMPACT_FRACTION_BAR_INSET_PT = 0.45d;
     private static final double COMPACT_FRACTION_HEIGHT_PT =
         MathTypeStructureMetrics.COMPACT_INLINE_FRACTION_HEIGHT_PT;
     private static final double FRACTION_NUMERATOR_Y_PT = -2.4d;
     private static final double FRACTION_DENOMINATOR_Y_PT = 11.8d;
     private static final double FRACTION_BAR_Y_PT = 12.8d;
+    private static final double FRACTION_BAR_INSET_PT = 0.65d;
     private static final double FRACTION_HEIGHT_PT = MathTypeStructureMetrics.ORDINARY_FRACTION_HEIGHT_PT;
     private static final double TEXT_FRACTION_HEIGHT_PT = MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT;
     private static final double TEXT_FRACTION_NUMERATOR_Y_PT =
@@ -937,7 +939,7 @@ final class VectorWmfFormulaRenderer {
             bottom = Math.max(bottom, run.baselinePt() + (run.script() ? 2.8d : 3.5d));
         }
         for (LineSegment line : layout.lines()) {
-            bottom = Math.max(bottom, Math.max(line.y1Pt(), line.y2Pt()) + 0.6d);
+            bottom = Math.max(bottom, line.maxYPt() + 0.6d);
         }
         return bottom;
     }
@@ -1004,6 +1006,10 @@ final class VectorWmfFormulaRenderer {
         FormulaLayout overarc = layoutOverarc(text);
         if (overarc != null) {
             return overarc;
+        }
+        FormulaLayout simpleArrows = layoutSimpleArrowFragments(text);
+        if (simpleArrows != null) {
+            return simpleArrows;
         }
         FormulaLayout arrows = layoutXArrowFragments(text);
         if (arrows != null) {
@@ -1572,8 +1578,7 @@ final class VectorWmfFormulaRenderer {
                 x + run.xPt() * scale, baseline + run.baselinePt() * scale, run.widthScale() * scale));
         }
         for (LineSegment line : localLines) {
-            lines.add(new LineSegment(x + line.x1Pt() * scale, baseline + line.y1Pt() * scale,
-                x + line.x2Pt() * scale, baseline + line.y2Pt() * scale));
+            lines.add(line.scaled(scale, x, baseline));
         }
     }
 
@@ -1589,10 +1594,7 @@ final class VectorWmfFormulaRenderer {
                 run.widthScale() * UNIFIED_SCRIPT_BOX_SCALE));
         }
         for (LineSegment line : localLines) {
-            lines.add(new LineSegment(x + line.x1Pt() * UNIFIED_SCRIPT_BOX_SCALE,
-                baseline + line.y1Pt() * UNIFIED_SCRIPT_BOX_SCALE,
-                x + line.x2Pt() * UNIFIED_SCRIPT_BOX_SCALE,
-                baseline + line.y2Pt() * UNIFIED_SCRIPT_BOX_SCALE));
+            lines.add(line.scaled(UNIFIED_SCRIPT_BOX_SCALE, x, baseline));
         }
     }
 
@@ -2048,7 +2050,7 @@ final class VectorWmfFormulaRenderer {
         }
         List<LineSegment> lines = new ArrayList<>(layout.lines().size());
         for (LineSegment line : layout.lines()) {
-            lines.add(new LineSegment(line.x1Pt() * scale, line.y1Pt(), line.x2Pt() * scale, line.y2Pt()));
+            lines.add(line.scaledX(scale));
         }
         return new FormulaLayout(runs, lines, layout.widthPt(), layout.heightPt());
     }
@@ -2202,8 +2204,8 @@ final class VectorWmfFormulaRenderer {
                 appendCompactInlineFractionLayout(placed, lines, denominator,
                     fractionX + (fractionWidth - denominatorWidth * COMPACT_FRACTION_SCALE) / 2.0d,
                     COMPACT_FRACTION_DENOMINATOR_Y_PT);
-                lines.add(new LineSegment(fractionX, COMPACT_FRACTION_BAR_Y_PT,
-                    fractionX + fractionWidth, COMPACT_FRACTION_BAR_Y_PT));
+                addInsetFractionBar(lines, fractionX, fractionWidth, COMPACT_FRACTION_BAR_Y_PT,
+                    COMPACT_FRACTION_BAR_INSET_PT);
             } else {
                 double numeratorY = sqrtFractionFamily ? SQRT_FRACTION_NUMERATOR_Y_PT
                     : textFractionFamily ? TEXT_FRACTION_NUMERATOR_Y_PT
@@ -2218,7 +2220,7 @@ final class VectorWmfFormulaRenderer {
                     numeratorY);
                 appendLayout(placed, lines, denominator, fractionX + (fractionWidth - denominatorWidth) / 2.0d,
                     denominatorY);
-                lines.add(new LineSegment(fractionX, barY, fractionX + fractionWidth, barY));
+                addInsetFractionBar(lines, fractionX, fractionWidth, barY, FRACTION_BAR_INSET_PT);
             }
             x = fractionX + fractionWidth + (compactInlineFraction ? 0.8d : 1.4d);
             sawFraction = true;
@@ -2327,6 +2329,10 @@ final class VectorWmfFormulaRenderer {
         if (arrows != null) {
             return arrows;
         }
+        FormulaLayout simpleArrows = layoutSimpleArrowFragments(text);
+        if (simpleArrows != null) {
+            return simpleArrows;
+        }
         FormulaLayout overline = layoutOverline(text);
         if (overline != null) {
             return overline;
@@ -2415,6 +2421,50 @@ final class VectorWmfFormulaRenderer {
         return sawArrow ? new FormulaLayout(placed, lines, Math.max(1.0d, x), height) : null;
     }
 
+    private static FormulaLayout layoutSimpleArrowFragments(String text) {
+        List<String> markers = List.of("\\rightarrow", "\\leftarrow", "\\to", "\\gets");
+        MarkerHit firstHit = findNextCommandMarker(text, markers, 0);
+        if (firstHit == null) {
+            return null;
+        }
+        List<PlacedText> placed = new ArrayList<>();
+        List<LineSegment> lines = new ArrayList<>();
+        double x = 0.0d;
+        double height = 15.0d;
+        int cursor = 0;
+        boolean sawArrow = false;
+        while (cursor < text.length()) {
+            MarkerHit hit = findNextCommandMarker(text, markers, cursor);
+            if (hit == null) {
+                FormulaLayout suffix = layoutXArrowSidePart(text.substring(cursor));
+                if (suffix == null) {
+                    return null;
+                }
+                appendLayout(placed, lines, suffix, x, 0.0d);
+                x += suffix.widthPt();
+                height = Math.max(height, suffix.heightPt());
+                break;
+            }
+            if (hit.start() > cursor) {
+                FormulaLayout prefix = layoutXArrowSidePart(text.substring(cursor, hit.start()));
+                if (prefix == null) {
+                    return null;
+                }
+                appendLayout(placed, lines, prefix, x, 0.0d);
+                x += prefix.widthPt();
+                height = Math.max(height, prefix.heightPt());
+            }
+            boolean leftArrow = "\\leftarrow".equals(hit.marker()) || "\\gets".equals(hit.marker());
+            FormulaLayout arrow = layoutPlainArrow(leftArrow);
+            appendLayout(placed, lines, arrow, x + 1.0d, 0.0d);
+            x += arrow.widthPt() + 2.0d;
+            height = Math.max(height, arrow.heightPt());
+            sawArrow = true;
+            cursor = hit.start() + hit.marker().length();
+        }
+        return sawArrow ? new FormulaLayout(placed, lines, Math.max(1.0d, x), height) : null;
+    }
+
     private static FormulaLayout layoutXArrowSidePart(String text) {
         if (text == null || text.isBlank()) {
             return new FormulaLayout(List.of(), List.of(), 0.0d, 13.0d);
@@ -2454,6 +2504,21 @@ final class VectorWmfFormulaRenderer {
         return new FormulaLayout(placed, lines, width, 15.0d);
     }
 
+    private static FormulaLayout layoutPlainArrow(boolean leftArrow) {
+        double width = 11.0d;
+        double y = 8.5d;
+        List<LineSegment> lines = new ArrayList<>();
+        lines.add(new LineSegment(0.8d, y, width - 0.8d, y));
+        if (leftArrow) {
+            lines.add(new LineSegment(0.8d, y, 3.6d, y - 1.8d));
+            lines.add(new LineSegment(0.8d, y, 3.6d, y + 1.8d));
+        } else {
+            lines.add(new LineSegment(width - 0.8d, y, width - 3.6d, y - 1.8d));
+            lines.add(new LineSegment(width - 0.8d, y, width - 3.6d, y + 1.8d));
+        }
+        return new FormulaLayout(List.of(), lines, width, 15.0d);
+    }
+
     private static void appendLayout(List<PlacedText> placed, List<LineSegment> lines, FormulaLayout layout,
         double dx, double dy) {
         for (PlacedText run : layout.runs()) {
@@ -2463,7 +2528,7 @@ final class VectorWmfFormulaRenderer {
                 run.widthScale()));
         }
         for (LineSegment line : layout.lines()) {
-            lines.add(new LineSegment(line.x1Pt() + dx, line.y1Pt() + dy, line.x2Pt() + dx, line.y2Pt() + dy));
+            lines.add(line.translated(dx, dy));
         }
     }
 
@@ -2480,8 +2545,7 @@ final class VectorWmfFormulaRenderer {
                 run.widthScale() * scale));
         }
         for (LineSegment line : layout.lines()) {
-            lines.add(new LineSegment(dx + line.x1Pt() * scale, dy + line.y1Pt() * scale,
-                dx + line.x2Pt() * scale, dy + line.y2Pt() * scale));
+            lines.add(line.scaled(scale, dx, dy));
         }
     }
 
@@ -2493,11 +2557,14 @@ final class VectorWmfFormulaRenderer {
                 run.widthScale() * COMPACT_FRACTION_SCALE));
         }
         for (LineSegment line : layout.lines()) {
-            lines.add(new LineSegment(dx + line.x1Pt() * COMPACT_FRACTION_SCALE,
-                dy + line.y1Pt() * COMPACT_FRACTION_SCALE,
-                dx + line.x2Pt() * COMPACT_FRACTION_SCALE,
-                dy + line.y2Pt() * COMPACT_FRACTION_SCALE));
+            lines.add(line.scaled(COMPACT_FRACTION_SCALE, dx, dy));
         }
+    }
+
+    private static void addInsetFractionBar(List<LineSegment> lines, double x, double width, double y,
+        double preferredInset) {
+        double inset = Math.min(preferredInset, Math.max(0.0d, width / 6.0d));
+        lines.add(new LineSegment(x + inset, y, x + Math.max(inset, width - inset), y));
     }
 
     private static FormulaLayout layoutLeftBraceArray(String body) {
@@ -2782,6 +2849,10 @@ final class VectorWmfFormulaRenderer {
         FormulaLayout arrows = layoutXArrowFragments(text);
         if (arrows != null) {
             return arrows;
+        }
+        FormulaLayout simpleArrows = layoutSimpleArrowFragments(text);
+        if (simpleArrows != null) {
+            return simpleArrows;
         }
         FormulaLayout fractions = layoutFractions(text);
         if (fractions != null) {
@@ -3473,7 +3544,8 @@ final class VectorWmfFormulaRenderer {
             double rootX = x;
             appendLayout(placed, lines, body, rootX + MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT,
                 MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT);
-            double width = body.widthPt() + MathTypeStructureMetrics.SQRT_WIDTH_PAD_PT;
+            double topBarEnd = rootX + MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT + body.widthPt() + 0.55d;
+            double width = body.widthPt() + MathTypeStructureMetrics.SQRT_WIDTH_PAD_PT + 1.0d;
             double seededHeight = hasFractionCommand(text.substring(groupStart + 1, groupEnd))
                 ? MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT : MathTypeStructureMetrics.SQRT_HEIGHT_PT;
             double rootHeight = Math.max(body.heightPt() + MathTypeStructureMetrics.SQRT_TOP_Y_PT, seededHeight);
@@ -3482,7 +3554,7 @@ final class VectorWmfFormulaRenderer {
                 rootX + MathTypeStructureMetrics.SQRT_CHECK_MID_X_PT,
                 rootHeight - MathTypeStructureMetrics.SQRT_BOTTOM_PAD_PT,
                 rootX + MathTypeStructureMetrics.SQRT_CHECK_TOP_X_PT, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
-                rootX + width, MathTypeStructureMetrics.SQRT_TOP_Y_PT
+                topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
             ));
             x += width;
             height = Math.max(height, rootHeight);
@@ -3552,6 +3624,29 @@ final class VectorWmfFormulaRenderer {
             int index = text.indexOf(marker, start);
             if (index >= 0 && (best == null || index < best.start())) {
                 best = new MarkerHit(marker, index);
+            }
+        }
+        return best;
+    }
+
+    private static MarkerHit findNextCommandMarker(String text, List<String> markers, int start) {
+        MarkerHit best = null;
+        for (String marker : markers) {
+            int search = start;
+            while (search < text.length()) {
+                int index = text.indexOf(marker, search);
+                if (index < 0) {
+                    break;
+                }
+                int end = index + marker.length();
+                if (end >= text.length() || !Character.isLetter(text.charAt(end))) {
+                    if (best == null || index < best.start()
+                        || (index == best.start() && marker.length() > best.marker().length())) {
+                        best = new MarkerHit(marker, index);
+                    }
+                    break;
+                }
+                search = end;
             }
         }
         return best;
@@ -3993,7 +4088,7 @@ final class VectorWmfFormulaRenderer {
     private static void addEncodedSegment(List<EncodedText> segments, TextKind kind, String text,
         boolean mathItalic) {
         Charset charset = kind == TextKind.CJK ? GBK : WINDOWS_1252;
-        byte[] bytes = text.getBytes(charset);
+        byte[] bytes = kind == TextKind.SYMBOL ? symbolBytes(text) : text.getBytes(charset);
         Font font = switch (kind) {
             case ANSI -> mathItalic && isItalicLetterRun(text) ? TIMES_ITALIC_FONT : TIMES_FONT;
             case SYMBOL -> SYMBOL_FONT;
@@ -4001,6 +4096,14 @@ final class VectorWmfFormulaRenderer {
         };
         segments.add(new EncodedText(kind, text, bytes, measureTextPt(font, text, 12.0d),
             mathItalic && isItalicLetterRun(text)));
+    }
+
+    private static byte[] symbolBytes(String text) {
+        byte[] bytes = new byte[text.length()];
+        for (int i = 0; i < text.length(); i++) {
+            bytes[i] = (byte) text.charAt(i);
+        }
+        return bytes;
     }
 
     private static boolean isItalicLetterRun(String text) {
@@ -4418,6 +4521,36 @@ final class VectorWmfFormulaRenderer {
 
         double y2Pt() {
             return pointsPt[pointsPt.length - 1];
+        }
+
+        double maxYPt() {
+            double max = pointsPt[1];
+            for (int i = 3; i < pointsPt.length; i += 2) {
+                max = Math.max(max, pointsPt[i]);
+            }
+            return max;
+        }
+
+        LineSegment scaled(double scale, double dx, double dy) {
+            double[] scaled = new double[pointsPt.length];
+            for (int i = 0; i < pointsPt.length; i += 2) {
+                scaled[i] = dx + pointsPt[i] * scale;
+                scaled[i + 1] = dy + pointsPt[i + 1] * scale;
+            }
+            return new LineSegment(scaled);
+        }
+
+        LineSegment translated(double dx, double dy) {
+            return scaled(1.0d, dx, dy);
+        }
+
+        LineSegment scaledX(double scale) {
+            double[] scaled = new double[pointsPt.length];
+            for (int i = 0; i < pointsPt.length; i += 2) {
+                scaled[i] = pointsPt[i] * scale;
+                scaled[i + 1] = pointsPt[i + 1];
+            }
+            return new LineSegment(scaled);
         }
 
         int[] toTwips(double offsetXPt, double offsetYPt, PreviewScale previewScale) {
