@@ -198,8 +198,10 @@ class VectorWmfFormulaRendererTest {
         assertTrue(Math.abs(((double) midX / (double) topX) - expectedMidRatio) <= 0.05d,
             "sqrt checkmark x ratio should stay metric-driven");
         int tallTopIndex = tallRoot.pointCount() - 2;
-        int tallMidIndex = tallTopIndex - 1;
+        int tallShoulderIndex = tallTopIndex - 1;
+        int tallMidIndex = tallShoulderIndex - 1;
         int tallTopX = tallRoot.x(tallTopIndex) - tallRoot.x1();
+        int tallShoulderX = tallRoot.x(tallShoulderIndex) - tallRoot.x1();
         int tallMidX = tallRoot.x(tallMidIndex) - tallRoot.x1();
         int tallLowX = tallRoot.x(1) - tallRoot.x1();
         double expectedTallTopRatio = MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT
@@ -210,8 +212,16 @@ class VectorWmfFormulaRendererTest {
             / MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT;
         assertTrue(Math.abs(((double) tallMidX / (double) tallTopX) - expectedTallMidRatio) <= 0.08d,
             "tall sqrt checkmark midpoint should stay metric-driven after WMF scaling");
+        double expectedTallShoulderRatio = MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_X_PT
+            / MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT;
+        assertTrue(Math.abs(((double) tallShoulderX / (double) tallTopX) - expectedTallShoulderRatio) <= 0.08d,
+            "tall sqrt shoulder should stay metric-driven after WMF scaling");
         assertTrue(tallLowX < tallMidX && tallRoot.y(1) > tallRoot.y(tallMidIndex),
             "tall sqrt should add a low shoulder before the rising stroke");
+        assertTrue(tallMidX < tallShoulderX && tallShoulderX < tallTopX
+                && tallRoot.y(tallMidIndex) > tallRoot.y(tallShoulderIndex)
+                && tallRoot.y(tallShoulderIndex) > tallRoot.y(tallTopIndex),
+            "tall sqrt should add a middle shoulder that smooths the rising stroke before the top turn");
         assertTrue(((double) tallMidX / (double) tallTopX) < ((double) midX / (double) topX),
             "tall sqrt checkmark midpoint should open the rising stroke instead of drawing an almost vertical leg");
         assertTrue(minTextXCoordinate(fractionRoot) - tallRoot.x1()

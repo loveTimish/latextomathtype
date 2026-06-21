@@ -3092,3 +3092,31 @@ batch, then append any useful lesson or pitfall found in that round.
   explicit structure tag. The JSON field `fourPointPolylineRecords` is now a
   compatibility name; failure text should say "radical polyline with at least
   four points".
+- v196 adds a second tall-root shoulder point:
+  `SQRT_TALL_CHECK_SHOULDER_X_PT = 1.9` and
+  `SQRT_TALL_CHECK_SHOULDER_Y_RATIO = 0.55`, so tall radicals now emit six
+  points: start, low shoulder, bottom turn, middle shoulder, top turn, and top
+  bar end. Ordinary radicals remain four-point, and the cache key is
+  `v196-tall-sqrt-shoulder`.
+- v196 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260621-235643.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v196.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v196/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v196 glyph evidence is intentionally unchanged for text: case 13 still has
+  `x/y/z` runs at about `5.65/19.2/32.75pt`, and case 18 keeps `l/g` at about
+  `35.9/34.8pt`. WMF bytes changed for tall-root cases such as image_eq9,
+  image_eq11, image_eq12, image_eq13, and image_eq18, proving the extra
+  radical point was written without moving glyph runs.
+- v196 visual status: page 2/3 show no broken root, short-line regression, or
+  bitmap fallback. The case13 zoom shows the outer tall radical has a more
+  controllable shoulder, but both case13 and case18 still look too straight and
+  thin on the left leg. The next useful pass should tune the left-leg/low-turn
+  geometry or nested-root spacing, not keep adding generic points.
+- v196 no-context review could not be spawned because the agent thread limit
+  was reached. Treat this as a process gap for the round, not as review
+  acceptance.

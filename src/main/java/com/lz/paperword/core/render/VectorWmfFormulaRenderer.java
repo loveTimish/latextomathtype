@@ -3648,6 +3648,8 @@ final class VectorWmfFormulaRenderer {
                     rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO,
                     rootX + checkMidX,
                     rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
+                    rootX + MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_X_PT,
+                    rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_Y_RATIO,
                     rootX + checkTopX, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
                     topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
                 ));
