@@ -260,6 +260,8 @@ class VectorWmfFormulaRendererTest {
                 && tallRoot.y(tallMidIndex) > tallRoot.y(tallShoulderIndex)
                 && tallRoot.y(tallShoulderIndex) > tallRoot.y(tallTopIndex),
             "tall sqrt should add a middle shoulder that smooths the rising stroke before the top turn");
+        assertTrue(((double) tallShoulderX / (double) tallTopX) >= expectedTallShoulderRatio - 0.08d,
+            "tall sqrt shoulder should stay open near the top turn instead of collapsing into a vertical stroke");
         assertTrue(((double) tallMidX / (double) tallTopX) < ((double) midX / (double) topX),
             "tall sqrt checkmark midpoint should open the rising stroke instead of drawing an almost vertical leg");
         assertTrue(minTextXCoordinate(fractionRoot) - tallRoot.x1()

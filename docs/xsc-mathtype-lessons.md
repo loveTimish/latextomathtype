@@ -3279,3 +3279,24 @@ batch, then append any useful lesson or pitfall found in that round.
   case18 `l/g` stayed at about `35.9/34.8pt`. Visual zoom shows a small spacing
   improvement but not a finished MathType look: the radical stroke itself is
   still too straight and the inner nested root still reads too vertical.
+- v203 opens the non-compact tall-root shoulder only:
+  `SQRT_TALL_CHECK_SHOULDER_X_PT` moves from `2.7pt` to `3.15pt` and
+  `SQRT_TALL_CHECK_SHOULDER_Y_RATIO` moves from `0.55` to `0.50`. The tall
+  midpoint and all compact tall-root constants stay unchanged, so compact
+  `\sqrt{\frac{l}{g}}` coverage remains protected. Cache key:
+  `v203-open-tall-sqrt-shoulder`.
+- v203 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-012532.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v203.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v203/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v203 visual result is only a small stroke-shape improvement: case13's tall
+  nested root is a little less pinched near the top turn, while case18 remains
+  unchanged. Case12 is still not acceptable enough because the inner radical
+  left leg and the fraction body still crowd together; the next useful step is
+  a real nested-radical body/scale model or a richer radical stroke than a
+  single WMF polyline.
