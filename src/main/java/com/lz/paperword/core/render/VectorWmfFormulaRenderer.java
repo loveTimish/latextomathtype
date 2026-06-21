@@ -44,13 +44,11 @@ final class VectorWmfFormulaRenderer {
     private static final double COMPACT_FRACTION_NUMERATOR_Y_PT = -0.2d;
     private static final double COMPACT_FRACTION_DENOMINATOR_Y_PT = 14.0d;
     private static final double COMPACT_FRACTION_BAR_Y_PT = 13.6d;
-    private static final double COMPACT_FRACTION_BAR_INSET_PT = 0.45d;
     private static final double COMPACT_FRACTION_HEIGHT_PT =
         MathTypeStructureMetrics.COMPACT_INLINE_FRACTION_HEIGHT_PT;
     private static final double FRACTION_NUMERATOR_Y_PT = -2.4d;
     private static final double FRACTION_DENOMINATOR_Y_PT = 11.8d;
     private static final double FRACTION_BAR_Y_PT = 12.8d;
-    private static final double FRACTION_BAR_INSET_PT = 0.65d;
     private static final double FRACTION_HEIGHT_PT = MathTypeStructureMetrics.ORDINARY_FRACTION_HEIGHT_PT;
     private static final double TEXT_FRACTION_HEIGHT_PT = MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT;
     private static final double TEXT_FRACTION_NUMERATOR_Y_PT = 0.8d;
@@ -2280,7 +2278,7 @@ final class VectorWmfFormulaRenderer {
                     fractionX + (fractionWidth - denominatorWidth * COMPACT_FRACTION_SCALE) / 2.0d,
                     COMPACT_FRACTION_DENOMINATOR_Y_PT);
                 addInsetFractionBar(lines, fractionX, fractionWidth, COMPACT_FRACTION_BAR_Y_PT,
-                    COMPACT_FRACTION_BAR_INSET_PT);
+                    FractionBarProfile.COMPACT);
             } else {
                 double numeratorY = sqrtFractionFamily ? SQRT_FRACTION_NUMERATOR_Y_PT
                     : textHeavyCurrentFraction ? TEXT_FRACTION_NUMERATOR_Y_PT
@@ -2295,7 +2293,8 @@ final class VectorWmfFormulaRenderer {
                     numeratorY);
                 appendLayout(placed, lines, denominator, fractionX + (fractionWidth - denominatorWidth) / 2.0d,
                     denominatorY);
-                addInsetFractionBar(lines, fractionX, fractionWidth, barY, FRACTION_BAR_INSET_PT);
+                addInsetFractionBar(lines, fractionX, fractionWidth, barY,
+                    fractionBarProfile(sqrtFractionFamily, textHeavyCurrentFraction, nestedFractionFamily));
             }
             x = fractionX + fractionWidth + (compactInlineFraction ? 0.8d : 1.4d);
             sawFraction = true;
@@ -2640,10 +2639,27 @@ final class VectorWmfFormulaRenderer {
         }
     }
 
+    private static FractionBarProfile fractionBarProfile(boolean sqrtFractionFamily,
+        boolean textHeavyCurrentFraction, boolean nestedFractionFamily) {
+        if (sqrtFractionFamily) {
+            return FractionBarProfile.SQRT;
+        }
+        if (textHeavyCurrentFraction) {
+            return FractionBarProfile.TEXT;
+        }
+        return nestedFractionFamily ? FractionBarProfile.NESTED : FractionBarProfile.ORDINARY;
+    }
+
     private static void addInsetFractionBar(List<LineSegment> lines, double x, double width, double y,
-        double preferredInset) {
-        double inset = Math.min(preferredInset, Math.max(0.0d, width / 6.0d));
-        lines.add(new LineSegment(x + inset, y, x + Math.max(inset, width - inset), y));
+        FractionBarProfile profile) {
+        double maxInset = Math.max(0.0d, width / 6.0d);
+        double inset = Math.min(profile.insetPt(), maxInset);
+        double start = x + inset - profile.overhangPt();
+        double end = x + Math.max(inset, width - inset) + profile.overhangPt();
+        if (end <= start) {
+            end = start + Math.max(0.4d, width);
+        }
+        lines.add(new LineSegment(start, y, end, y));
     }
 
     private static FormulaLayout layoutLeftBraceArray(String body) {
@@ -4682,6 +4698,31 @@ final class VectorWmfFormulaRenderer {
     }
 
     private record SegmentScale(double rightPt) {
+    }
+
+    private enum FractionBarProfile {
+        COMPACT(MathTypeStructureMetrics.FRACTION_BAR_COMPACT_INSET_PT, 0.0d),
+        ORDINARY(MathTypeStructureMetrics.FRACTION_BAR_ORDINARY_INSET_PT, 0.0d),
+        TEXT(MathTypeStructureMetrics.FRACTION_BAR_TEXT_INSET_PT, 0.0d),
+        NESTED(MathTypeStructureMetrics.FRACTION_BAR_NESTED_INSET_PT, 0.0d),
+        SQRT(MathTypeStructureMetrics.FRACTION_BAR_SQRT_INSET_PT,
+            MathTypeStructureMetrics.FRACTION_BAR_SQRT_OVERHANG_PT);
+
+        private final double insetPt;
+        private final double overhangPt;
+
+        FractionBarProfile(double insetPt, double overhangPt) {
+            this.insetPt = insetPt;
+            this.overhangPt = overhangPt;
+        }
+
+        double insetPt() {
+            return insetPt;
+        }
+
+        double overhangPt() {
+            return overhangPt;
+        }
     }
 
     private record EncodableChar(TextKind kind, String text) {

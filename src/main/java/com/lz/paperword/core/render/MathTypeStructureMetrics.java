@@ -123,6 +123,12 @@ final class MathTypeStructureMetrics {
     static final double SQRT_BOX_BODY_BASELINE_OFFSET_PT = 0.2d;
     static final double SQRT_BOX_LEFT_DESCENT_RATIO = 0.52d;
     static final double STRUCTURE_LINE_WIDTH_PT = 0.32d;
+    static final double FRACTION_BAR_ORDINARY_INSET_PT = 0.50d;
+    static final double FRACTION_BAR_COMPACT_INSET_PT = 0.35d;
+    static final double FRACTION_BAR_TEXT_INSET_PT = 0.18d;
+    static final double FRACTION_BAR_NESTED_INSET_PT = 0.35d;
+    static final double FRACTION_BAR_SQRT_INSET_PT = 0.24d;
+    static final double FRACTION_BAR_SQRT_OVERHANG_PT = 0.20d;
     static final double ARRAY_SOURCE_HEIGHT_PT = 33.0d;
     static final double ARRAY_ROW_HEIGHT_PT = 16.5d;
     static final double ARRAY_MIN_HEIGHT_PT = ARRAY_SOURCE_HEIGHT_PT;

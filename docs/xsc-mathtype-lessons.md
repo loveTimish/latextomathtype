@@ -3241,3 +3241,22 @@ batch, then append any useful lesson or pitfall found in that round.
   glyph-width assertion compared different characters, and widened nested
   fraction-bar coverage was not guarded. The final patch fixes all three before
   commit.
+- v201 moves fraction-bar length from local magic numbers to structure profiles
+  in `MathTypeStructureMetrics`: compact, ordinary, text-heavy, nested, and
+  sqrt-body fractions now choose separate inset/overhang values. Cache key:
+  `v201-fraction-bar-profiles`.
+- v201 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-010906.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v201.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v201/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v201 visual result: case15 text-heavy fractions now have bars that visually
+  cover the wide CJK numerator/denominator text instead of stopping after a
+  large inset, and the trailing `AO/CO` fraction is also closer to the glyph
+  width. This is a real local improvement, but not a goal-level finish:
+  case12 and case18 still look hard because the radical stroke/body placement
+  model is too straight and cramped.

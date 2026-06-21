@@ -144,6 +144,9 @@ class VectorWmfFormulaRendererTest {
             "sqrt-body fractions should use the tighter dedicated body pad instead of the ordinary sqrt body slot");
         assertTrue(radical.x2() >= fractionBar.x2(),
             "scaled sqrt-body fractions must keep the radical top bar covering the fraction bar");
+        int sqrtBarVisualInset = fractionBar.x1() - minTextXCoordinate(simpleBodyFraction);
+        assertTrue(sqrtBarVisualInset <= 12,
+            "sqrt-body fraction bars should visually track the glyph width instead of looking like a short dash");
         List<Polyline> nestedBodyFractionLines = polylines(nestedBodyFraction);
         Polyline innerNestedRoot = sortedRadicals(nestedBodyFractionLines).get(1);
         Polyline nestedFractionBar = nestedBodyFractionLines.stream()
@@ -414,6 +417,10 @@ class VectorWmfFormulaRendererTest {
         int mainDenominatorGap = mainDenominatorBaseline - mainBar.y1();
         int trailingNumeratorGap = trailingBar.y1() - trailingNumeratorBaseline;
         int trailingDenominatorGap = trailingDenominatorBaseline - trailingBar.y1();
+        assertTrue(mainBar.x1() <= minTextXCoordinateBetween(mixedWmf, mainBar.x1(), mainBar.x2()) + 6,
+            "text-heavy fraction bar should start close to the text ink, not after a large inset");
+        assertTrue(mainBar.x2() >= maxTextRightCoordinateBetween(mixedWmf, mainBar.x1(), mainBar.x2()) - 6,
+            "text-heavy fraction bar should cover the wide CJK numerator/denominator text");
         assertTrue(mainNumeratorGap >= 110,
             "text-heavy fraction bar should sit visibly below the numerator baseline");
         assertTrue(mainDenominatorGap >= 110,
@@ -1904,15 +1911,7 @@ class VectorWmfFormulaRendererTest {
             }
             if (function == 0x0A32 && offset + 14 <= data.length) {
                 int x = word(data, offset + 8);
-                int count = word(data, offset + 10);
-                int textBytes = count + (count & 1);
-                int dxOffset = offset + 14 + textBytes;
-                int dxTotal = 0;
-                while (dxOffset + 2 <= offset + sizeWords * 2) {
-                    dxTotal += word(data, dxOffset);
-                    dxOffset += 2;
-                }
-                max = Math.max(max, x + dxTotal);
+                max = Math.max(max, x + textDxTotalAt(data, offset, sizeWords));
             }
             offset += sizeWords * 2;
         }
@@ -1981,6 +1980,62 @@ class VectorWmfFormulaRendererTest {
         }
         assertTrue(max != Integer.MIN_VALUE, "expected ExtTextOut records inside x range");
         return max;
+    }
+
+    private static int minTextXCoordinateBetween(byte[] data, int minX, int maxX) {
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        int min = Integer.MAX_VALUE;
+        while (offset + 6 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x0A32 && offset + 14 <= data.length) {
+                int x = word(data, offset + 8);
+                if (x >= minX && x <= maxX) {
+                    min = Math.min(min, x);
+                }
+            }
+            offset += sizeWords * 2;
+        }
+        assertTrue(min != Integer.MAX_VALUE, "expected ExtTextOut records inside x range");
+        return min;
+    }
+
+    private static int maxTextRightCoordinateBetween(byte[] data, int minX, int maxX) {
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        int max = Integer.MIN_VALUE;
+        while (offset + 6 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x0A32 && offset + 14 <= data.length) {
+                int x = word(data, offset + 8);
+                if (x >= minX && x <= maxX) {
+                    max = Math.max(max, x + textDxTotalAt(data, offset, sizeWords));
+                }
+            }
+            offset += sizeWords * 2;
+        }
+        assertTrue(max != Integer.MIN_VALUE, "expected ExtTextOut records inside x range");
+        return max;
+    }
+
+    private static int textDxTotalAt(byte[] data, int offset, int sizeWords) {
+        int count = word(data, offset + 10);
+        int textBytes = count + (count & 1);
+        int dxOffset = offset + 14 + textBytes;
+        int dxTotal = 0;
+        while (dxOffset + 2 <= offset + sizeWords * 2) {
+            dxTotal += word(data, dxOffset);
+            dxOffset += 2;
+        }
+        return dxTotal;
     }
 
     private static int maxPolylineYCoordinate(byte[] data) {
