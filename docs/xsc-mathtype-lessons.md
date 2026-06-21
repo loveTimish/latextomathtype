@@ -2979,3 +2979,31 @@ batch, then append any useful lesson or pitfall found in that round.
   polyline geometry and the compact body placement guard, not from character
   sizing. A future pass still needs a more principled radical stroke model or
   ink-level comparison, especially for nested radicals.
+- v192 increases only `SQRT_NESTED_BODY_Y_EXTRA_PT` from `2.2` to `3.0` and
+  bumps the cache key to `v192-deep-sqrt-top-gap`. The intent is to make deep
+  nested radicals read as separate stacked structures instead of compressing the
+  body glyphs into the top band.
+- v192 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260621-225504.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v192.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v192/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero visible
+  LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs, and zero
+  review-required suspicious WMF text.
+- v192 glyph evidence: case 13 nested radical baselines moved from about
+  `16.9/20.3/21.5pt` in v191 to about `18.5/22.7/23.9pt`, so nested content is
+  more separated vertically while the shape remains `41.28x64.0pt`. The change
+  is still not final MathType-quality; it is a local improvement for deep nested
+  roots.
+- v192 side effect: because `SQRT_NESTED_BODY_Y_EXTRA_PT` is global, case 11/12
+  and case 18 also shift slightly. Case 18 record width changed from about
+  `41.35pt` to `40.25pt`, and the root-body `l/g` run starts moved left by
+  about `1.1pt`. Word page 3 still looks acceptable, but future work should
+  consider splitting shallow nested-root spacing from deep nested-root spacing
+  if shallow roots start drifting.
+- v192 process note: the requested no-context review was launched, but did not
+  return before this round's cutoff, and a replacement review could not be
+  spawned because the agent thread limit was reached. Treat this as a workflow
+  gap for the round, not as review acceptance.
