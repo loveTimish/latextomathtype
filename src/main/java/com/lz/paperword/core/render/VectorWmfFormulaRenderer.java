@@ -860,6 +860,32 @@ final class VectorWmfFormulaRenderer {
         return nextCommandOutsideText(text, "\\sqrt", 0) >= 0;
     }
 
+    static int sqrtCommandDepthOutsideText(String text) {
+        if (text == null || text.isBlank()) {
+            return 0;
+        }
+        int depth = 0;
+        int cursor = 0;
+        while (cursor < text.length()) {
+            int hit = nextCommandOutsideText(text, "\\sqrt", cursor);
+            if (hit < 0) {
+                break;
+            }
+            int groupStart = skipWhitespaceForward(text, hit + "\\sqrt".length());
+            if (groupStart >= text.length() || text.charAt(groupStart) != '{') {
+                cursor = hit + "\\sqrt".length();
+                continue;
+            }
+            int groupEnd = findGroupEnd(text, groupStart);
+            if (groupEnd < 0) {
+                break;
+            }
+            depth = Math.max(depth, 1 + sqrtCommandDepthOutsideText(text.substring(groupStart + 1, groupEnd)));
+            cursor = groupEnd + 1;
+        }
+        return depth;
+    }
+
     private static int nextCommandOutsideText(String text, String command, int cursor) {
         if (text == null) {
             return -1;
@@ -3575,7 +3601,7 @@ final class VectorWmfFormulaRenderer {
                 return null;
             }
             double bodyYOffset = MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT
-                + (hasSqrtCommandOutsideText(bodyText) ? MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT : 0.0d);
+                + sqrtCommandDepthOutsideText(bodyText) * MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT;
             double rootX = x;
             appendLayout(placed, lines, body, rootX + MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT,
                 bodyYOffset);

@@ -80,7 +80,7 @@ public class LaTeXImageRenderer {
     /** 系统属性：WMF 文本宽度校准。 */
     private static final String WMF_TEXT_WIDTH_SCALE_PROP = "paperword.wmf.textWidth.scale";
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v185-nested-root-body-spacing";
+    private static final String CACHE_VERSION = "v187-deep-nested-root-family";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(
@@ -660,9 +660,13 @@ public class LaTeXImageRenderer {
             return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.ARRAY, rows);
         }
         if (text.contains("\\sqrt")) {
-            return MathTypeStructureMetrics.metrics(hasFractionCommand(text)
-                ? MathTypeStructureMetrics.Family.SQRT_FRACTION
-                : MathTypeStructureMetrics.Family.SQRT);
+            if (VectorWmfFormulaRenderer.sqrtCommandDepthOutsideText(text) > 2) {
+                return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.SQRT_NESTED);
+            }
+            if (hasFractionCommand(text)) {
+                return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.SQRT_FRACTION);
+            }
+            return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.SQRT);
         }
         if (hasOnlyScriptSlotFractions(text)) {
             return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.SCRIPT_FRACTION);

@@ -127,6 +127,8 @@ class LaTeXImageRendererTest {
             (double) method.invoke(renderer, "\\sqrt{2}"), 0.01d);
         assertEquals(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT,
             (double) method.invoke(renderer, "\\sqrt{1+\\frac{a}{b}}"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT,
+            (double) method.invoke(renderer, "\\sqrt{1+\\sqrt{\\frac{a}{b}+\\sqrt{z}}}"), 0.01d);
         assertEquals(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT,
             (double) method.invoke(renderer, "\\frac{\\sqrt{a^{2}+b^{2}}}{2}"), 0.01d);
         assertEquals(MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT,
@@ -152,6 +154,8 @@ class LaTeXImageRendererTest {
             MathTypeStructureMetrics.SQRT_HEIGHT_PT);
         assertCalibratedHeight(renderer, estimate, calibrate, "\\sqrt{1+\\frac{a}{b}}",
             MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\sqrt{1+\\sqrt{\\frac{a}{b}+\\sqrt{z}}}",
+            MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT);
         assertCalibratedHeight(renderer, estimate, calibrate, "\\frac{\\sqrt{a^{2}+b^{2}}}{2}",
             MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
         assertCalibratedHeight(renderer, estimate, calibrate, "x^{\\frac{1}{2}}+a^{\\frac{2}{3}}",
@@ -196,9 +200,17 @@ class LaTeXImageRendererTest {
             MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT, "text_fraction");
         assertFamily(renderer, family, "\\sqrt{2}", MathTypeStructureMetrics.Family.SQRT,
             MathTypeStructureMetrics.SQRT_HEIGHT_PT, "sqrt");
+        assertFamily(renderer, family, "\\sqrt{1+\\sqrt{x}}", MathTypeStructureMetrics.Family.SQRT,
+            MathTypeStructureMetrics.SQRT_HEIGHT_PT, "sqrt");
+        assertFamily(renderer, family, "\\sqrt{x+\\sqrt{y+\\sqrt{z}}}",
+            MathTypeStructureMetrics.Family.SQRT_NESTED,
+            MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT, "sqrt_nested");
         assertFamily(renderer, family, "\\sqrt{1+\\frac{a}{b}}",
             MathTypeStructureMetrics.Family.SQRT_FRACTION,
             MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT, "sqrt_fraction");
+        assertFamily(renderer, family, "\\sqrt{1+\\sqrt{\\frac{a}{b}+\\sqrt{z}}}",
+            MathTypeStructureMetrics.Family.SQRT_NESTED,
+            MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT, "sqrt_nested");
         assertFamily(renderer, family, "\\frac{\\sqrt{a^{2}+b^{2}}}{2}",
             MathTypeStructureMetrics.Family.SQRT_FRACTION,
             MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT, "sqrt_fraction");

@@ -18,6 +18,7 @@ final class MathTypeStructureMetrics {
         NESTED_FRACTION("nested_fraction"),
         TEXT_FRACTION("text_fraction"),
         SQRT("sqrt"),
+        SQRT_NESTED("sqrt_nested"),
         SQRT_FRACTION("sqrt_fraction"),
         ARRAY("array"),
         ACCENT("accent");
@@ -77,6 +78,7 @@ final class MathTypeStructureMetrics {
     static final double ORDINARY_FRACTION_HEIGHT_PT = 28.0d;
     static final double COMPACT_INLINE_FRACTION_HEIGHT_PT = 25.5d;
     static final double SQRT_HEIGHT_PT = 18.0d;
+    static final double SQRT_NESTED_HEIGHT_PT = 64.0d;
     static final double SQRT_FRACTION_HEIGHT_PT = 35.25d;
     static final double ORDINARY_FRACTION_ABOVE_PT = 16.0d;
     static final double ORDINARY_FRACTION_BELOW_PT = ORDINARY_FRACTION_HEIGHT_PT - ORDINARY_FRACTION_ABOVE_PT;
@@ -173,6 +175,13 @@ final class MathTypeStructureMetrics {
                 0.583d,
                 new InkMetrics(0.881d, 0.750d, 0.486d, 5)
             );
+            case SQRT_NESTED -> new SourceSampleMetrics(
+                family,
+                SQRT_NESTED_HEIGHT_PT,
+                12.0d,
+                0.583d,
+                new InkMetrics(Double.NaN, Double.NaN, Double.NaN, 0)
+            );
             case SQRT_FRACTION -> new SourceSampleMetrics(
                 family,
                 SQRT_FRACTION_HEIGHT_PT,
@@ -211,6 +220,7 @@ final class MathTypeStructureMetrics {
             case NESTED_FRACTION -> NESTED_FRACTION_HEIGHT_PT;
             case TEXT_FRACTION -> TEXT_FRACTION_HEIGHT_PT;
             case SQRT -> SQRT_HEIGHT_PT;
+            case SQRT_NESTED -> SQRT_NESTED_HEIGHT_PT;
             case SQRT_FRACTION -> SQRT_FRACTION_HEIGHT_PT;
             case ARRAY -> Math.max(ARRAY_MIN_HEIGHT_PT, Math.max(1L, rowCount) * ARRAY_ROW_HEIGHT_PT);
             case ACCENT -> ACCENT_HEIGHT_PT;

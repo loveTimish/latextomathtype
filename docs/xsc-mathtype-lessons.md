@@ -2856,3 +2856,38 @@ batch, then append any useful lesson or pitfall found in that round.
   rendering can still compress deep nested radicals even when record-level top
   gaps improve, so keep a production-envelope test and continue treating Word
   PNG review as required evidence.
+- v187 is a scoped deep-nested-radical improvement, not acceptance. It adds
+  `sqrtCommandDepthOutsideText(...)`, applies `SQRT_NESTED_BODY_Y_EXTRA_PT` per
+  nested depth in `layoutSqrt(...)`, and introduces a `SQRT_NESTED` structure
+  family at `64pt` only for non-fraction roots with structural depth greater
+  than `2`. This keeps two-level cases such as `\sqrt{1+\sqrt{x}}` on the
+  ordinary `18pt` root family, while giving `\sqrt{x+\sqrt{y+\sqrt{z}}}` enough
+  production height to avoid the worst vertical flattening.
+- A bad intermediate v186-style threshold (`sqrtCommandDepthOutsideText > 1`)
+  inflated two-level nested roots to `64pt`, moved case 12 to a later page, and
+  made the golden corpus visually worse even though the structural tests still
+  passed. After narrowing the threshold to `> 2`, bump cache again; the verified
+  cache key for this round is `v187-deep-nested-root-family`.
+- v187 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-latest.docx` and
+  `formula-golden-corpus-20260621-214150.docx`. The leak scanner still reported
+  `23` MathType `Equation.DSMT4` OLE objects, `23` WMF previews, and zero
+  visible LaTeX leaks. `wmf_record_report.py` still reported `23` vector WMFs,
+  zero `StretchDIB`, zero bitmap records, zero WMF LaTeX leaks, and zero
+  suspicious reviews required.
+- v187 Word COM + Poppler PNG status: page 2 restores cases 7-12 after the bad
+  threshold experiment; case 11/12 keep the v185 visual improvement without
+  becoming oversized. Page 3 case 13 deep nested radicals have clearer layer
+  separation than v185, but still look too high/flat and are not final. Page 3
+  case 18 physics `sqrt_fraction` remains crowded. Page 4 still shows the
+  chemistry arrow, but chemistry spacing and higher-math fraction styling remain
+  future work.
+- A no-context v187 review caught a real production-classification blocker:
+  checking `hasFractionCommand(text)` before root depth meant
+  `\sqrt{1+\sqrt{\frac{a}{b}+\sqrt{z}}}` stayed in the `SQRT_FRACTION`
+  `35.25pt` family instead of the new `SQRT_NESTED` `64pt` family. The fix is
+  depth-first classification for non-indexed structural roots: if root depth is
+  greater than `2`, choose `SQRT_NESTED` before checking ordinary
+  `sqrt_fraction`. Add tests for estimate height, calibrated height, and
+  `classifyStructureFamily(...)` so this exact deep-nested-with-fraction case
+  cannot regress silently.
