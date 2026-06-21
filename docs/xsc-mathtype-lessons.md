@@ -3208,3 +3208,36 @@ batch, then append any useful lesson or pitfall found in that round.
   mid/top X constants are consumed, the fraction-bar protrusion and top-bar
   coverage guards remain in tests, the new anti-vertical-leg assertion covers
   the widened tall root, and the v199 DOCX/PDF/PNG paths exist.
+- v200 adds a scoped nested sqrt-body fraction scale instead of character
+  special-casing. `SQRT_NESTED_BODY_FRACTION_SCALE = 0.90` applies only when a
+  whole simple fraction is laid out inside an existing sqrt body
+  (`sqrtDepth > 0`); standalone pure sqrt-body fractions keep
+  `SQRT_BODY_FRACTION_SCALE = 0.78`. Cache key:
+  `v200-nested-sqrt-fraction-scale`.
+- v200 passes `sqrtDepth` through the `layoutFractionPart(...)`,
+  `layoutFractions(...)`, `layoutSqrt(...)`, and common wrapper recursion
+  (`underline`, `cancel`, `boxed`, `overline`) so nested scale is a structural
+  decision even through decoration wrappers. This avoids data-specific fixes
+  such as widening `a/b` but not `l/g`, and keeps physics case18
+  `\sqrt{\frac{l}{g}}` unchanged while widening case12's inner
+  `\sqrt{\frac{a}{b}}`.
+- v200 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-005815.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v200-final.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v200-final/page-*.png`.
+  Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v200 glyph evidence: case12's inner fraction glyph advance widens from about
+  `2.85pt` to `3.15pt`, while case18 `l/g` stays at about `2.7/4.85pt`.
+  Visual zoom confirms case12 is more readable and has no broken radical or
+  short-line regression, but the inner radical/fraction spacing is still hard
+  and not MathType-like enough.
+- v200 no-context review found no direct blocker for case12, but caught three
+  useful hardening items: wrapper layouts could drop `sqrtDepth`, the first
+  glyph-width assertion compared different characters, and widened nested
+  fraction-bar coverage was not guarded. The final patch fixes all three before
+  commit.

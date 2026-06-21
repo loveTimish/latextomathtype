@@ -95,8 +95,12 @@ class VectorWmfFormulaRendererTest {
     void sqrtBodyFractionsUseCompactSlotScaleOnlyWhenBodyIsWholeFraction() throws IOException {
         byte[] simpleBodyFraction = VectorWmfFormulaRenderer.render("\\sqrt{\\frac{l}{g}}", 54.0d,
             MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        byte[] standaloneABodyFraction = VectorWmfFormulaRenderer.render("\\sqrt{\\frac{a}{b}}", 54.0d,
+            MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
         byte[] mixedBodyFraction = VectorWmfFormulaRenderer.render("\\sqrt{1+\\frac{a}{b}}", 54.0d,
             MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        byte[] nestedBodyFraction = VectorWmfFormulaRenderer.render("\\sqrt{\\sqrt{\\frac{a}{b}}}", 72.0d,
+            58.0d);
 
         assertTrue(VectorWmfFormulaRenderer.isWholeSimpleFraction("\\frac{l}{g}"));
         assertTrue(VectorWmfFormulaRenderer.isWholeSimpleFraction("{\\frac{l}{g}}"));
@@ -112,6 +116,10 @@ class VectorWmfFormulaRendererTest {
             "a pure fraction body inside a radical should use a tighter vertical slot");
         assertTrue(maxTextRightCoordinate(simpleBodyFraction) < maxTextRightCoordinate(mixedBodyFraction),
             "a pure fraction body inside a radical should not keep full display fraction advance");
+        assertTrue(textDxTotal(nestedBodyFraction, "a") > textDxTotal(standaloneABodyFraction, "a"),
+            "pure fraction bodies nested inside another radical should use a more readable nested scale");
+        assertTrue(maxTextRightCoordinate(nestedBodyFraction) > maxTextRightCoordinate(simpleBodyFraction),
+            "nested sqrt-body fractions should widen relative to standalone compact sqrt-body fractions");
         List<Polyline> lines = polylines(simpleBodyFraction);
         Polyline radical = lines.stream()
             .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
@@ -136,6 +144,16 @@ class VectorWmfFormulaRendererTest {
             "sqrt-body fractions should use the tighter dedicated body pad instead of the ordinary sqrt body slot");
         assertTrue(radical.x2() >= fractionBar.x2(),
             "scaled sqrt-body fractions must keep the radical top bar covering the fraction bar");
+        List<Polyline> nestedBodyFractionLines = polylines(nestedBodyFraction);
+        Polyline innerNestedRoot = sortedRadicals(nestedBodyFractionLines).get(1);
+        Polyline nestedFractionBar = nestedBodyFractionLines.stream()
+            .filter(line -> line.pointCount() == 2)
+            .findFirst()
+            .orElseThrow();
+        assertTrue(radicalTopX(innerNestedRoot) <= nestedFractionBar.x1(),
+            "widened nested sqrt-body fraction bars should not protrude left of the inner radical top turn");
+        assertTrue(innerNestedRoot.x2() >= nestedFractionBar.x2(),
+            "widened nested sqrt-body fractions must keep the inner radical top bar covering the fraction bar");
         assertTrue(textFontHeightTwips(mixedBodyFraction, "a") >= 220,
             "mixed root bodies such as 1+frac must not receive the pure-body fraction shrink");
         assertEquals((int) (MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d),

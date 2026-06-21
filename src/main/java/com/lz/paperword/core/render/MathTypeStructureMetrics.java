@@ -68,6 +68,7 @@ final class MathTypeStructureMetrics {
     static final double SQRT_FRACTION_PREVIEW_WIDTH_SCALE = 0.83d;
     static final double SQRT_FRACTION_MIXED_PREVIEW_WIDTH_SCALE = 1.08d;
     static final double SQRT_BODY_FRACTION_SCALE = 0.78d;
+    static final double SQRT_NESTED_BODY_FRACTION_SCALE = 0.90d;
     static final double SQRT_BODY_FRACTION_LEFT_ADJUST_PT = -2.4d;
     static final double SQRT_BODY_FRACTION_TOP_PAD_PT = 2.4d;
 
