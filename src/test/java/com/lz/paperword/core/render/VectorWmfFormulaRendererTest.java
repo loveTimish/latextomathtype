@@ -141,6 +141,17 @@ class VectorWmfFormulaRendererTest {
             .filter(line -> line.pointCount() == 2 && line.x1() >= radicalTopX(radical) && line.x2() > line.x1())
             .findFirst()
             .orElseThrow();
+        List<Integer> penWidths = penWidthsTwips(simpleBodyFraction);
+        assertEquals(14, wmfObjectCount(simpleBodyFraction),
+            "adding a root pen should update the WMF header object count");
+        assertTrue(penWidths.contains((int) Math.round(MathTypeStructureMetrics.STRUCTURE_LINE_WIDTH_PT * 20.0d)),
+            "WMF should retain the ordinary structure pen for fraction bars and text-mixed structures");
+        assertTrue(penWidths.contains((int) Math.round(MathTypeStructureMetrics.ROOT_STRUCTURE_LINE_WIDTH_PT * 20.0d)),
+            "WMF should create a dedicated root pen instead of widening every structure line");
+        assertEquals(13, selectedObjectForPolyline(simpleBodyFraction, radical),
+            "main compact root radical should be drawn with the dedicated root pen");
+        assertEquals(12, selectedObjectForPolyline(simpleBodyFraction, fractionBar),
+            "sqrt-body fraction bar should keep the ordinary structure pen");
         assertTrue(hook.x1() < radical.x1() && hook.x2() == radical.x1(),
             "compact radical hook should start left of the main stroke and join it");
         double expectedHookRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_HOOK_X_PT
@@ -2172,6 +2183,62 @@ class VectorWmfFormulaRendererTest {
             offset += sizeWords * 2;
         }
         return max;
+    }
+
+    private static List<Integer> penWidthsTwips(byte[] data) {
+        List<Integer> widths = new ArrayList<>();
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        while (offset + 8 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x02FA) {
+                widths.add(word(data, offset + 8));
+            }
+            offset += sizeWords * 2;
+        }
+        return widths;
+    }
+
+    private static int wmfObjectCount(byte[] data) {
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        return word(data, offset + 10);
+    }
+
+    private static int selectedObjectForPolyline(byte[] data, Polyline target) {
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        int selected = -1;
+        while (offset + 8 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x012D) {
+                selected = word(data, offset + 6);
+            } else if (function == 0x0325 && offset + 8 <= data.length) {
+                int pointCount = word(data, offset + 6);
+                if (pointCount == target.pointCount()) {
+                    boolean match = true;
+                    for (int i = 0; i < pointCount; i++) {
+                        if (word(data, offset + 8 + i * 4) != target.x(i)
+                            || word(data, offset + 10 + i * 4) != target.y(i)) {
+                            match = false;
+                            break;
+                        }
+                    }
+                    if (match) {
+                        return selected;
+                    }
+                }
+            }
+            offset += sizeWords * 2;
+        }
+        return -1;
     }
 
     private static List<Polyline> polylines(byte[] data) {

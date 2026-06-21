@@ -3598,3 +3598,29 @@ batch, then append any useful lesson or pitfall found in that round.
   that local overlay safety is under control, while true MathType-like root
   shape likely needs a more explicit stroke model or multi-pen WMF path rather
   than more tiny polyline endpoint changes.
+- v217 adds the first true multi-pen WMF stroke model. The 12 font object
+  indexes remain unchanged, ordinary structure pen stays object `12` at
+  `STRUCTURE_LINE_WIDTH_PT = 0.32pt`, and the new root pen is object `13` at
+  `ROOT_STRUCTURE_LINE_WIDTH_PT = 0.42pt`. `LineSegment` now carries a pen kind;
+  the renderer switches `SelectObject` only when the line pen changes, then
+  restores object `0` before text. Main radical polylines use the root pen,
+  while fraction bars and local overlay profiles continue using the ordinary
+  structure pen. Cache key: `v217-compact-sqrt-root-pen`.
+- v217 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-032809.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v217.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v217/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v217 evidence: glyph metrics stayed stable (`case12 a/b x=19.9pt/right=22.9pt`,
+  `case18 l x=35.9pt`, `g x=34.8pt/right=39.65pt`), proving the added pen did
+  not alter text placement or Word preview scale. Word crops
+  `case12-v217-zoom.png`, `case18-v217-wide.png`,
+  `case15-v217-text-mixed.png`, and `page2-v217-root-overview.png` show the
+  compact radical has more appropriate visual weight while text-mixed fraction
+  bars remain thin. Remaining gap: the root shape is still angular because the
+  polyline geometry is angular; multi-pen helps weight, but MathType-like roots
+  still need a better radical geometry model, not global pen changes.

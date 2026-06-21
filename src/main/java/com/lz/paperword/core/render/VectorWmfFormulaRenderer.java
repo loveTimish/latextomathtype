@@ -32,6 +32,7 @@ final class VectorWmfFormulaRenderer {
     private static final int SYMBOL_CHARSET = 2;
     private static final int GB2312_CHARSET = 134;
     private static final int PEN_OBJECT_INDEX = 12;
+    private static final int ROOT_PEN_OBJECT_INDEX = 13;
     private static final double LEFT_MARGIN_PT = 0.12d;
     private static final double TOP_MARGIN_PT = 0.20d;
     private static final String TEXT_WIDTH_SCALE_PROP = "paperword.wmf.textWidth.scale";
@@ -227,12 +228,19 @@ final class VectorWmfFormulaRenderer {
         builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE, scriptFontPt, ANSI_CHARSET,
             dxShortScriptWidthScale, true));
         builder.record(0x02FB, out -> writeFont(out, ANSI_PREVIEW_FACE, displayFontPt, ANSI_CHARSET, 1.0d, true));
-        builder.record(0x02FA, VectorWmfFormulaRenderer::writeBlackPen); // CreatePen
+        builder.record(0x02FA, out -> writeBlackPen(out, MathTypeStructureMetrics.STRUCTURE_LINE_WIDTH_PT)); // CreatePen
+        builder.record(0x02FA,
+            out -> writeBlackPen(out, MathTypeStructureMetrics.ROOT_STRUCTURE_LINE_WIDTH_PT)); // CreatePen
         builder.record(0x012D, out -> writeWord(out, 0)); // SelectObject
 
         if (!layout.lines().isEmpty()) {
-            builder.record(0x012D, out -> writeWord(out, PEN_OBJECT_INDEX)); // SelectObject pen
+            LinePen selectedPen = null;
             for (LineSegment line : layout.lines()) {
+                if (line.pen() != selectedPen) {
+                    int penIndex = line.pen() == LinePen.ROOT ? ROOT_PEN_OBJECT_INDEX : PEN_OBJECT_INDEX;
+                    builder.record(0x012D, out -> writeWord(out, penIndex)); // SelectObject pen
+                    selectedPen = line.pen();
+                }
                 int[] points = line.toTwips(LEFT_MARGIN_PT + offsetX, TOP_MARGIN_PT + offsetY, previewScale);
                 builder.record(0x0325, out -> writePolyline(out, points));
             }
@@ -3751,7 +3759,7 @@ final class VectorWmfFormulaRenderer {
                     ));
                 }
                 if (compactBodyFraction) {
-                    lines.add(LineSegment.polyline(
+                    lines.add(LineSegment.rootPolyline(
                         rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
                         rootX + lowX,
                         rootHeight * lowYRatio,
@@ -3767,7 +3775,7 @@ final class VectorWmfFormulaRenderer {
                         topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
                     ));
                 } else {
-                    lines.add(LineSegment.polyline(
+                    lines.add(LineSegment.rootPolyline(
                         rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
                         rootX + lowX,
                         rootHeight * lowYRatio,
@@ -3780,7 +3788,7 @@ final class VectorWmfFormulaRenderer {
                     ));
                 }
             } else {
-                lines.add(LineSegment.polyline(
+                lines.add(LineSegment.rootPolyline(
                     rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
                     rootX + checkMidX,
                     rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
@@ -4639,9 +4647,9 @@ final class VectorWmfFormulaRenderer {
         }
     }
 
-    private static void writeBlackPen(ByteArrayOutputStream out) throws IOException {
+    private static void writeBlackPen(ByteArrayOutputStream out, double widthPt) throws IOException {
         writeWord(out, 0); // PS_SOLID
-        writeShort(out, Math.max(1, toTwips(MathTypeStructureMetrics.STRUCTURE_LINE_WIDTH_PT)));
+        writeShort(out, Math.max(1, toTwips(widthPt)));
         writeShort(out, 0);
         writeDWord(out, 0);
     }
@@ -4798,16 +4806,32 @@ final class VectorWmfFormulaRenderer {
         }
     }
 
-    private record LineSegment(double[] pointsPt) {
+    private enum LinePen {
+        STRUCTURE,
+        ROOT
+    }
+
+    private record LineSegment(double[] pointsPt, LinePen pen) {
         private LineSegment(double x1Pt, double y1Pt, double x2Pt, double y2Pt) {
-            this(new double[] {x1Pt, y1Pt, x2Pt, y2Pt});
+            this(new double[] {x1Pt, y1Pt, x2Pt, y2Pt}, LinePen.STRUCTURE);
+        }
+
+        private LineSegment(double[] pointsPt) {
+            this(pointsPt, LinePen.STRUCTURE);
         }
 
         private static LineSegment polyline(double... pointsPt) {
             if (pointsPt.length < 4 || (pointsPt.length & 1) != 0) {
                 throw new IllegalArgumentException("Line polyline requires at least two x/y points");
             }
-            return new LineSegment(pointsPt.clone());
+            return new LineSegment(pointsPt.clone(), LinePen.STRUCTURE);
+        }
+
+        private static LineSegment rootPolyline(double... pointsPt) {
+            if (pointsPt.length < 4 || (pointsPt.length & 1) != 0) {
+                throw new IllegalArgumentException("Line polyline requires at least two x/y points");
+            }
+            return new LineSegment(pointsPt.clone(), LinePen.ROOT);
         }
 
         double x1Pt() {
@@ -4848,7 +4872,7 @@ final class VectorWmfFormulaRenderer {
                 scaled[i] = dx + pointsPt[i] * scale;
                 scaled[i + 1] = dy + pointsPt[i + 1] * scale;
             }
-            return new LineSegment(scaled);
+            return new LineSegment(scaled, pen);
         }
 
         LineSegment translated(double dx, double dy) {
@@ -4861,7 +4885,7 @@ final class VectorWmfFormulaRenderer {
                 scaled[i] = pointsPt[i] * scale;
                 scaled[i + 1] = pointsPt[i + 1];
             }
-            return new LineSegment(scaled);
+            return new LineSegment(scaled, pen);
         }
 
         int[] toTwips(double offsetXPt, double offsetYPt, PreviewScale previewScale) {
