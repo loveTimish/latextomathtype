@@ -125,10 +125,24 @@ class VectorWmfFormulaRendererTest {
             .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
             .findFirst()
             .orElseThrow();
-        Polyline fractionBar = lines.stream()
-            .filter(line -> line.pointCount() == 2)
+        Polyline hook = lines.stream()
+            .filter(line -> line.pointCount() == 2 && line.x1() < radical.x1() && line.x2() == radical.x1())
             .findFirst()
             .orElseThrow();
+        Polyline fractionBar = lines.stream()
+            .filter(line -> line.pointCount() == 2 && line.x2() > line.x1())
+            .findFirst()
+            .orElseThrow();
+        assertTrue(hook.x1() < radical.x1() && hook.x2() == radical.x1(),
+            "compact radical hook should start left of the main stroke and join it");
+        double expectedHookRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_HOOK_X_PT
+            / MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_X_PT;
+        double actualHookRatio = (double) (radical.x1() - hook.x1())
+            / (double) (radicalTopX(radical) - radical.x1());
+        assertTrue(Math.abs(actualHookRatio - expectedHookRatio) <= 0.08d,
+            "compact radical hook length should stay metric-driven after preview scaling");
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
+            * MathTypeStructureMetrics.SQRT_TALL_COMPACT_HOOK_END_Y_RATIO, hook.y2());
         int radicalTopX = radicalTopX(radical);
         assertTrue(radicalTopX <= fractionBar.x1(),
             "scaled sqrt-body fractions should not protrude left of the radical top turn");
@@ -202,7 +216,8 @@ class VectorWmfFormulaRendererTest {
         assertEquals(2, rootInFractionLines.size());
         assertEquals(2, nestedOnlyLines.size());
         assertEquals(2, nestedLines.size());
-        assertEquals(3, nestedFractionLines.size());
+        assertTrue(nestedFractionLines.size() >= 3,
+            "nested fraction roots may include compact radical hook strokes in addition to required bars");
         assertTrue(nestedLines.stream().allMatch(VectorWmfFormulaRendererTest::isRadicalPolyline),
             "nested root radicals must keep radical polylines after layout translation");
         assertTrue(radicalTopGapTwips(nestedLines) >= Math.round(

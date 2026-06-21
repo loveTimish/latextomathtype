@@ -3347,3 +3347,27 @@ batch, then append any useful lesson or pitfall found in that round.
   roots, for example a separate short left hook/low shoulder segment or a
   slightly thicker/curved-looking multi-polyline profile, not another body
   position tweak.
+- v206 adds the first explicit multi-polyline compact tall-root stroke: compact
+  tall radicals now draw a short hook line before the main radical via
+  `SQRT_TALL_COMPACT_HOOK_X_PT = 0.55pt`,
+  `SQRT_TALL_COMPACT_HOOK_START_Y_RATIO = 0.62`, and
+  `SQRT_TALL_COMPACT_HOOK_END_Y_RATIO = 0.52`. This changes only WMF polyline
+  geometry; glyph positions and advances remain unchanged. Cache key:
+  `v206-compact-sqrt-hook`.
+- v206 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-014617.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v206.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v206/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v206 evidence: case12's WMF polyline count rises from `3` to `4`, and case18
+  rises from `2` to `3`, while glyph metrics stay stable (`a/b` around
+  `19.9pt`, `l/g` around `35.9/34.8pt`). Word PNG visual check shows the short
+  hook is visible and reduces the single-straight-leg look, but the radical is
+  still too thin and mechanical. The next useful step is likely a thicker
+  structure-line profile or a second close parallel stroke for compact roots,
+  provided structural scans continue to reject bitmap fallback and line
+  protrusion.
