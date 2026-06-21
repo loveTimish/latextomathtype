@@ -171,6 +171,11 @@ class VectorWmfFormulaRendererTest {
             "sqrt-body fractions should use the tighter dedicated body pad instead of the ordinary sqrt body slot");
         assertTrue(radical.x2() >= fractionBar.x2(),
             "scaled sqrt-body fractions must keep the radical top bar covering the fraction bar");
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
+            * MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_LOW_Y_RATIO, radical.y(1));
+        assertTrue(radical.y(1) < Math.round(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
+                * MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO * 20.0d),
+            "compact tall radicals should lift the lower check point without changing the top bar");
         int compactTopIndex = radical.pointCount() - 2;
         int compactTopLeadIndex = compactTopIndex - 1;
         int compactShoulderIndex = compactTopLeadIndex - 1;

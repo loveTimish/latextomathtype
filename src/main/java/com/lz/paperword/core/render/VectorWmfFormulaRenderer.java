@@ -3714,6 +3714,9 @@ final class VectorWmfFormulaRenderer {
                 double shoulderYRatio = compactBodyFraction
                     ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_Y_RATIO
                     : MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_Y_RATIO;
+                double lowYRatio = compactBodyFraction
+                    ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_LOW_Y_RATIO
+                    : MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO;
                 double topLeadX = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_LEAD_X_PT;
                 double topLeadYRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_LEAD_Y_RATIO;
                 if (compactBodyFraction) {
@@ -3729,7 +3732,7 @@ final class VectorWmfFormulaRenderer {
                         rootX + shadowX,
                         rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO + shadowY,
                         rootX + lowX + shadowX,
-                        rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO + shadowY,
+                        rootHeight * lowYRatio + shadowY,
                         rootX + checkMidX + shadowX,
                         rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight) + shadowY,
                         rootX + shoulderX + shadowX,
@@ -3743,7 +3746,7 @@ final class VectorWmfFormulaRenderer {
                     lines.add(LineSegment.polyline(
                         rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
                         rootX + lowX,
-                        rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO,
+                        rootHeight * lowYRatio,
                         rootX + checkMidX,
                         rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
                         rootX + shoulderX,
@@ -3757,7 +3760,7 @@ final class VectorWmfFormulaRenderer {
                     lines.add(LineSegment.polyline(
                         rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
                         rootX + lowX,
-                        rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO,
+                        rootHeight * lowYRatio,
                         rootX + checkMidX,
                         rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
                         rootX + shoulderX,

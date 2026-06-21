@@ -3436,3 +3436,28 @@ batch, then append any useful lesson or pitfall found in that round.
   modest; case12 still has a mechanical inner radical and a long lower leg.
   Next work should either tune the lower/mid compact leg inside the existing
   bbox or add rendered-ink bbox measurement before larger shape changes.
+- v210 lifts only the compact tall sqrt-fraction lower check point by adding
+  `SQRT_TALL_COMPACT_CHECK_LOW_Y_RATIO = 0.76` while ordinary tall radicals keep
+  `SQRT_TALL_CHECK_LOW_Y_RATIO = 0.80`. The renderer applies the same compact
+  lower-point ratio to the main radical and the root-only shadow stroke; it does
+  not change `topBarEnd`, `bodyX`, `scaledBodyWidth`, text advances, or the
+  compact top-turn X. Cache key: `v210-compact-sqrt-low-lift`.
+- v210 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-024011.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v210.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v210/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v210 evidence: case12 glyph metrics stayed at the v209 level (`1+ x=8.2pt`,
+  `a/b x=19.9pt/right=22.9pt`), and case18 stayed stable (`l x=35.9pt`,
+  `g x=34.8pt/right=39.65pt`). Word crops `case12-v210-zoom.png`,
+  `case18-v210-wide.png`, and `case15-v210-text-mixed.png` show a small
+  positive change: the compact lower leg is less long, with no mixed-text
+  regression. Remaining gap: roots still look like mechanical polylines, not
+  MathType-style strokes. The next useful round should introduce a richer
+  compact radical stroke profile, such as an extra lower-curve point or
+  short diagonal transition inside the same bbox, rather than repeatedly nudging
+  a single Y ratio.
