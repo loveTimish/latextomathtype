@@ -3371,3 +3371,26 @@ batch, then append any useful lesson or pitfall found in that round.
   structure-line profile or a second close parallel stroke for compact roots,
   provided structural scans continue to reject bitmap fallback and line
   protrusion.
+- v207 thickens compact tall radicals without changing the global WMF pen:
+  because `STRUCTURE_LINE_WIDTH_PT` is shared by fraction bars, roots, accents,
+  arrows, and boxes, globally increasing it would also thicken text-mixed and
+  ordinary fraction bars. Instead v207 adds a root-only near-parallel shadow
+  stroke controlled by `SQRT_TALL_COMPACT_SHADOW_X_OFFSET_PT = 0.18pt` and
+  `SQRT_TALL_COMPACT_SHADOW_Y_OFFSET_PT = 0.0pt`. Cache key:
+  `v207-compact-sqrt-shadow-stroke`.
+- v207 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-015319.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v207.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v207/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v207 evidence: case12's WMF polyline count rises from `4` to `5`, and case18
+  rises from `3` to `4`, while glyph metrics stay stable (`a/b` around
+  `19.9pt`, `l/g` around `35.9/34.8pt`). Word PNG visual check shows the
+  compact radical is visibly less hairline and does not smear into a dirty
+  blob. Remaining gap: case12 still looks cramped and the radical/top-bar joint
+  is still too angular. Next useful work should focus on top-turn geometry and
+  nested radical/body scale, not global line width.

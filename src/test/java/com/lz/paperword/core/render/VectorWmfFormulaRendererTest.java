@@ -123,6 +123,11 @@ class VectorWmfFormulaRendererTest {
         List<Polyline> lines = polylines(simpleBodyFraction);
         Polyline radical = lines.stream()
             .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
+            .max((left, right) -> Integer.compare(left.pointCount(), right.pointCount()))
+            .orElseThrow();
+        Polyline shadow = lines.stream()
+            .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
+            .filter(line -> line.x1() > radical.x1() && line.pointCount() == radical.pointCount() - 1)
             .findFirst()
             .orElseThrow();
         Polyline hook = lines.stream()
@@ -143,6 +148,12 @@ class VectorWmfFormulaRendererTest {
             "compact radical hook length should stay metric-driven after preview scaling");
         assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
             * MathTypeStructureMetrics.SQRT_TALL_COMPACT_HOOK_END_Y_RATIO, hook.y2());
+        double expectedShadowRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_SHADOW_X_OFFSET_PT
+            / MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_X_PT;
+        double actualShadowRatio = (double) (shadow.x1() - radical.x1())
+            / (double) (radicalTopX(radical) - radical.x1());
+        assertTrue(Math.abs(actualShadowRatio - expectedShadowRatio) <= 0.05d,
+            "compact radical shadow stroke should thicken only the radical, not the fraction bar");
         int radicalTopX = radicalTopX(radical);
         assertTrue(radicalTopX <= fractionBar.x1(),
             "scaled sqrt-body fractions should not protrude left of the radical top turn");
@@ -232,8 +243,8 @@ class VectorWmfFormulaRendererTest {
         assertTrue(radicalTopGapTwips(nestedFractionLines) >= Math.round(
                 MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
             "nested fraction root top bars should have visible vertical separation");
-        assertEquals(2, nestedFractionLines.stream().filter(VectorWmfFormulaRendererTest::isRadicalPolyline).count());
-        List<Polyline> nestedFractionRadicals = sortedRadicals(nestedFractionLines);
+        List<Polyline> nestedFractionRadicals = sortedMainRadicals(nestedFractionLines);
+        assertEquals(2, nestedFractionRadicals.size());
         int nestedFractionHorizontalGap = radicalTopX(nestedFractionRadicals.get(1))
             - radicalTopX(nestedFractionRadicals.get(0));
         assertTrue(nestedFractionHorizontalGap >= Math.round((MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT
@@ -249,7 +260,7 @@ class VectorWmfFormulaRendererTest {
             .findFirst()
             .orElseThrow();
         List<Polyline> tallNestedFractionRoots = nestedFractionLines.stream()
-            .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
+            .filter(VectorWmfFormulaRendererTest::isMainRadicalPolyline)
             .toList();
         assertEquals(4, root.pointCount());
         assertTrue(tallRoot.pointCount() > 4,
@@ -2145,8 +2156,19 @@ class VectorWmfFormulaRendererTest {
             .toList();
     }
 
+    private static List<Polyline> sortedMainRadicals(List<Polyline> lines) {
+        return lines.stream()
+            .filter(VectorWmfFormulaRendererTest::isMainRadicalPolyline)
+            .sorted((left, right) -> Integer.compare(left.x1(), right.x1()))
+            .toList();
+    }
+
     private static boolean isRadicalPolyline(Polyline line) {
         return line.pointCount() >= 4;
+    }
+
+    private static boolean isMainRadicalPolyline(Polyline line) {
+        return line.pointCount() >= 6 || line.pointCount() == 4;
     }
 
     private static int radicalTopY(Polyline line) {

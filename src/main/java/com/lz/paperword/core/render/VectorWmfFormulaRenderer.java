@@ -3721,6 +3721,19 @@ final class VectorWmfFormulaRenderer {
                         rootX,
                         rootHeight * MathTypeStructureMetrics.SQRT_TALL_COMPACT_HOOK_END_Y_RATIO
                     ));
+                    double shadowX = MathTypeStructureMetrics.SQRT_TALL_COMPACT_SHADOW_X_OFFSET_PT;
+                    double shadowY = MathTypeStructureMetrics.SQRT_TALL_COMPACT_SHADOW_Y_OFFSET_PT;
+                    lines.add(LineSegment.polyline(
+                        rootX + shadowX,
+                        rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO + shadowY,
+                        rootX + lowX + shadowX,
+                        rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO + shadowY,
+                        rootX + checkMidX + shadowX,
+                        rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight) + shadowY,
+                        rootX + shoulderX + shadowX,
+                        rootHeight * shoulderYRatio + shadowY,
+                        rootX + checkTopX + shadowX, MathTypeStructureMetrics.SQRT_TOP_Y_PT + shadowY
+                    ));
                 }
                 lines.add(LineSegment.polyline(
                     rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
