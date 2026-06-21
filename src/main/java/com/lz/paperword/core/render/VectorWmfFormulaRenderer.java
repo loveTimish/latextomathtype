@@ -2208,10 +2208,14 @@ final class VectorWmfFormulaRenderer {
     }
 
     private static FormulaLayout layoutFractions(String text) {
-        return layoutFractions(text, 0);
+        return layoutFractions(text, 0, false);
     }
 
     private static FormulaLayout layoutFractions(String text, int sqrtDepth) {
+        return layoutFractions(text, sqrtDepth, false);
+    }
+
+    private static FormulaLayout layoutFractions(String text, int sqrtDepth, boolean insideFractionSlot) {
         boolean compactInlineFraction = isCompactInlineFraction(text);
         boolean sqrtFractionFamily = !compactInlineFraction && text.contains("\\sqrt");
         boolean textFractionFamily = !compactInlineFraction && !sqrtFractionFamily && hasTextHeavyFraction(text);
@@ -2227,7 +2231,7 @@ final class VectorWmfFormulaRenderer {
             if (frac < 0) {
                 String tail = text.substring(cursor);
                 if (!tail.isBlank()) {
-                    FormulaLayout suffix = layoutFractionPart(tail, sqrtDepth);
+                    FormulaLayout suffix = layoutFractionPart(tail, sqrtDepth, insideFractionSlot);
                     if (suffix == null) {
                         return null;
                     }
@@ -2238,7 +2242,7 @@ final class VectorWmfFormulaRenderer {
             }
             String prefixText = text.substring(cursor, frac);
             if (!prefixText.isBlank()) {
-                FormulaLayout prefix = layoutFractionPart(prefixText, sqrtDepth);
+                FormulaLayout prefix = layoutFractionPart(prefixText, sqrtDepth, insideFractionSlot);
                 if (prefix == null) {
                     return null;
                 }
@@ -2261,9 +2265,11 @@ final class VectorWmfFormulaRenderer {
             if (denominatorEnd < 0) {
                 return null;
             }
-            FormulaLayout numerator = layoutFractionPart(text.substring(numeratorStart + 1, numeratorEnd), sqrtDepth);
+            boolean regularFractionSlot = !compactInlineFraction;
+            FormulaLayout numerator = layoutFractionPart(text.substring(numeratorStart + 1, numeratorEnd), sqrtDepth,
+                regularFractionSlot);
             FormulaLayout denominator = layoutFractionPart(text.substring(denominatorStart + 1, denominatorEnd),
-                sqrtDepth);
+                sqrtDepth, regularFractionSlot);
             if (numerator == null || denominator == null) {
                 return null;
             }
@@ -2402,10 +2408,14 @@ final class VectorWmfFormulaRenderer {
     }
 
     private static FormulaLayout layoutFractionPart(String text) {
-        return layoutFractionPart(text, 0);
+        return layoutFractionPart(text, 0, false);
     }
 
     private static FormulaLayout layoutFractionPart(String text, int sqrtDepth) {
+        return layoutFractionPart(text, sqrtDepth, false);
+    }
+
+    private static FormulaLayout layoutFractionPart(String text, int sqrtDepth, boolean insideFractionSlot) {
         if (text == null || text.isBlank()) {
             return new FormulaLayout(List.of(new PlacedText(" ", false, false, false, false, 0.0d, 9.6d)),
                 List.of(), 4.0d, 13.0d);
@@ -2419,7 +2429,7 @@ final class VectorWmfFormulaRenderer {
         if (simpleArrows != null) {
             return simpleArrows;
         }
-        FormulaLayout overline = layoutOverline(text, sqrtDepth);
+        FormulaLayout overline = layoutOverline(text, sqrtDepth, insideFractionSlot);
         if (overline != null) {
             return overline;
         }
@@ -2437,12 +2447,12 @@ final class VectorWmfFormulaRenderer {
             if (unified != null) {
                 return unified;
             }
-            FormulaLayout fractions = layoutFractions(text, sqrtDepth);
+            FormulaLayout fractions = layoutFractions(text, sqrtDepth, insideFractionSlot);
             if (fractions != null) {
                 return fractions;
             }
         }
-        FormulaLayout sqrt = layoutSqrt(text, sqrtDepth);
+        FormulaLayout sqrt = layoutSqrt(text, sqrtDepth, insideFractionSlot);
         if (sqrt != null) {
             return sqrt;
         }
@@ -3465,10 +3475,14 @@ final class VectorWmfFormulaRenderer {
     }
 
     private static FormulaLayout layoutBoxedFragments(String text) {
-        return layoutBoxedFragments(text, 0);
+        return layoutBoxedFragments(text, 0, false);
     }
 
     private static FormulaLayout layoutBoxedFragments(String text, int sqrtDepth) {
+        return layoutBoxedFragments(text, sqrtDepth, false);
+    }
+
+    private static FormulaLayout layoutBoxedFragments(String text, int sqrtDepth, boolean insideFractionSlot) {
         String marker = "\\boxed";
         if (!text.contains(marker)) {
             return null;
@@ -3482,7 +3496,7 @@ final class VectorWmfFormulaRenderer {
         while (cursor < text.length()) {
             int start = text.indexOf(marker, cursor);
             if (start < 0) {
-                FormulaLayout suffix = layoutFractionPart(text.substring(cursor), sqrtDepth);
+                FormulaLayout suffix = layoutFractionPart(text.substring(cursor), sqrtDepth, insideFractionSlot);
                 if (suffix == null) {
                     return null;
                 }
@@ -3492,7 +3506,7 @@ final class VectorWmfFormulaRenderer {
                 break;
             }
             if (start > cursor) {
-                FormulaLayout prefix = layoutFractionPart(text.substring(cursor, start), sqrtDepth);
+                FormulaLayout prefix = layoutFractionPart(text.substring(cursor, start), sqrtDepth, insideFractionSlot);
                 if (prefix == null) {
                     return null;
                 }
@@ -3522,10 +3536,14 @@ final class VectorWmfFormulaRenderer {
     }
 
     private static FormulaLayout layoutOverline(String text) {
-        return layoutOverline(text, 0);
+        return layoutOverline(text, 0, false);
     }
 
     private static FormulaLayout layoutOverline(String text, int sqrtDepth) {
+        return layoutOverline(text, sqrtDepth, false);
+    }
+
+    private static FormulaLayout layoutOverline(String text, int sqrtDepth, boolean insideFractionSlot) {
         String marker = "\\overline";
         if (!text.contains(marker)) {
             return null;
@@ -3541,7 +3559,7 @@ final class VectorWmfFormulaRenderer {
         while (cursor < text.length()) {
             int start = text.indexOf(marker, cursor);
             if (start < 0) {
-                FormulaLayout suffix = layoutFractionPart(text.substring(cursor), sqrtDepth);
+                FormulaLayout suffix = layoutFractionPart(text.substring(cursor), sqrtDepth, insideFractionSlot);
                 if (suffix == null) {
                     return null;
                 }
@@ -3551,7 +3569,7 @@ final class VectorWmfFormulaRenderer {
                 break;
             }
             if (start > cursor) {
-                FormulaLayout prefix = layoutFractionPart(text.substring(cursor, start), sqrtDepth);
+                FormulaLayout prefix = layoutFractionPart(text.substring(cursor, start), sqrtDepth, insideFractionSlot);
                 if (prefix == null) {
                     return null;
                 }
@@ -3571,7 +3589,7 @@ final class VectorWmfFormulaRenderer {
             if (body.contains(marker)) {
                 return null;
             }
-            FormulaLayout bodyLayout = layoutBoxedAwarePart(body, sqrtDepth);
+            FormulaLayout bodyLayout = layoutBoxedAwarePart(body, sqrtDepth, insideFractionSlot);
             if (bodyLayout == null) {
                 return null;
             }
@@ -3606,24 +3624,32 @@ final class VectorWmfFormulaRenderer {
     }
 
     private static FormulaLayout layoutBoxedAwarePart(String text) {
-        return layoutBoxedAwarePart(text, 0);
+        return layoutBoxedAwarePart(text, 0, false);
     }
 
     private static FormulaLayout layoutBoxedAwarePart(String text, int sqrtDepth) {
+        return layoutBoxedAwarePart(text, sqrtDepth, false);
+    }
+
+    private static FormulaLayout layoutBoxedAwarePart(String text, int sqrtDepth, boolean insideFractionSlot) {
         if (text != null && text.contains("\\boxed")) {
-            FormulaLayout boxed = layoutBoxedFragments(text, sqrtDepth);
+            FormulaLayout boxed = layoutBoxedFragments(text, sqrtDepth, insideFractionSlot);
             if (boxed != null) {
                 return boxed;
             }
         }
-        return layoutFractionPart(text, sqrtDepth);
+        return layoutFractionPart(text, sqrtDepth, insideFractionSlot);
     }
 
     private static FormulaLayout layoutSqrt(String text) {
-        return layoutSqrt(text, 0);
+        return layoutSqrt(text, 0, false);
     }
 
     private static FormulaLayout layoutSqrt(String text, int sqrtDepth) {
+        return layoutSqrt(text, sqrtDepth, false);
+    }
+
+    private static FormulaLayout layoutSqrt(String text, int sqrtDepth, boolean insideFractionSlot) {
         text = unwrapWholeGroup(text);
         String marker = "\\sqrt";
         if (!text.contains(marker)) {
@@ -3638,7 +3664,7 @@ final class VectorWmfFormulaRenderer {
         while (cursor < text.length()) {
             int start = text.indexOf(marker, cursor);
             if (start < 0) {
-                FormulaLayout suffix = layoutFractionPart(text.substring(cursor), sqrtDepth);
+                FormulaLayout suffix = layoutFractionPart(text.substring(cursor), sqrtDepth, insideFractionSlot);
                 if (suffix == null) {
                     return null;
                 }
@@ -3648,7 +3674,8 @@ final class VectorWmfFormulaRenderer {
                 break;
             }
             if (start > cursor) {
-                FormulaLayout prefix = layoutFractionPart(text.substring(cursor, start), sqrtDepth);
+                FormulaLayout prefix = layoutFractionPart(text.substring(cursor, start), sqrtDepth,
+                    insideFractionSlot);
                 if (prefix == null) {
                     return null;
                 }
@@ -3665,7 +3692,7 @@ final class VectorWmfFormulaRenderer {
                 return null;
             }
             String bodyText = text.substring(groupStart + 1, groupEnd);
-            FormulaLayout body = layoutFractionPart(bodyText, sqrtDepth + 1);
+            FormulaLayout body = layoutFractionPart(bodyText, sqrtDepth + 1, insideFractionSlot);
             if (body == null) {
                 return null;
             }
@@ -3786,7 +3813,7 @@ final class VectorWmfFormulaRenderer {
                         topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
                     ));
                 } else {
-                    if (nestedSqrtBody) {
+                    if (nestedSqrtBody || insideFractionSlot) {
                         double nestedProfileX = MathTypeStructureMetrics.SQRT_TALL_NESTED_UPPER_PROFILE_X_OFFSET_PT;
                         double nestedProfileY = MathTypeStructureMetrics.SQRT_TALL_NESTED_UPPER_PROFILE_Y_OFFSET_PT;
                         lines.add(LineSegment.polyline(

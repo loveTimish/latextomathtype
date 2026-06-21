@@ -74,10 +74,20 @@ class VectorWmfFormulaRendererTest {
             MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
         byte[] rootInFraction = VectorWmfFormulaRenderer.render("\\frac{\\sqrt{a^{2}+b^{2}}}{2}", 54.0d,
             MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        byte[] denominatorRootInFraction = VectorWmfFormulaRenderer.render("\\frac{2}{\\sqrt{a^{2}+b^{2}}}",
+            54.0d, MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        byte[] tallRootInFraction = VectorWmfFormulaRenderer.render("\\frac{\\sqrt{1+\\frac{a}{b}}}{2}",
+            62.0d, MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        byte[] tallDenominatorRootInFraction =
+            VectorWmfFormulaRenderer.render("\\frac{2}{\\sqrt{1+\\frac{a}{b}}}", 62.0d,
+                MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
 
         assertFalse(records(simpleRoot).contains(0x0F43));
         assertFalse(records(fractionRoot).contains(0x0F43));
         assertFalse(records(rootInFraction).contains(0x0F43));
+        assertFalse(records(denominatorRootInFraction).contains(0x0F43));
+        assertFalse(records(tallRootInFraction).contains(0x0F43));
+        assertFalse(records(tallDenominatorRootInFraction).contains(0x0F43));
         assertTrue(maxTextYCoordinate(simpleRoot) <= MathTypeStructureMetrics.SQRT_HEIGHT_PT * 20.0d);
         assertTrue(maxPolylineYCoordinate(simpleRoot) <= MathTypeStructureMetrics.SQRT_HEIGHT_PT * 20.0d);
         assertTrue(maxTextYCoordinate(fractionRoot) <= MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d);
@@ -115,10 +125,16 @@ class VectorWmfFormulaRendererTest {
             "mixed sqrt bodies should not receive the whole-body fraction root profile");
         assertFalse(hasCompactRootProfile(rootInFraction),
             "roots inside ordinary fractions should not receive the compact root profile");
-        assertFalse(hasNestedTallRootProfile(fractionRoot),
-            "mixed sqrt bodies should not receive the nested-root upper profile");
-        assertFalse(hasNestedTallRootProfile(rootInFraction),
-            "roots inside ordinary fractions should not receive the nested-root upper profile");
+        assertFalse(hasOrdinaryTallRootProfile(fractionRoot),
+            "mixed sqrt bodies should not receive the ordinary tall-root upper profile");
+        assertEquals(0, ordinaryTallRootProfileCount(rootInFraction),
+            "ordinary-height roots inside fraction slots should not receive an extra upper profile");
+        assertEquals(0, ordinaryTallRootProfileCount(denominatorRootInFraction),
+            "ordinary-height denominator roots should not receive an extra upper profile");
+        assertEquals(1, ordinaryTallRootProfileCount(tallRootInFraction),
+            "tall roots inside ordinary fraction slots should receive one ordinary tall-root upper profile");
+        assertEquals(1, ordinaryTallRootProfileCount(tallDenominatorRootInFraction),
+            "tall denominator roots inside ordinary fraction slots should receive one ordinary tall-root upper profile");
     }
 
     @Test
@@ -152,6 +168,8 @@ class VectorWmfFormulaRendererTest {
             "nested sqrt-body fractions should widen relative to standalone compact sqrt-body fractions");
         assertTrue(maxTextRightCoordinate(nestedBodyFraction) >= 22.8d * 20.0d,
             "nested sqrt-body fraction stroke overhangs must not shrink the inner a/b glyph slot");
+        assertFalse(hasOrdinaryTallRootProfile(simpleBodyFraction),
+            "whole sqrt-body fractions should keep compact profiles instead of ordinary fraction-slot profiles");
         List<Polyline> lines = polylines(simpleBodyFraction);
         Polyline radical = lines.stream()
             .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
@@ -342,7 +360,13 @@ class VectorWmfFormulaRendererTest {
 
         assertEquals(1, lines.size());
         assertEquals(2, fractionLines.size());
-        assertEquals(2, rootInFractionLines.size());
+        assertEquals(1, rootInFractionLines.stream()
+            .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
+            .count());
+        assertEquals(1, rootInFractionLines.stream()
+            .filter(line -> line.pointCount() == 2 && line.x2() - line.x1() > 400)
+            .count());
+        assertEquals(0, ordinaryTallRootProfileCount(rootInFraction));
         assertEquals(2, nestedOnlyLines.stream().filter(VectorWmfFormulaRendererTest::isRadicalPolyline).count());
         assertEquals(2, nestedLines.stream().filter(VectorWmfFormulaRendererTest::isRadicalPolyline).count());
         assertTrue(nestedFractionLines.size() >= 3,
@@ -353,7 +377,7 @@ class VectorWmfFormulaRendererTest {
             "nested root radicals must keep radical polylines after layout translation");
         assertTrue(hasNestedTallRootProfile(nestedRoot),
             "nested tall roots should add a local upper profile to soften the mechanical single-stroke turn");
-        assertFalse(hasNestedTallRootProfile(fractionRoot),
+        assertFalse(hasOrdinaryTallRootProfile(fractionRoot),
             "ordinary mixed sqrt+fraction roots should not get the nested-root profile");
         assertTrue(radicalTopGapTwips(nestedLines) >= Math.round(
                 MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
@@ -2404,7 +2428,15 @@ class VectorWmfFormulaRendererTest {
     }
 
     private static boolean hasNestedTallRootProfile(byte[] data) {
-        return polylines(data).stream().anyMatch(VectorWmfFormulaRendererTest::isNestedTallRootProfile);
+        return hasOrdinaryTallRootProfile(data);
+    }
+
+    private static boolean hasOrdinaryTallRootProfile(byte[] data) {
+        return ordinaryTallRootProfileCount(data) > 0;
+    }
+
+    private static long ordinaryTallRootProfileCount(byte[] data) {
+        return polylines(data).stream().filter(VectorWmfFormulaRendererTest::isNestedTallRootProfile).count();
     }
 
     private static boolean isNestedTallRootProfile(Polyline line) {

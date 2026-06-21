@@ -3810,3 +3810,39 @@ batch, then append any useful lesson or pitfall found in that round.
   behavior, and `case15-v223-final-text-mixed.png` remains intact. This is
   still not final visual acceptance; the nested roots remain too straight and
   likely need a fuller root-stroke model or source-driven profile calibration.
+- v224 adds an explicit `insideFractionSlot` layout context instead of reusing
+  `sqrtDepth` to detect roots placed in numerator/denominator slots. Only
+  non-compact fraction slots pass this context. Cache key:
+  `v224-fraction-slot-tall-sqrt-profile`.
+- v224 profile scope: tall ordinary roots inside regular fraction slots can
+  reuse the ordinary upper profile, but ordinary-height roots like case10
+  `\frac{\sqrt{a^{2}+b^{2}}}{2}` must not gain an extra three-point profile.
+  This preserves the fragile case10 single continuous fraction rule while still
+  allowing taller fraction-slot roots to be softened.
+- v224 test lesson: distinguish semantic profile eligibility from the helper
+  name. The old `hasNestedTallRootProfile` shape matcher also matches ordinary
+  fraction-slot upper profiles. Use explicit `ordinaryTallRootProfileCount`
+  assertions and keep separate checks for one long two-point fraction rule,
+  root pen ownership, and denominator gap.
+- v224 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-044405.docx`.
+  Renderer tests and golden corpus tests passed. Structural reports were saved
+  as `wmf-v224-final.json`, `glyph-v224-final.json`, and
+  `glyph-v224-final.txt`; clean counts stayed `23` WMF previews, zero visible
+  LaTeX leaks, zero bitmap/StretchDIB WMFs, and zero
+  suspicious-review-required text samples. `scan-v224.json` is not a gate for
+  this generated DOCX because it has no source mapping and reports zero mapped
+  formulas.
+- v224 preview lesson: Word COM export can hang in `/Automation -Embedding`
+  without producing a PDF; kill only the current hidden `WINWORD.EXE` instance
+  after confirming it is the stuck automation process. LibreOffice headless can
+  convert the DOCX to PDF, but in this corpus it rendered only the labels and
+  not the embedded MathType OLE/WMF previews, so LibreOffice page PNGs are not a
+  reliable visual gate here. ImageMagick can still render extracted WMF files
+  for a lower-level preview (`wmf-rendered-v224/case10/12/13/15`).
+- v224 visual status from extracted WMF PNGs: case10 keeps a continuous
+  fraction rule and is not affected by the new fraction-slot profile. Case12
+  and case13 remain visually unfinished: compact sqrt-fractions still show
+  short-line/boxy root artifacts, and deep nested roots remain too mechanical.
+  The next useful visual pass should redesign radical stroke geometry more
+  globally rather than adding more local short profile strokes.
