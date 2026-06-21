@@ -160,13 +160,15 @@ class VectorWmfFormulaRendererTest {
             / (double) (radicalTopX(radical) - radical.x1());
         assertTrue(Math.abs(actualShadowRatio - expectedShadowRatio) <= 0.05d,
             "compact radical shadow stroke should thicken only the radical, not the fraction bar");
-        assertTrue(shadow.x2() == radical.x(3) + shadow.x1() - radical.x1(),
-            "compact radical shadow should stop after the lower/mid leg instead of duplicating the top turn");
-        assertTrue(shadow.x2() < radical.x(radical.pointCount() - 3),
-            "compact radical shadow should not trace the upper turn where it creates double-line corners");
         int compactTopIndex = radical.pointCount() - 2;
         int compactTopLeadIndex = compactTopIndex - 1;
         int compactShoulderIndex = compactTopLeadIndex - 1;
+        int compactMidIndex = compactShoulderIndex - 1;
+        int expectedShadowEndX = radical.x(compactMidIndex) + shadow.x1() - radical.x1();
+        assertTrue(Math.abs(shadow.x(shadow.pointCount() - 1) - expectedShadowEndX) <= 2,
+            "compact radical shadow should stop after the lower/mid leg instead of duplicating the top turn");
+        assertTrue(shadow.x(shadow.pointCount() - 1) < radical.x(compactShoulderIndex),
+            "compact radical shadow should not trace the upper turn where it creates double-line corners");
         assertCloseTwips(MathTypeStructureMetrics.SQRT_TALL_COMPACT_UPPER_PROFILE_X_OFFSET_PT,
             upperProfile.x1() - radical.x(compactShoulderIndex));
         assertCloseTwips(MathTypeStructureMetrics.SQRT_TALL_COMPACT_UPPER_PROFILE_Y_OFFSET_PT,
@@ -175,6 +177,10 @@ class VectorWmfFormulaRendererTest {
             upperProfile.x2() - radical.x(compactTopIndex));
         assertTrue(upperProfile.x1() > radical.x(3) && upperProfile.x2() < radical.x2(),
             "compact upper profile should thicken only the upper turn without extending the top bar");
+        assertTrue(upperProfile.x2() <= radical.x(compactTopIndex),
+            "compact upper profile must not extend right of the radical top turn");
+        assertTrue(upperProfile.y2() >= radical.y(compactTopIndex),
+            "compact upper profile must stay inside the radical top edge instead of raising the bbox");
         int radicalTopX = radicalTopX(radical);
         assertTrue(radicalTopX <= fractionBar.x1(),
             "scaled sqrt-body fractions should not protrude left of the radical top turn");

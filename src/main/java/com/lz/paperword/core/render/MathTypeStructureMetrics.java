@@ -110,8 +110,8 @@ final class MathTypeStructureMetrics {
     static final double SQRT_TALL_COMPACT_CHECK_LOW_X_PT = 1.1d;
     static final double SQRT_TALL_COMPACT_CHECK_SHOULDER_X_PT = 2.65d;
     static final double SQRT_TALL_COMPACT_CHECK_TOP_LEAD_X_PT = 3.55d;
-    static final double SQRT_TALL_COMPACT_CHECK_MID_X_PT = 1.4d;
-    static final double SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_X_PT = 1.28d;
+    static final double SQRT_TALL_COMPACT_CHECK_MID_X_PT = 1.7d;
+    static final double SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_X_PT = 1.48d;
     static final double SQRT_TALL_CHECK_LOW_Y_RATIO = 0.80d;
     static final double SQRT_TALL_COMPACT_CHECK_LOW_Y_RATIO = 0.76d;
     static final double SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_Y_RATIO = 0.68d;
@@ -123,8 +123,8 @@ final class MathTypeStructureMetrics {
     static final double SQRT_TALL_COMPACT_HOOK_END_Y_RATIO = 0.52d;
     static final double SQRT_TALL_COMPACT_SHADOW_X_OFFSET_PT = 0.18d;
     static final double SQRT_TALL_COMPACT_SHADOW_Y_OFFSET_PT = 0.0d;
-    static final double SQRT_TALL_COMPACT_UPPER_PROFILE_X_OFFSET_PT = -0.12d;
-    static final double SQRT_TALL_COMPACT_UPPER_PROFILE_Y_OFFSET_PT = 0.18d;
+    static final double SQRT_TALL_COMPACT_UPPER_PROFILE_X_OFFSET_PT = -0.16d;
+    static final double SQRT_TALL_COMPACT_UPPER_PROFILE_Y_OFFSET_PT = 0.24d;
     static final double SQRT_CHECK_TOP_X_PT = 5.0d;
     static final double SQRT_TALL_CHECK_TOP_X_PT = 4.8d;
     static final double SQRT_TALL_COMPACT_CHECK_TOP_X_PT = 4.0d;

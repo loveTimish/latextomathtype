@@ -3541,3 +3541,33 @@ batch, then append any useful lesson or pitfall found in that round.
   Remaining gap: the visual gain is small. The next round should either tune
   the profile offset/length from rendered evidence or implement a true
   root-only pen/profile layer instead of adding more tiny overlay strokes.
+- v215 keeps the same root-only approach and deliberately avoids changing the
+  shared WMF `CreatePen` width, because `STRUCTURE_LINE_WIDTH_PT` also feeds
+  fraction bars, boxes, arrows, and text-mixed structures. The compact
+  sqrt-fraction upper profile is slightly more visible
+  (`SQRT_TALL_COMPACT_UPPER_PROFILE_X_OFFSET_PT = -0.16pt`,
+  `SQRT_TALL_COMPACT_UPPER_PROFILE_Y_OFFSET_PT = 0.24pt`), while the compact
+  lower leg advances farther right (`SQRT_TALL_COMPACT_CHECK_MID_X_PT = 1.7pt`,
+  `SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_X_PT = 1.48pt`) to reduce the
+  vertical-hook look in nested root/fraction cases. Cache key:
+  `v215-compact-sqrt-lower-slope`.
+- v215 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-031257.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v215.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v215/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v215 evidence: glyph metrics stayed at the v213/v214 stable values
+  (`case12 a/b x=19.9pt/right=22.9pt`, `case18 l x=35.9pt`,
+  `g x=34.8pt/right=39.65pt`), so the lower-slope change did not shrink or
+  reflow the Word preview box. Word crops `case12-v215-zoom.png`,
+  `case18-v215-wide.png`, `case15-v215-text-mixed.png`, and
+  `page2-v215-root-overview.png` show no text-mixed or physics sqrt-fraction
+  regression. The visual improvement is still modest: the nested sqrt lower
+  leg is slightly less vertical, but the root sign still looks mechanical.
+  Next useful work should move from point nudges to a dedicated root-stroke
+  profile model, with separate checks for inner nested roots and whole-body
+  sqrt-fractions.
