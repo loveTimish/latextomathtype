@@ -3007,3 +3007,30 @@ batch, then append any useful lesson or pitfall found in that round.
   return before this round's cutoff, and a replacement review could not be
   spawned because the agent thread limit was reached. Treat this as a workflow
   gap for the round, not as review acceptance.
+- v193 splits the root-body horizontal slot instead of changing ordinary root
+  padding: simple whole fractions directly under a radical now use
+  `SQRT_BODY_FRACTION_LEFT_PAD_PT = 5.4`, while ordinary radical bodies still
+  use `SQRT_BODY_LEFT_PAD_PT = 6.0`. Keep the existing
+  `SQRT_BODY_FRACTION_LEFT_ADJUST_PT = -2.4`; this pass is a conservative
+  `0.6pt` extra tuck for compact root-body fractions, not a broad root layout
+  rewrite.
+- v193 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260621-232223.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v193.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v193/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v193 glyph evidence is intentionally narrow: case 12's root-body `a/b` runs
+  moved from `x=19.85pt` to `x=19.35pt`, and case 18's `l/g` runs moved from
+  about `36.75/35.65pt` to `35.90/34.80pt`. Case 13 deep nested radical
+  metrics did not change. Word page 2/3 show no left protrusion, but the root
+  checkmark/left-leg shape is still visibly hand-drawn and should be the next
+  larger design pass.
+- v193 no-context review found no blocking risk and agreed that splitting the
+  compact root-body fraction pad is better scoped than changing ordinary root
+  padding. It flagged the first pad guard as too weak, so the test now also
+  pins the fraction-bar gap after the radical top turn to a narrow positive
+  `8..18` twip range.

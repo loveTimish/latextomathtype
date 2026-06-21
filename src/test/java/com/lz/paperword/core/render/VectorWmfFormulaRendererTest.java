@@ -125,8 +125,14 @@ class VectorWmfFormulaRendererTest {
             "scaled sqrt-body fractions should not protrude left of the radical top turn");
         assertTrue(radical.x(2) <= minTextXCoordinate(simpleBodyFraction),
             "scaled sqrt-body fraction glyphs should not protrude left of the radical top turn");
-        assertTrue(fractionBar.x1() - radical.x(2) <= 45,
+        int fractionGap = fractionBar.x1() - radical.x(2);
+        assertTrue(fractionGap >= 8 && fractionGap <= 18,
+            "scaled sqrt-body fraction bar should keep a narrow but positive gap after the radical top turn");
+        assertTrue(fractionGap <= 45,
             "scaled sqrt-body fractions should sit close to the radical top turn, not float in an oversized slot");
+        assertTrue(fractionGap <= Math.round((MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT
+                - MathTypeStructureMetrics.SQRT_BODY_FRACTION_LEFT_PAD_PT) * 20.0d) + 2,
+            "sqrt-body fractions should use the tighter dedicated body pad instead of the ordinary sqrt body slot");
         assertTrue(radical.x2() >= fractionBar.x2(),
             "scaled sqrt-body fractions must keep the radical top bar covering the fraction bar");
         assertTrue(textFontHeightTwips(mixedBodyFraction, "a") >= 220,

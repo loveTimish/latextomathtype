@@ -3619,7 +3619,9 @@ final class VectorWmfFormulaRenderer {
             double bodyScale = compactBodyFraction ? MathTypeStructureMetrics.SQRT_BODY_FRACTION_SCALE : 1.0d;
             double scaledBodyWidth = layoutRightExtentPt(body) * bodyScale;
             double scaledBodyHeight = body.heightPt() * bodyScale;
-            double bodyX = rootX + MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT
+            double bodyPad = compactBodyFraction ? MathTypeStructureMetrics.SQRT_BODY_FRACTION_LEFT_PAD_PT
+                : MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT;
+            double bodyX = rootX + bodyPad
                 + (compactBodyFraction ? MathTypeStructureMetrics.SQRT_BODY_FRACTION_LEFT_ADJUST_PT : 0.0d);
             if (compactBodyFraction) {
                 appendScaledLayout(placed, lines, body, bodyScale,
