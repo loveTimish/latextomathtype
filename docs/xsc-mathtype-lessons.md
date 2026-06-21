@@ -3322,3 +3322,28 @@ batch, then append any useful lesson or pitfall found in that round.
   mechanical. The next round should replace the radical stroke model with a
   richer multi-segment/curved-looking WMF polyline profile rather than adding
   more padding.
+- v205 opens the compact tall-radical stroke profile without moving the
+  fraction body: `SQRT_TALL_COMPACT_CHECK_SHOULDER_X_PT` moves from `1.9pt` to
+  `2.65pt`, and compact tall roots now use their own
+  `SQRT_TALL_COMPACT_CHECK_SHOULDER_Y_RATIO = 0.46`. An attempted
+  `SQRT_TALL_COMPACT_CHECK_TOP_X_PT = 4.25pt` failed the structural guard
+  because the radical top turn moved right of the compact fraction bar; keeping
+  the top turn at `4.0pt` preserves coverage while still opening the shoulder.
+  Cache key: `v205-open-compact-sqrt-stroke`.
+- v205 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-014001.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v205.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v205/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v205 visual result is safe but still modest. Case18 keeps the same glyph
+  placement (`l/g` around `35.9/34.8pt`) and the compact radical shoulder is a
+  little more open, but Word's rendered PNG still looks mechanical. Case12 does
+  not regress, but the inner radical still has a long straight leg. The next
+  meaningful improvement should add more explicit stroke shape to compact tall
+  roots, for example a separate short left hook/low shoulder segment or a
+  slightly thicker/curved-looking multi-polyline profile, not another body
+  position tweak.

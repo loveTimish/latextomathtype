@@ -144,6 +144,17 @@ class VectorWmfFormulaRendererTest {
             "sqrt-body fractions should use the tighter dedicated body pad instead of the ordinary sqrt body slot");
         assertTrue(radical.x2() >= fractionBar.x2(),
             "scaled sqrt-body fractions must keep the radical top bar covering the fraction bar");
+        int compactTopIndex = radical.pointCount() - 2;
+        int compactShoulderIndex = compactTopIndex - 1;
+        double compactShoulderRatio = (double) (radical.x(compactShoulderIndex) - radical.x1())
+            / (double) (radical.x(compactTopIndex) - radical.x1());
+        double expectedCompactShoulderRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_X_PT
+            / MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_X_PT;
+        assertTrue(Math.abs(compactShoulderRatio - expectedCompactShoulderRatio) <= 0.08d,
+            "compact tall radicals should use the opened shoulder profile, not the old near-vertical leg");
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
+            * MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_Y_RATIO,
+            radical.y(compactShoulderIndex));
         int sqrtBarVisualInset = fractionBar.x1() - minTextXCoordinate(simpleBodyFraction);
         assertTrue(sqrtBarVisualInset <= 12,
             "sqrt-body fraction bars should visually track the glyph width instead of looking like a short dash");

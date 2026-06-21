@@ -3711,6 +3711,9 @@ final class VectorWmfFormulaRenderer {
                 double shoulderX = compactBodyFraction
                     ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_X_PT
                     : MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_X_PT;
+                double shoulderYRatio = compactBodyFraction
+                    ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_Y_RATIO
+                    : MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_Y_RATIO;
                 lines.add(LineSegment.polyline(
                     rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
                     rootX + lowX,
@@ -3718,7 +3721,7 @@ final class VectorWmfFormulaRenderer {
                     rootX + checkMidX,
                     rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
                     rootX + shoulderX,
-                    rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_Y_RATIO,
+                    rootHeight * shoulderYRatio,
                     rootX + checkTopX, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
                     topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
                 ));
