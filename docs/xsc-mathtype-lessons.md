@@ -3571,3 +3571,30 @@ batch, then append any useful lesson or pitfall found in that round.
   Next useful work should move from point nudges to a dedicated root-stroke
   profile model, with separate checks for inner nested roots and whole-body
   sqrt-fractions.
+- v216 turns the compact sqrt-fraction lower shadow into a shorter local
+  root-stroke profile. It now stops at the lower-transition point instead of
+  copying through the mid leg, while the upper profile remains inside the
+  shoulder/topLead/topTurn area and still does not touch `topBarEnd`. This
+  keeps the extra stroke local to `compactBodyFraction && tallRoot`, avoids the
+  shared `STRUCTURE_LINE_WIDTH_PT`, and adds renderer tests proving ordinary
+  sqrt, mixed-body sqrt, and roots inside ordinary fractions do not receive
+  the compact profile. Cache key:
+  `v216-compact-sqrt-local-root-profile`.
+- v216 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-032055.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v216.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v216/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v216 evidence: glyph metrics are still stable (`case12 a/b x=19.9pt/right=22.9pt`,
+  `case18 l x=35.9pt`, `g x=34.8pt/right=39.65pt`), so shortening the lower
+  profile did not trigger Word preview rescaling. Word crops
+  `case12-v216-zoom.png`, `case18-v216-wide.png`,
+  `case15-v216-text-mixed.png`, and `page2-v216-root-overview.png` show no
+  obvious regression, but the visible improvement is still small. This confirms
+  that local overlay safety is under control, while true MathType-like root
+  shape likely needs a more explicit stroke model or multi-pen WMF path rather
+  than more tiny polyline endpoint changes.

@@ -89,6 +89,12 @@ class VectorWmfFormulaRendererTest {
             "fractions containing roots should not keep the ordinary 28pt fraction geometry");
         assertTrue(maxTextYCoordinate(rootInFraction) <= MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d);
         assertTrue(maxPolylineYCoordinate(rootInFraction) <= MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d);
+        assertFalse(hasCompactRootProfile(simpleRoot),
+            "ordinary sqrt roots should not receive the compact sqrt-fraction root profile");
+        assertFalse(hasCompactRootProfile(fractionRoot),
+            "mixed sqrt bodies should not receive the whole-body fraction root profile");
+        assertFalse(hasCompactRootProfile(rootInFraction),
+            "roots inside ordinary fractions should not receive the compact root profile");
     }
 
     @Test
@@ -127,15 +133,6 @@ class VectorWmfFormulaRendererTest {
             .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
             .max((left, right) -> Integer.compare(left.pointCount(), right.pointCount()))
             .orElseThrow();
-        Polyline shadow = lines.stream()
-            .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
-            .filter(line -> line.x1() > radical.x1() && line.pointCount() == 4)
-            .findFirst()
-            .orElseThrow();
-        Polyline upperProfile = lines.stream()
-            .filter(line -> line.pointCount() == 3 && line.x1() < radical.x(radical.pointCount() - 3))
-            .findFirst()
-            .orElseThrow();
         Polyline hook = lines.stream()
             .filter(line -> line.pointCount() == 2 && line.x1() < radical.x1() && line.x2() == radical.x1())
             .findFirst()
@@ -154,21 +151,33 @@ class VectorWmfFormulaRendererTest {
             "compact radical hook length should stay metric-driven after preview scaling");
         assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
             * MathTypeStructureMetrics.SQRT_TALL_COMPACT_HOOK_END_Y_RATIO, hook.y2());
+        int compactTopIndex = radical.pointCount() - 2;
+        int compactTopLeadIndex = compactTopIndex - 1;
+        int compactShoulderIndex = compactTopLeadIndex - 1;
+        int compactMidIndex = compactShoulderIndex - 1;
+        int compactLowerTransitionIndex = compactMidIndex - 1;
+        Polyline shadow = lines.stream()
+            .filter(line -> line.x1() > radical.x1() && line.pointCount() == 3)
+            .filter(line -> line.x2() < radical.x(compactMidIndex))
+            .findFirst()
+            .orElseThrow();
+        Polyline upperProfile = lines.stream()
+            .filter(line -> line.pointCount() == 3)
+            .filter(line -> line.x1() > radical.x(compactMidIndex))
+            .filter(line -> line.x1() < radical.x(compactTopIndex))
+            .findFirst()
+            .orElseThrow();
         double expectedShadowRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_SHADOW_X_OFFSET_PT
             / MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_X_PT;
         double actualShadowRatio = (double) (shadow.x1() - radical.x1())
             / (double) (radicalTopX(radical) - radical.x1());
         assertTrue(Math.abs(actualShadowRatio - expectedShadowRatio) <= 0.05d,
             "compact radical shadow stroke should thicken only the radical, not the fraction bar");
-        int compactTopIndex = radical.pointCount() - 2;
-        int compactTopLeadIndex = compactTopIndex - 1;
-        int compactShoulderIndex = compactTopLeadIndex - 1;
-        int compactMidIndex = compactShoulderIndex - 1;
-        int expectedShadowEndX = radical.x(compactMidIndex) + shadow.x1() - radical.x1();
+        int expectedShadowEndX = radical.x(compactLowerTransitionIndex) + shadow.x1() - radical.x1();
         assertTrue(Math.abs(shadow.x(shadow.pointCount() - 1) - expectedShadowEndX) <= 2,
-            "compact radical shadow should stop after the lower/mid leg instead of duplicating the top turn");
-        assertTrue(shadow.x(shadow.pointCount() - 1) < radical.x(compactShoulderIndex),
-            "compact radical shadow should not trace the upper turn where it creates double-line corners");
+            "compact radical lower profile should stop at the transition point instead of copying the mid/upper turn");
+        assertTrue(shadow.x(shadow.pointCount() - 1) < radical.x(compactMidIndex),
+            "compact radical lower profile should not duplicate the vertical mid leg");
         assertCloseTwips(MathTypeStructureMetrics.SQRT_TALL_COMPACT_UPPER_PROFILE_X_OFFSET_PT,
             upperProfile.x1() - radical.x(compactShoulderIndex));
         assertCloseTwips(MathTypeStructureMetrics.SQRT_TALL_COMPACT_UPPER_PROFILE_Y_OFFSET_PT,
@@ -2228,6 +2237,10 @@ class VectorWmfFormulaRendererTest {
         return line.pointCount() >= 4
             && line.y(line.pointCount() - 1) == line.y(line.pointCount() - 2)
             && line.x2() - line.x(line.pointCount() - 2) > 40;
+    }
+
+    private static boolean hasCompactRootProfile(byte[] data) {
+        return polylines(data).stream().anyMatch(line -> line.pointCount() == 3);
     }
 
     private static int radicalTopY(Polyline line) {

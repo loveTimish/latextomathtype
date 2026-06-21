@@ -3737,9 +3737,7 @@ final class VectorWmfFormulaRenderer {
                         rootX + lowX + shadowX,
                         rootHeight * lowYRatio + shadowY,
                         rootX + lowerTransitionX + shadowX,
-                        rootHeight * lowerTransitionYRatio + shadowY,
-                        rootX + checkMidX + shadowX,
-                        rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight) + shadowY
+                        rootHeight * lowerTransitionYRatio + shadowY
                     ));
                     double upperProfileX = MathTypeStructureMetrics.SQRT_TALL_COMPACT_UPPER_PROFILE_X_OFFSET_PT;
                     double upperProfileY = MathTypeStructureMetrics.SQRT_TALL_COMPACT_UPPER_PROFILE_Y_OFFSET_PT;
