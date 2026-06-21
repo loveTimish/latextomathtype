@@ -3714,6 +3714,8 @@ final class VectorWmfFormulaRenderer {
                 double shoulderYRatio = compactBodyFraction
                     ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_Y_RATIO
                     : MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_Y_RATIO;
+                double topLeadX = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_LEAD_X_PT;
+                double topLeadYRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_LEAD_Y_RATIO;
                 if (compactBodyFraction) {
                     lines.add(LineSegment.polyline(
                         rootX - MathTypeStructureMetrics.SQRT_TALL_COMPACT_HOOK_X_PT,
@@ -3732,20 +3734,38 @@ final class VectorWmfFormulaRenderer {
                         rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight) + shadowY,
                         rootX + shoulderX + shadowX,
                         rootHeight * shoulderYRatio + shadowY,
+                        rootX + topLeadX + shadowX,
+                        rootHeight * topLeadYRatio + shadowY,
                         rootX + checkTopX + shadowX, MathTypeStructureMetrics.SQRT_TOP_Y_PT + shadowY
                     ));
                 }
-                lines.add(LineSegment.polyline(
-                    rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
-                    rootX + lowX,
-                    rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO,
-                    rootX + checkMidX,
-                    rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
-                    rootX + shoulderX,
-                    rootHeight * shoulderYRatio,
-                    rootX + checkTopX, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
-                    topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
-                ));
+                if (compactBodyFraction) {
+                    lines.add(LineSegment.polyline(
+                        rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
+                        rootX + lowX,
+                        rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO,
+                        rootX + checkMidX,
+                        rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
+                        rootX + shoulderX,
+                        rootHeight * shoulderYRatio,
+                        rootX + topLeadX,
+                        rootHeight * topLeadYRatio,
+                        rootX + checkTopX, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
+                        topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
+                    ));
+                } else {
+                    lines.add(LineSegment.polyline(
+                        rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
+                        rootX + lowX,
+                        rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO,
+                        rootX + checkMidX,
+                        rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
+                        rootX + shoulderX,
+                        rootHeight * shoulderYRatio,
+                        rootX + checkTopX, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
+                        topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
+                    ));
+                }
             } else {
                 lines.add(LineSegment.polyline(
                     rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,

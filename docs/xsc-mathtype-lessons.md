@@ -3410,3 +3410,29 @@ batch, then append any useful lesson or pitfall found in that round.
   Future root work should change stroke profile inside the existing bbox, or
   explicitly grow the physical shape and accept the size change with Word PNG
   evidence.
+- v209 improves compact tall radicals without changing glyph scale or the right
+  bbox: it inserts an internal top-lead point between the compact shoulder and
+  top turn (`SQRT_TALL_COMPACT_CHECK_TOP_LEAD_X_PT = 3.55pt`,
+  `SQRT_TALL_COMPACT_CHECK_TOP_LEAD_Y_RATIO = 0.19`) and applies it to both the
+  root-only shadow stroke and the main compact tall radical. `topBarEnd`,
+  `bodyX`, `scaledBodyWidth`, and text advances are unchanged. Cache key:
+  `v209-compact-sqrt-top-lead`.
+- v209 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-023037.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v209.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v209/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v209 evidence: case12 and case18 keep the v207 glyph metrics (`case12 a/b`
+  still around `19.9pt/right=22.9pt`, `case18 l/g` still around
+  `35.9/34.8pt`) while their WMF byte size rises only for the compact
+  sqrt-fraction cases due to the extra internal point. Word crops
+  `case12-v209-zoom.png`, `case18-v209-zoom.png`, and
+  `case15-v209-text-mixed.png` show a slightly less abrupt top-turn transition
+  and no text-mixed regression. Remaining gap: the visual improvement is
+  modest; case12 still has a mechanical inner radical and a long lower leg.
+  Next work should either tune the lower/mid compact leg inside the existing
+  bbox or add rendered-ink bbox measurement before larger shape changes.

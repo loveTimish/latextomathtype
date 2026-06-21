@@ -172,7 +172,8 @@ class VectorWmfFormulaRendererTest {
         assertTrue(radical.x2() >= fractionBar.x2(),
             "scaled sqrt-body fractions must keep the radical top bar covering the fraction bar");
         int compactTopIndex = radical.pointCount() - 2;
-        int compactShoulderIndex = compactTopIndex - 1;
+        int compactTopLeadIndex = compactTopIndex - 1;
+        int compactShoulderIndex = compactTopLeadIndex - 1;
         double compactShoulderRatio = (double) (radical.x(compactShoulderIndex) - radical.x1())
             / (double) (radical.x(compactTopIndex) - radical.x1());
         double expectedCompactShoulderRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_X_PT
@@ -182,6 +183,18 @@ class VectorWmfFormulaRendererTest {
         assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
             * MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_Y_RATIO,
             radical.y(compactShoulderIndex));
+        double compactTopLeadRatio = (double) (radical.x(compactTopLeadIndex) - radical.x1())
+            / (double) (radical.x(compactTopIndex) - radical.x1());
+        double expectedCompactTopLeadRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_LEAD_X_PT
+            / MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_X_PT;
+        assertTrue(Math.abs(compactTopLeadRatio - expectedCompactTopLeadRatio) <= 0.05d,
+            "compact top-lead point should stay metric-driven after preview scaling");
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
+            * MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_LEAD_Y_RATIO,
+            radical.y(compactTopLeadIndex));
+        assertTrue(radical.x(compactShoulderIndex) < radical.x(compactTopLeadIndex)
+                && radical.x(compactTopLeadIndex) < radical.x(compactTopIndex),
+            "compact tall radicals should add an internal top-lead point without moving the top turn");
         int sqrtBarVisualInset = fractionBar.x1() - minTextXCoordinate(simpleBodyFraction);
         assertTrue(sqrtBarVisualInset <= 12,
             "sqrt-body fraction bars should visually track the glyph width instead of looking like a short dash");
@@ -195,6 +208,8 @@ class VectorWmfFormulaRendererTest {
             "widened nested sqrt-body fraction bars should not protrude left of the inner radical top turn");
         assertTrue(innerNestedRoot.x2() >= nestedFractionBar.x2(),
             "widened nested sqrt-body fractions must keep the inner radical top bar covering the fraction bar");
+        assertTrue(innerNestedRoot.x2() <= 1530,
+            "nested compact sqrt tuning must not extend the inner top bar beyond the v207 stable bbox");
         int nestedFractionGap = nestedFractionBar.x1() - radicalTopX(innerNestedRoot);
         assertTrue(nestedFractionGap >= fractionGap
                 + Math.round(MathTypeStructureMetrics.SQRT_NESTED_BODY_FRACTION_LEFT_EXTRA_PT * 20.0d) - 2,
@@ -2136,7 +2151,7 @@ class VectorWmfFormulaRendererTest {
 
     private static boolean hasLiftedTallRootTurn(Polyline line) {
         int topIndex = line.pointCount() - 2;
-        int midIndex = topIndex - 1;
+        int midIndex = line.pointCount() >= 7 ? topIndex - 2 : topIndex - 1;
         int rootHeightTwips = line.y(midIndex) - line.y(topIndex)
             + (int) Math.round(MathTypeStructureMetrics.SQRT_TALL_BOTTOM_PAD_PT * 20.0d);
         int oldTurnY = line.y(topIndex) + rootHeightTwips
@@ -2170,7 +2185,9 @@ class VectorWmfFormulaRendererTest {
     }
 
     private static boolean isMainRadicalPolyline(Polyline line) {
-        return line.pointCount() >= 6 || line.pointCount() == 4;
+        return line.pointCount() == 4 || (line.pointCount() >= 6
+            && line.y(line.pointCount() - 1) == line.y(line.pointCount() - 2)
+            && line.x2() - line.x(line.pointCount() - 2) > 40);
     }
 
     private static int radicalTopY(Polyline line) {
