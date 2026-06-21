@@ -3300,3 +3300,25 @@ batch, then append any useful lesson or pitfall found in that round.
   left leg and the fraction body still crowd together; the next useful step is
   a real nested-radical body/scale model or a richer radical stroke than a
   single WMF polyline.
+- v204 adds a metric-level clearance for compact fraction bodies inside nested
+  radicals only: `SQRT_NESTED_BODY_FRACTION_LEFT_EXTRA_PT = 0.85pt`. The guard
+  is `compactBodyFraction && sqrtDepth > 0`, so standalone compact roots such
+  as case18 `\sqrt{\frac{l}{g}}` keep their previous slot while case12's inner
+  `\sqrt{\frac{a}{b}}` gets a wider gap between the radical top turn and the
+  fraction bar/body. Cache key: `v204-pad-nested-sqrt-fraction`.
+- v204 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-013417.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v204.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v204/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v204 glyph evidence shows the change is scoped: case12 `a/b` moves from
+  about `19.05pt` to `19.9pt`, while case18 `l/g` stays at about
+  `35.9/34.8pt`. Visual zoom says this is only a local readability
+  improvement, not a final pass: the inner radical still looks too straight and
+  mechanical. The next round should replace the radical stroke model with a
+  richer multi-segment/curved-looking WMF polyline profile rather than adding
+  more padding.

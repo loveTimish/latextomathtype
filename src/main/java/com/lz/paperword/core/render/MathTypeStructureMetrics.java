@@ -71,6 +71,7 @@ final class MathTypeStructureMetrics {
     static final double SQRT_NESTED_BODY_FRACTION_SCALE = 0.90d;
     static final double SQRT_BODY_FRACTION_LEFT_ADJUST_PT = -2.4d;
     static final double SQRT_BODY_FRACTION_TOP_PAD_PT = 2.4d;
+    static final double SQRT_NESTED_BODY_FRACTION_LEFT_EXTRA_PT = 0.85d;
 
     static final double SCRIPT_CANDIDATE_HEIGHT_PT = 18.75d;
     static final double ORDINARY_FRACTION_CANDIDATE_HEIGHT_PT = 30.75d;

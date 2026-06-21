@@ -157,6 +157,10 @@ class VectorWmfFormulaRendererTest {
             "widened nested sqrt-body fraction bars should not protrude left of the inner radical top turn");
         assertTrue(innerNestedRoot.x2() >= nestedFractionBar.x2(),
             "widened nested sqrt-body fractions must keep the inner radical top bar covering the fraction bar");
+        int nestedFractionGap = nestedFractionBar.x1() - radicalTopX(innerNestedRoot);
+        assertTrue(nestedFractionGap >= fractionGap
+                + Math.round(MathTypeStructureMetrics.SQRT_NESTED_BODY_FRACTION_LEFT_EXTRA_PT * 20.0d) - 2,
+            "nested sqrt-body fractions should get dedicated inner clearance from the radical turn");
         assertTrue(textFontHeightTwips(mixedBodyFraction, "a") >= 220,
             "mixed root bodies such as 1+frac must not receive the pure-body fraction shrink");
         assertEquals((int) (MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d),
