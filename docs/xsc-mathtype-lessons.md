@@ -2891,3 +2891,19 @@ batch, then append any useful lesson or pitfall found in that round.
   `sqrt_fraction`. Add tests for estimate height, calibrated height, and
   `classifyStructureFamily(...)` so this exact deep-nested-with-fraction case
   cannot regress silently.
+- v188 targets a different `sqrt_fraction` failure: mixed linear/root formulas
+  such as `T=2\pi\sqrt{\frac{l}{g}}` were using the same narrow
+  `SQRT_FRACTION_PREVIEW_WIDTH_SCALE` as pure roots. The golden metrics showed
+  case 18 at only `38.25pt` wide against the TSV's `86pt` reference width,
+  while pure case 9/10 should not be widened. Use a separate
+  `SQRT_FRACTION_MIXED_PREVIEW_WIDTH_SCALE` only when the formula is not a
+  top-level fraction and has visible top-level text outside the `\sqrt{...}`
+  group.
+- v188 validation after this width split: case 18 grew from `38.25pt` to
+  `49.77pt` shape width and record width from `33.05pt` to `43.15pt`, while
+  case 9 stayed `28.68pt` and case 10 stayed `47.81pt`. Structural gates still
+  reported `23` valid MathType OLE objects, `23` vector WMFs, zero LaTeX leaks,
+  zero bitmap/StretchDIB WMFs, and zero suspicious-review-required WMF text.
+  Word PNG page 3 shows case 18 less horizontally cramped, but the internal
+  `l/g` fraction under the root is still not MathType-quality. Continue with a
+  root-body fraction layout pass; do not call v188 final visual acceptance.

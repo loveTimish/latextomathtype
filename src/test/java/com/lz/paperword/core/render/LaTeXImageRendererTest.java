@@ -289,6 +289,12 @@ class LaTeXImageRendererTest {
             40.0d * 0.96d * MathTypeStructureMetrics.SQRT_SCRIPT_PREVIEW_WIDTH_SCALE);
         assertCalibratedWidth(renderer, estimate, calibrate, "\\sqrt{1+\\frac{a}{b}}", 40.0d,
             40.0d * 0.96d * MathTypeStructureMetrics.SQRT_FRACTION_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "T=2\\pi\\sqrt{\\frac{l}{g}}", 40.0d,
+            40.0d * 0.96d * MathTypeStructureMetrics.SQRT_FRACTION_MIXED_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "\\frac{\\sqrt{a^{2}+b^{2}}}{2}", 40.0d,
+            40.0d * 0.96d * MathTypeStructureMetrics.SQRT_FRACTION_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "\\sqrt{x}+\\sqrt{\\frac{a}{b}}", 40.0d,
+            40.0d * 0.96d * MathTypeStructureMetrics.SQRT_FRACTION_PREVIEW_WIDTH_SCALE);
     }
 
     private static void assertCalibratedHeight(LaTeXImageRenderer renderer, Method estimate, Method calibrate,

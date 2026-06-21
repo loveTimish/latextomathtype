@@ -66,6 +66,7 @@ final class MathTypeStructureMetrics {
     static final double SQRT_PREVIEW_WIDTH_SCALE = 1.18d;
     static final double SQRT_SCRIPT_PREVIEW_WIDTH_SCALE = 0.96d;
     static final double SQRT_FRACTION_PREVIEW_WIDTH_SCALE = 0.83d;
+    static final double SQRT_FRACTION_MIXED_PREVIEW_WIDTH_SCALE = 1.08d;
 
     static final double SCRIPT_CANDIDATE_HEIGHT_PT = 18.75d;
     static final double ORDINARY_FRACTION_CANDIDATE_HEIGHT_PT = 30.75d;

@@ -80,7 +80,7 @@ public class LaTeXImageRenderer {
     /** 系统属性：WMF 文本宽度校准。 */
     private static final String WMF_TEXT_WIDTH_SCALE_PROP = "paperword.wmf.textWidth.scale";
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v187-deep-nested-root-family";
+    private static final String CACHE_VERSION = "v188-mixed-sqrt-fraction-width";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(
@@ -700,7 +700,9 @@ public class LaTeXImageRenderer {
             case SQRT -> hasScript(latex)
                 ? MathTypeStructureMetrics.SQRT_SCRIPT_PREVIEW_WIDTH_SCALE
                 : MathTypeStructureMetrics.SQRT_PREVIEW_WIDTH_SCALE;
-            case SQRT_FRACTION -> MathTypeStructureMetrics.SQRT_FRACTION_PREVIEW_WIDTH_SCALE;
+            case SQRT_FRACTION -> !hasTopLevelFraction(latex) && hasTopLevelTextOutsideSqrt(latex)
+                ? MathTypeStructureMetrics.SQRT_FRACTION_MIXED_PREVIEW_WIDTH_SCALE
+                : MathTypeStructureMetrics.SQRT_FRACTION_PREVIEW_WIDTH_SCALE;
             default -> switch (previewClass) {
             case "array" -> 0.91d;
             case "textFraction", "text_fraction" -> 1.0d;
@@ -724,6 +726,36 @@ public class LaTeXImageRenderer {
             log.warn("Invalid numeric property {}={}, using {}", propertyName, configured, defaultValue);
             return defaultValue;
         }
+    }
+
+    private static boolean hasTopLevelTextOutsideSqrt(String latex) {
+        if (latex == null || latex.isBlank()) {
+            return false;
+        }
+        StringBuilder outside = new StringBuilder();
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int start = latex.indexOf("\\sqrt", cursor);
+            if (start < 0) {
+                outside.append(latex.substring(cursor));
+                break;
+            }
+            outside.append(latex, cursor, start);
+            int groupStart = skipWhitespace(latex, start + "\\sqrt".length());
+            if (groupStart >= latex.length() || latex.charAt(groupStart) != '{') {
+                cursor = start + "\\sqrt".length();
+                continue;
+            }
+            int groupEnd = matchingBrace(latex, groupStart);
+            if (groupEnd < 0) {
+                break;
+            }
+            cursor = groupEnd + 1;
+        }
+        String normalized = normalizeTextForLength(outside.toString())
+            .replaceAll("\\\\(?:left|right|displaystyle|textstyle|scriptstyle|scriptscriptstyle)\\b\\s*\\.?", "")
+            .replaceAll("[\\s{}\\[\\]()（）,，.。:：;；]", "");
+        return normalized.codePoints().anyMatch(Character::isLetterOrDigit);
     }
 
     private static boolean hasArrayLikeEnvironment(String latex) {
