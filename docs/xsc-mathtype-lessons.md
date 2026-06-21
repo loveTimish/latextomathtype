@@ -3034,3 +3034,29 @@ batch, then append any useful lesson or pitfall found in that round.
   padding. It flagged the first pad guard as too weak, so the test now also
   pins the fraction-bar gap after the radical top turn to a narrow positive
   `8..18` twip range.
+- v194 introduces a tall-root-only checkmark midpoint:
+  `SQRT_TALL_CHECK_MID_X_PT = 1.4`, while ordinary roots keep
+  `SQRT_CHECK_MID_X_PT = 2.0` and tall roots keep
+  `SQRT_TALL_CHECK_TOP_X_PT = 4.0`. This targets the visual complaint that tall
+  radical rising strokes looked too vertical, without reopening ordinary-root
+  spacing or the v191/v193 left-protrusion guards.
+- v194 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260621-233201.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v194.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v194/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v194 does not move text glyphs; glyph metrics for case 12/13/18 stay at the
+  v193 positions. Word page 2/3 show no structural regression and the tall-root
+  rising stroke is slightly less vertical, but the radical is still a straight
+  polyline with a mechanical look. A future root-shape pass should consider a
+  richer multi-segment or curve-approximated radical stroke rather than only
+  moving the existing four points.
+- v194 no-context review found no blocking risk and confirmed that the
+  tall-root-only midpoint is better scoped than changing the global
+  `SQRT_CHECK_MID_X_PT`. It also noted a future cleanup: the tall-root threshold
+  `SQRT_HEIGHT_PT + 4.0` is duplicated between layout and
+  `sqrtBottomPadPt(...)`, so extract it before larger radical-shape changes.

@@ -175,7 +175,7 @@ class VectorWmfFormulaRendererTest {
         Polyline root = lines.get(0);
         Polyline tallRoot = fractionLines.stream()
             .filter(line -> line.pointCount() == 4)
-            .findFirst()
+            .max((left, right) -> Integer.compare(left.y(1), right.y(1)))
             .orElseThrow();
         Polyline scaledFractionRoot = rootInFractionLines.stream()
             .filter(line -> line.pointCount() == 4)
@@ -195,10 +195,17 @@ class VectorWmfFormulaRendererTest {
         assertTrue(Math.abs(((double) midX / (double) topX) - expectedMidRatio) <= 0.05d,
             "sqrt checkmark x ratio should stay metric-driven");
         int tallTopX = tallRoot.x(2) - tallRoot.x1();
+        int tallMidX = tallRoot.x(1) - tallRoot.x1();
         double expectedTallTopRatio = MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT
             / MathTypeStructureMetrics.SQRT_CHECK_TOP_X_PT;
         assertTrue(Math.abs(((double) tallTopX / (double) topX) - expectedTallTopRatio) <= 0.08d,
             "tall sqrt checkmark top turn should be narrower than the ordinary sqrt turn");
+        double expectedTallMidRatio = MathTypeStructureMetrics.SQRT_TALL_CHECK_MID_X_PT
+            / MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT;
+        assertTrue(Math.abs(((double) tallMidX / (double) tallTopX) - expectedTallMidRatio) <= 0.08d,
+            "tall sqrt checkmark midpoint should stay metric-driven after WMF scaling");
+        assertTrue(((double) tallMidX / (double) tallTopX) < ((double) midX / (double) topX),
+            "tall sqrt checkmark midpoint should open the rising stroke instead of drawing an almost vertical leg");
         assertTrue(minTextXCoordinate(fractionRoot) - tallRoot.x1()
             >= tallTopX,
             "tall sqrt bodies should remain to the right of the narrowed radical top turn");
