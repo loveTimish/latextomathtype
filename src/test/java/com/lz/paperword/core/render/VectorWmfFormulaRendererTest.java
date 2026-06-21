@@ -203,6 +203,12 @@ class VectorWmfFormulaRendererTest {
                 MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
             "nested fraction root top bars should have visible vertical separation");
         assertEquals(2, nestedFractionLines.stream().filter(VectorWmfFormulaRendererTest::isRadicalPolyline).count());
+        List<Polyline> nestedFractionRadicals = sortedRadicals(nestedFractionLines);
+        int nestedFractionHorizontalGap = radicalTopX(nestedFractionRadicals.get(1))
+            - radicalTopX(nestedFractionRadicals.get(0));
+        assertTrue(nestedFractionHorizontalGap >= Math.round((MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT
+                + MathTypeStructureMetrics.SQRT_NESTED_BODY_LEFT_EXTRA_PT) * 20.0d) - 2,
+            "nested fraction roots should use the same dedicated horizontal breathing room as simple nested roots");
         Polyline root = lines.get(0);
         Polyline tallRoot = fractionLines.stream()
             .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)

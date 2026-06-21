@@ -3260,3 +3260,22 @@ batch, then append any useful lesson or pitfall found in that round.
   width. This is a real local improvement, but not a goal-level finish:
   case12 and case18 still look hard because the radical stroke/body placement
   model is too straight and cramped.
+- v202 increases `SQRT_NESTED_BODY_LEFT_EXTRA_PT` from `1.2pt` to `2.2pt` and
+  bumps the cache key to `v202-nested-sqrt-body-gap`. This is deliberately
+  scoped to bodies that structurally contain another sqrt, so ordinary roots
+  and compact `\sqrt{\frac{l}{g}}` keep their previous placement.
+- v202 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-011741.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v202.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v202/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v202 glyph evidence: nested root bodies moved right without touching case18.
+  Case11 `1+` moved from about `8.1pt` to `8.7pt`, case12 `1+` from about
+  `7.75pt` to `8.35pt`, and case13 `x/y/z` moved right by about `0.35-0.85pt`;
+  case18 `l/g` stayed at about `35.9/34.8pt`. Visual zoom shows a small spacing
+  improvement but not a finished MathType look: the radical stroke itself is
+  still too straight and the inner nested root still reads too vertical.
