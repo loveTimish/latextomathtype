@@ -3624,3 +3624,32 @@ batch, then append any useful lesson or pitfall found in that round.
   bars remain thin. Remaining gap: the root shape is still angular because the
   polyline geometry is angular; multi-pen helps weight, but MathType-like roots
   still need a better radical geometry model, not global pen changes.
+- v218 adds a metric-driven upper transition point only to the compact
+  whole-body sqrt-fraction main radical. The new point is between the mid leg
+  and shoulder (`SQRT_TALL_COMPACT_CHECK_UPPER_TRANSITION_X_PT = 2.24pt`,
+  `SQRT_TALL_COMPACT_CHECK_UPPER_TRANSITION_Y_RATIO = 0.61`) and does not move
+  `bodyX`, `topBarEnd`, fraction bars, text metrics, ordinary sqrt paths, or
+  local overlay profiles. Cache key:
+  `v218-compact-sqrt-upper-transition`.
+- v218 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-033509.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v218.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v218/page-*.png`. Structural
+  reports were saved as `scan-v218.json`, `wmf-v218.json`,
+  `glyph-v218.json`, and `glyph-v218.txt`. The clean structural counts stayed:
+  `23` MathType OLE objects, `23` WMF previews, zero visible LaTeX leaks, zero
+  invalid MathType OLE, zero bitmap/StretchDIB WMFs, and zero review-required
+  suspicious WMF text.
+- v218 evidence: renderer tests and golden corpus tests pass, and glyph metrics
+  stayed stable (`case12 a/b x=19.9pt/right=22.9pt`, `case18 l x=35.9pt`,
+  `g x=34.8pt/right=39.65pt`). Word crops `case12-v218-zoom.png`,
+  `case18-v218-wide.png`, `case15-v218-text-mixed.png`, and
+  `page2-v218-root-overview.png` show the compact outer root is a small
+  improvement and text-mixed fractions remain intact. This is not a full visual
+  pass: `page2-v218-root-overview.png` still shows case10 with a visible
+  split/extra fraction-rule segment around the denominator, and nested inner
+  roots still have a mechanical sharp check. Next work should target fraction
+  rule ownership/continuity and root line cap/shoulder geometry, not more global
+  scaling.

@@ -3728,6 +3728,9 @@ final class VectorWmfFormulaRenderer {
                 double lowerTransitionX = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_X_PT;
                 double lowerTransitionYRatio =
                     MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_Y_RATIO;
+                double upperTransitionX = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_UPPER_TRANSITION_X_PT;
+                double upperTransitionYRatio =
+                    MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_UPPER_TRANSITION_Y_RATIO;
                 double topLeadX = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_LEAD_X_PT;
                 double topLeadYRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_LEAD_Y_RATIO;
                 if (compactBodyFraction) {
@@ -3767,6 +3770,8 @@ final class VectorWmfFormulaRenderer {
                         rootHeight * lowerTransitionYRatio,
                         rootX + checkMidX,
                         rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
+                        rootX + upperTransitionX,
+                        rootHeight * upperTransitionYRatio,
                         rootX + shoulderX,
                         rootHeight * shoulderYRatio,
                         rootX + topLeadX,

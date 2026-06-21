@@ -165,7 +165,8 @@ class VectorWmfFormulaRendererTest {
         int compactTopIndex = radical.pointCount() - 2;
         int compactTopLeadIndex = compactTopIndex - 1;
         int compactShoulderIndex = compactTopLeadIndex - 1;
-        int compactMidIndex = compactShoulderIndex - 1;
+        int compactUpperTransitionIndex = compactShoulderIndex - 1;
+        int compactMidIndex = compactUpperTransitionIndex - 1;
         int compactLowerTransitionIndex = compactMidIndex - 1;
         Polyline shadow = lines.stream()
             .filter(line -> line.x1() > radical.x1() && line.pointCount() == 3)
@@ -234,6 +235,22 @@ class VectorWmfFormulaRendererTest {
             "compact lower transition point should stay between the low point and mid point");
         assertTrue(radical.y(2) < radical.y(1) && radical.y(2) < radical.y(3),
             "compact lower transition point should soften the lower leg inside the existing bbox");
+        double upperTransitionRatio = (double) (radical.x(compactUpperTransitionIndex) - radical.x1())
+            / (double) (radical.x(compactTopIndex) - radical.x1());
+        double expectedUpperTransitionRatio =
+            MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_UPPER_TRANSITION_X_PT
+                / MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_X_PT;
+        assertTrue(Math.abs(upperTransitionRatio - expectedUpperTransitionRatio) <= 0.06d,
+            "compact tall radicals should use a metric-driven upper transition point");
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
+            * MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_UPPER_TRANSITION_Y_RATIO,
+            radical.y(compactUpperTransitionIndex));
+        assertTrue(radical.x(compactMidIndex) < radical.x(compactUpperTransitionIndex)
+                && radical.x(compactUpperTransitionIndex) < radical.x(compactShoulderIndex),
+            "compact upper transition point should stay between the mid leg and shoulder");
+        assertTrue(radical.y(compactUpperTransitionIndex) < radical.y(compactMidIndex)
+                && radical.y(compactUpperTransitionIndex) > radical.y(compactShoulderIndex),
+            "compact upper transition point should soften the rise without changing the top edge");
         double compactShoulderRatio = (double) (radical.x(compactShoulderIndex) - radical.x1())
             / (double) (radical.x(compactTopIndex) - radical.x1());
         double expectedCompactShoulderRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_X_PT

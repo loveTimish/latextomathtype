@@ -112,9 +112,11 @@ final class MathTypeStructureMetrics {
     static final double SQRT_TALL_COMPACT_CHECK_TOP_LEAD_X_PT = 3.55d;
     static final double SQRT_TALL_COMPACT_CHECK_MID_X_PT = 1.7d;
     static final double SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_X_PT = 1.48d;
+    static final double SQRT_TALL_COMPACT_CHECK_UPPER_TRANSITION_X_PT = 2.24d;
     static final double SQRT_TALL_CHECK_LOW_Y_RATIO = 0.80d;
     static final double SQRT_TALL_COMPACT_CHECK_LOW_Y_RATIO = 0.76d;
     static final double SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_Y_RATIO = 0.68d;
+    static final double SQRT_TALL_COMPACT_CHECK_UPPER_TRANSITION_Y_RATIO = 0.61d;
     static final double SQRT_TALL_CHECK_SHOULDER_Y_RATIO = 0.50d;
     static final double SQRT_TALL_COMPACT_CHECK_SHOULDER_Y_RATIO = 0.46d;
     static final double SQRT_TALL_COMPACT_CHECK_TOP_LEAD_Y_RATIO = 0.19d;
