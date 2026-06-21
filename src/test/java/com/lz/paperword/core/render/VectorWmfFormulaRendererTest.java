@@ -377,7 +377,7 @@ class VectorWmfFormulaRendererTest {
             .filter(VectorWmfFormulaRendererTest::isMainRadicalPolyline)
             .toList();
         assertEquals(4, root.pointCount());
-        assertTrue(tallRoot.pointCount() > 4,
+        assertEquals(8, tallRoot.pointCount(),
             "tall sqrt radicals should use a richer multi-segment stroke");
         int rootX = root.x1();
         assertCloseTwips(MathTypeStructureMetrics.SQRT_HEIGHT_PT
@@ -389,10 +389,14 @@ class VectorWmfFormulaRendererTest {
         assertTrue(Math.abs(((double) midX / (double) topX) - expectedMidRatio) <= 0.05d,
             "sqrt checkmark x ratio should stay metric-driven");
         int tallTopIndex = tallRoot.pointCount() - 2;
-        int tallShoulderIndex = tallTopIndex - 1;
-        int tallMidIndex = tallShoulderIndex - 1;
+        int tallTopLeadIndex = tallTopIndex - 1;
+        int tallShoulderIndex = tallTopLeadIndex - 1;
+        int tallUpperTransitionIndex = tallShoulderIndex - 1;
+        int tallMidIndex = tallUpperTransitionIndex - 1;
         int tallTopX = tallRoot.x(tallTopIndex) - tallRoot.x1();
+        int tallTopLeadX = tallRoot.x(tallTopLeadIndex) - tallRoot.x1();
         int tallShoulderX = tallRoot.x(tallShoulderIndex) - tallRoot.x1();
+        int tallUpperTransitionX = tallRoot.x(tallUpperTransitionIndex) - tallRoot.x1();
         int tallMidX = tallRoot.x(tallMidIndex) - tallRoot.x1();
         int tallLowX = tallRoot.x(1) - tallRoot.x1();
         double expectedTallTopRatio = MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT
@@ -409,11 +413,30 @@ class VectorWmfFormulaRendererTest {
             / MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT;
         assertTrue(Math.abs(((double) tallShoulderX / (double) tallTopX) - expectedTallShoulderRatio) <= 0.08d,
             "tall sqrt shoulder should stay metric-driven after WMF scaling");
+        double expectedTallUpperTransitionRatio =
+            MathTypeStructureMetrics.SQRT_TALL_CHECK_UPPER_TRANSITION_X_PT
+                / MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT;
+        assertTrue(Math.abs(((double) tallUpperTransitionX / (double) tallTopX)
+                - expectedTallUpperTransitionRatio) <= 0.08d,
+            "tall sqrt upper transition should stay metric-driven after WMF scaling");
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
+            * MathTypeStructureMetrics.SQRT_TALL_CHECK_UPPER_TRANSITION_Y_RATIO,
+            tallRoot.y(tallUpperTransitionIndex));
+        double expectedTallTopLeadRatio = MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_LEAD_X_PT
+            / MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT;
+        assertTrue(Math.abs(((double) tallTopLeadX / (double) tallTopX) - expectedTallTopLeadRatio) <= 0.08d,
+            "tall sqrt top lead should stay metric-driven after WMF scaling");
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
+            * MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_LEAD_Y_RATIO, tallRoot.y(tallTopLeadIndex));
         assertTrue(tallLowX < tallMidX && tallRoot.y(1) > tallRoot.y(tallMidIndex),
             "tall sqrt should add a low shoulder before the rising stroke");
-        assertTrue(tallMidX < tallShoulderX && tallShoulderX < tallTopX
+        assertTrue(tallMidX < tallUpperTransitionX && tallUpperTransitionX < tallShoulderX
+                && tallShoulderX < tallTopLeadX && tallTopLeadX < tallTopX
                 && tallRoot.y(tallMidIndex) > tallRoot.y(tallShoulderIndex)
-                && tallRoot.y(tallShoulderIndex) > tallRoot.y(tallTopIndex),
+                && tallRoot.y(tallMidIndex) > tallRoot.y(tallUpperTransitionIndex)
+                && tallRoot.y(tallUpperTransitionIndex) > tallRoot.y(tallShoulderIndex)
+                && tallRoot.y(tallShoulderIndex) > tallRoot.y(tallTopLeadIndex)
+                && tallRoot.y(tallTopLeadIndex) > tallRoot.y(tallTopIndex),
             "tall sqrt should add a middle shoulder that smooths the rising stroke before the top turn");
         assertTrue(((double) tallShoulderX / (double) tallTopX) >= expectedTallShoulderRatio - 0.08d,
             "tall sqrt shoulder should stay open near the top turn instead of collapsing into a vertical stroke");

@@ -3682,3 +3682,34 @@ batch, then append any useful lesson or pitfall found in that round.
   fractions still look mechanically angular; next work should focus on root
   cap/shoulder geometry and, if needed, splitting root-in-fraction vertical
   slots from sqrt-body-fraction slots to avoid future shared-constant coupling.
+- v220 extends the ordinary tall-root main stroke from `low -> mid -> shoulder
+  -> top` to `low -> mid -> upperTransition -> shoulder -> topLead -> top`,
+  using ordinary metrics
+  (`SQRT_TALL_CHECK_UPPER_TRANSITION_X_PT = 2.45pt`,
+  `SQRT_TALL_CHECK_UPPER_TRANSITION_Y_RATIO = 0.61`,
+  `SQRT_TALL_CHECK_TOP_LEAD_X_PT = 4.05pt`,
+  `SQRT_TALL_CHECK_TOP_LEAD_Y_RATIO = 0.24`). Compact whole-body
+  sqrt-fraction hook/shadow/upperProfile logic was not changed. Cache key:
+  `v220-ordinary-tall-sqrt-top-lead`.
+- v220 tests now require the ordinary tall root main stroke to have exactly
+  `8` points and assert that upperTransition/topLead positions are
+  metric-driven, x-monotonic, and y-monotonic toward the top rule. This catches
+  regressions where a future edit accidentally treats the topLead as the
+  shoulder or collapses the middle rise back into one hard segment.
+- v220 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-035138.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v220.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v220/page-*.png`. Structural
+  reports were saved as `scan-v220.json`, `wmf-v220.json`, `glyph-v220.json`,
+  and `glyph-v220.txt`; the clean counts stayed `23` MathType OLE objects,
+  `23` WMF previews, zero visible LaTeX leaks, zero invalid MathType OLE, and
+  zero bitmap/StretchDIB WMFs.
+- v220 visual evidence: `page2-v220-root-overview.png` keeps the v219 case10
+  continuous fraction rule and does not regress case12. `case15-v220-text-mixed.png`
+  stays intact. `case13-v220-tall-nested.png` shows the ordinary tall root is
+  structurally safer but still visibly mechanical and crowded around nested
+  root bodies. The next useful work should target nested-root body clearance and
+  a more MathType-like radical stroke model rather than only adding more
+  polyline points.

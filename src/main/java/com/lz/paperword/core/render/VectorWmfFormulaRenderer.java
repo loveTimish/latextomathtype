@@ -3725,6 +3725,12 @@ final class VectorWmfFormulaRenderer {
                 double lowYRatio = compactBodyFraction
                     ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_LOW_Y_RATIO
                     : MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO;
+                double ordinaryTopLeadX = MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_LEAD_X_PT;
+                double ordinaryTopLeadYRatio = MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_LEAD_Y_RATIO;
+                double ordinaryUpperTransitionX =
+                    MathTypeStructureMetrics.SQRT_TALL_CHECK_UPPER_TRANSITION_X_PT;
+                double ordinaryUpperTransitionYRatio =
+                    MathTypeStructureMetrics.SQRT_TALL_CHECK_UPPER_TRANSITION_Y_RATIO;
                 double lowerTransitionX = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_X_PT;
                 double lowerTransitionYRatio =
                     MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_Y_RATIO;
@@ -3786,8 +3792,12 @@ final class VectorWmfFormulaRenderer {
                         rootHeight * lowYRatio,
                         rootX + checkMidX,
                         rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
+                        rootX + ordinaryUpperTransitionX,
+                        rootHeight * ordinaryUpperTransitionYRatio,
                         rootX + shoulderX,
                         rootHeight * shoulderYRatio,
+                        rootX + ordinaryTopLeadX,
+                        rootHeight * ordinaryTopLeadYRatio,
                         rootX + checkTopX, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
                         topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
                     ));
