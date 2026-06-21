@@ -92,6 +92,46 @@ class VectorWmfFormulaRendererTest {
     }
 
     @Test
+    void sqrtBodyFractionsUseCompactSlotScaleOnlyWhenBodyIsWholeFraction() throws IOException {
+        byte[] simpleBodyFraction = VectorWmfFormulaRenderer.render("\\sqrt{\\frac{l}{g}}", 54.0d,
+            MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        byte[] mixedBodyFraction = VectorWmfFormulaRenderer.render("\\sqrt{1+\\frac{a}{b}}", 54.0d,
+            MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+
+        assertTrue(VectorWmfFormulaRenderer.isWholeSimpleFraction("\\frac{l}{g}"));
+        assertTrue(VectorWmfFormulaRenderer.isWholeSimpleFraction("{\\frac{l}{g}}"));
+        assertTrue(VectorWmfFormulaRenderer.isWholeSimpleFraction("\\frac{\\pi}{2}"));
+        assertFalse(VectorWmfFormulaRenderer.isWholeSimpleFraction("1+\\frac{a}{b}"));
+        assertFalse(VectorWmfFormulaRenderer.isWholeSimpleFraction("\\sqrt{\\frac{l}{g}}"));
+        assertFalse(VectorWmfFormulaRenderer.isWholeSimpleFraction("\\dfrac{l}{g}"));
+        assertFalse(VectorWmfFormulaRenderer.isWholeSimpleFraction("\\frac{1+\\frac{a}{b}}{2+\\frac{c}{d}}"));
+        assertFalse(VectorWmfFormulaRenderer.isWholeSimpleFraction("\\frac{\\sqrt{x}}{g}"));
+        assertFalse(VectorWmfFormulaRenderer.isWholeSimpleFraction("\\frac{\\text{速度}}{g}"));
+        assertTrue(maxTextYCoordinate(simpleBodyFraction) - minTextYCoordinate(simpleBodyFraction)
+                < maxTextYCoordinate(mixedBodyFraction) - minTextYCoordinate(mixedBodyFraction),
+            "a pure fraction body inside a radical should use a tighter vertical slot");
+        assertTrue(maxTextRightCoordinate(simpleBodyFraction) < maxTextRightCoordinate(mixedBodyFraction),
+            "a pure fraction body inside a radical should not keep full display fraction advance");
+        List<Polyline> lines = polylines(simpleBodyFraction);
+        Polyline radical = lines.stream()
+            .filter(line -> line.pointCount() == 4)
+            .findFirst()
+            .orElseThrow();
+        Polyline fractionBar = lines.stream()
+            .filter(line -> line.pointCount() == 2)
+            .findFirst()
+            .orElseThrow();
+        assertTrue(radical.x(2) <= fractionBar.x1(),
+            "scaled sqrt-body fractions should not protrude left of the radical top turn");
+        assertTrue(radical.x2() >= fractionBar.x2(),
+            "scaled sqrt-body fractions must keep the radical top bar covering the fraction bar");
+        assertTrue(textFontHeightTwips(mixedBodyFraction, "a") >= 220,
+            "mixed root bodies such as 1+frac must not receive the pure-body fraction shrink");
+        assertEquals((int) (MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d),
+            windowExtY(simpleBodyFraction));
+    }
+
+    @Test
     void sqrtRootShapeCoordinatesComeFromStructureMetrics() throws IOException {
         byte[] simpleRoot = VectorWmfFormulaRenderer.render("\\sqrt{2}", 28.0d,
             MathTypeStructureMetrics.SQRT_HEIGHT_PT);

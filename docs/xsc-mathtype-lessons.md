@@ -2907,3 +2907,27 @@ batch, then append any useful lesson or pitfall found in that round.
   Word PNG page 3 shows case 18 less horizontally cramped, but the internal
   `l/g` fraction under the root is still not MathType-quality. Continue with a
   root-body fraction layout pass; do not call v188 final visual acceptance.
+- v189 scopes the first root-body fraction pass to ordinary `\frac` whose
+  numerator and denominator are short simple atoms, then applies
+  `SQRT_BODY_FRACTION_SCALE = 0.78` only to that root body. Do not broaden this
+  to every whole fraction under a radical: no-context review caught that
+  `\sqrt{\frac{1+\frac{a}{b}}{2+\frac{c}{d}}}`, root-containing fractions,
+  text-heavy fractions, `\dfrac`, and `\cfrac` would otherwise inherit the same
+  shrink and risk undoing nested-fraction/text-fraction calibration.
+- v189 also adds a small root-body fraction geometry adjustment:
+  `SQRT_BODY_FRACTION_LEFT_ADJUST_PT = -0.8` and
+  `SQRT_BODY_FRACTION_TOP_PAD_PT = 2.4`. Keep tests for both right coverage and
+  left protrusion; an earlier `-1.2pt` left shift was review-risky because the
+  body could sit left of the radical top turn.
+- v189 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260621-222128.docx`
+  and `analysis/formula-golden-corpus/word-rendered-v189-final/page-*.png`.
+  The leak scanner reported `23` `Equation.DSMT4` OLE objects, `23` WMF media,
+  zero visible LaTeX leaks, and zero invalid MathType OLE. `wmf_record_report`
+  reported `23` vector-text/vector-content WMFs, zero `StretchDIB`, zero bitmap
+  records, zero WMF LaTeX leaks, and zero review-required suspicious text.
+  Glyph metrics kept case 18 at `49.77x35.25pt`, with the root-body `l/g`
+  baselines at about `7.15pt` and `18.10pt`, so the internal fraction is more
+  compact than v188. Word page 3 confirms it is more readable, but visual
+  acceptance is still not final: `T=2\pi` to root spacing remains too loose and
+  the radical left leg/proportion still does not match MathType quality.

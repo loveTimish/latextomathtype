@@ -998,6 +998,18 @@ final class VectorWmfFormulaRenderer {
         return bottom;
     }
 
+    private static double layoutRightExtentPt(FormulaLayout layout) {
+        double right = layout.widthPt();
+        for (PlacedText run : layout.runs()) {
+            right = Math.max(right, run.xPt()
+                + estimatedRunWidthPt(new TextRun(run.text(), run.cjk(), run.mathItalic())) * run.widthScale());
+        }
+        for (LineSegment line : layout.lines()) {
+            right = Math.max(right, line.maxXPt());
+        }
+        return right;
+    }
+
     private static boolean isGridLikeLatex(String latex) {
         return latex != null && (latex.contains("\\begin{array}") || latex.contains("\\begin{cases}"));
     }
@@ -3603,13 +3615,24 @@ final class VectorWmfFormulaRenderer {
             double bodyYOffset = MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT
                 + sqrtCommandDepthOutsideText(bodyText) * MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT;
             double rootX = x;
-            appendLayout(placed, lines, body, rootX + MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT,
-                bodyYOffset);
-            double topBarEnd = rootX + MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT + body.widthPt() + 0.55d;
-            double width = body.widthPt() + MathTypeStructureMetrics.SQRT_WIDTH_PAD_PT + 1.0d;
+            boolean compactBodyFraction = isWholeSimpleFraction(bodyText);
+            double bodyScale = compactBodyFraction ? MathTypeStructureMetrics.SQRT_BODY_FRACTION_SCALE : 1.0d;
+            double scaledBodyWidth = layoutRightExtentPt(body) * bodyScale;
+            double scaledBodyHeight = body.heightPt() * bodyScale;
+            double bodyX = rootX + MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT
+                + (compactBodyFraction ? MathTypeStructureMetrics.SQRT_BODY_FRACTION_LEFT_ADJUST_PT : 0.0d);
+            if (compactBodyFraction) {
+                appendScaledLayout(placed, lines, body, bodyScale,
+                    bodyX, bodyYOffset, false);
+            } else {
+                appendLayout(placed, lines, body, bodyX, bodyYOffset);
+            }
+            double topBarEnd = bodyX + scaledBodyWidth
+                + (compactBodyFraction ? MathTypeStructureMetrics.SQRT_BODY_FRACTION_TOP_PAD_PT : 0.55d);
+            double width = scaledBodyWidth + MathTypeStructureMetrics.SQRT_WIDTH_PAD_PT + 1.0d;
             double seededHeight = hasFractionCommand(text.substring(groupStart + 1, groupEnd))
                 ? MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT : MathTypeStructureMetrics.SQRT_HEIGHT_PT;
-            double rootHeight = Math.max(body.heightPt() + bodyYOffset + MathTypeStructureMetrics.SQRT_TOP_Y_PT,
+            double rootHeight = Math.max(scaledBodyHeight + bodyYOffset + MathTypeStructureMetrics.SQRT_TOP_Y_PT,
                 seededHeight);
             lines.add(LineSegment.polyline(
                 rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
@@ -3624,6 +3647,47 @@ final class VectorWmfFormulaRenderer {
             cursor = groupEnd + 1;
         }
         return sawSqrt && (!placed.isEmpty() || !lines.isEmpty()) ? new FormulaLayout(placed, lines, Math.max(x, 1.0d), height) : null;
+    }
+
+    static boolean isWholeSimpleFraction(String text) {
+        text = unwrapWholeGroup(text == null ? "" : text.trim());
+        int frac = nextFractionCommand(text, 0);
+        if (frac < 0 || skipWhitespaceForward(text, 0) != frac) {
+            return false;
+        }
+        if (!text.startsWith("\\frac", frac)) {
+            return false;
+        }
+        int numeratorStart = skipWhitespaceForward(text, fractionCommandEnd(text, frac));
+        if (numeratorStart >= text.length() || text.charAt(numeratorStart) != '{') {
+            return false;
+        }
+        int numeratorEnd = findGroupEnd(text, numeratorStart);
+        if (numeratorEnd < 0) {
+            return false;
+        }
+        int denominatorStart = skipWhitespaceForward(text, numeratorEnd + 1);
+        if (denominatorStart >= text.length() || text.charAt(denominatorStart) != '{') {
+            return false;
+        }
+        int denominatorEnd = findGroupEnd(text, denominatorStart);
+        return denominatorEnd >= 0 && skipWhitespaceForward(text, denominatorEnd + 1) == text.length()
+            && isSimpleSqrtFractionAtom(text.substring(numeratorStart + 1, numeratorEnd))
+            && isSimpleSqrtFractionAtom(text.substring(denominatorStart + 1, denominatorEnd));
+    }
+
+    private static boolean isSimpleSqrtFractionAtom(String text) {
+        String raw = text == null ? "" : text.trim();
+        if (raw.contains("\\text") || raw.contains("\\mathrm") || raw.contains("\\operatorname")) {
+            return false;
+        }
+        String normalized = normalizeFlatLatex(normalizeTextCommands(raw));
+        if (normalized.isBlank() || hasFractionCommand(normalized) || hasSqrtCommandOutsideText(normalized)
+            || normalized.contains("\\begin")) {
+            return false;
+        }
+        String plain = normalized.replaceAll("\\\\[A-Za-z]+", "x").replaceAll("[{}\\s]", "");
+        return plain.codePointCount(0, plain.length()) <= 3;
     }
 
     private static String unwrapWholeGroup(String text) {
@@ -4588,6 +4652,14 @@ final class VectorWmfFormulaRenderer {
         double maxYPt() {
             double max = pointsPt[1];
             for (int i = 3; i < pointsPt.length; i += 2) {
+                max = Math.max(max, pointsPt[i]);
+            }
+            return max;
+        }
+
+        double maxXPt() {
+            double max = pointsPt[0];
+            for (int i = 2; i < pointsPt.length; i += 2) {
                 max = Math.max(max, pointsPt[i]);
             }
             return max;
