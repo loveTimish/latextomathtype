@@ -3744,3 +3744,33 @@ batch, then append any useful lesson or pitfall found in that round.
   mechanically angular. The next useful pass should tune radical stroke profile
   and fraction/root local proportions, not continue widening the global nested
   body gap.
+- v222 opens only the compact sqrt-body-fraction radical profile: compact
+  shoulder x moved from `2.65pt` to `3.02pt`, compact topLead x from `3.55pt`
+  to `3.82pt`, and compact hook x shortened from `0.55pt` to `0.40pt`.
+  Cache key: `v222-compact-sqrt-profile-open`. Body scale, body left/top pads,
+  compact-fraction detection, ordinary tall-root metrics, and global shape
+  dimensions were intentionally not changed.
+- v222 process pitfall: an intermediate attempt moved
+  `SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_X_PT` from `1.48pt` to `1.58pt`.
+  `VectorWmfFormulaRendererTest` failed because the compact shadow profile no
+  longer stayed below the mid leg. Keep lower-transition changes separate and
+  verify shadow/profile ownership before using that metric for visual tuning.
+- v222 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-041304.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v222-final.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v222-final/page-*.png`.
+  Structural reports were saved as `scan-v222-final.json`,
+  `wmf-v222-final.json`, `glyph-v222-final.json`, and
+  `glyph-v222-final.txt`; clean counts stayed `23` MathType OLE objects,
+  `23` WMF previews, zero visible LaTeX leaks, zero invalid MathType OLE, and
+  zero bitmap/StretchDIB WMFs.
+- v222 visual status: `case12-v222-final-zoom.png` shows a slightly more open
+  compact radical shoulder/topLead while the glyph run positions and shape
+  dimensions stay unchanged. `page2-v222-final-root-overview.png` keeps the
+  case10 fraction rule continuous, and `case15-v222-final-text-mixed.png`
+  keeps text-heavy fractions intact. This is still a small profile improvement,
+  not final acceptance: compact sqrt-fractions remain too narrow/tall, and
+  deep nested roots still need a stronger root-stroke model or local
+  proportion calibration.
