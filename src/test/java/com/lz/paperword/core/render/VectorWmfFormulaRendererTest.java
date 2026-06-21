@@ -120,6 +120,8 @@ class VectorWmfFormulaRendererTest {
             "pure fraction bodies nested inside another radical should use a more readable nested scale");
         assertTrue(maxTextRightCoordinate(nestedBodyFraction) > maxTextRightCoordinate(simpleBodyFraction),
             "nested sqrt-body fractions should widen relative to standalone compact sqrt-body fractions");
+        assertTrue(maxTextRightCoordinate(nestedBodyFraction) >= 22.8d * 20.0d,
+            "nested sqrt-body fraction stroke overhangs must not shrink the inner a/b glyph slot");
         List<Polyline> lines = polylines(simpleBodyFraction);
         Polyline radical = lines.stream()
             .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)

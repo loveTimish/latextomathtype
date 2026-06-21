@@ -3394,3 +3394,19 @@ batch, then append any useful lesson or pitfall found in that round.
   blob. Remaining gap: case12 still looks cramped and the radical/top-bar joint
   is still too angular. Next useful work should focus on top-turn geometry and
   nested radical/body scale, not global line width.
+- v208 candidate was rejected, not shipped as a renderer change. Extending the
+  inner radical top bar for `\sqrt{1+\sqrt{\frac{a}{b}}}` by `0.85pt`, then
+  even by `0.35pt`, looked like a harmless coverage tweak but still changed the
+  WMF/vector right bbox enough for Word preview scaling to shrink case12 glyphs:
+  case12 `a/b` moved from the v207 `19.9pt` area to about `19.5pt`, and `1+`
+  moved from about `8.2pt` to `8.1pt`. Removing the extra width from layout was
+  not enough because the stroke endpoint itself still participates in the
+  rendered bbox.
+- The committed v208 lesson is a guard, not a geometry bump: keep the cache key
+  at `v207-compact-sqrt-shadow-stroke`, remove the top-overhang constant, and
+  add a regression assertion that nested sqrt-body fraction text right edge
+  stays at least `22.8pt`. This prevents future "make the top bar longer"
+  tweaks from silently paying for coverage by shrinking the inner glyph slot.
+  Future root work should change stroke profile inside the existing bbox, or
+  explicitly grow the physical shape and accept the size change with Word PNG
+  evidence.
