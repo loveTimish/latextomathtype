@@ -89,6 +89,26 @@ class VectorWmfFormulaRendererTest {
             "fractions containing roots should not keep the ordinary 28pt fraction geometry");
         assertTrue(maxTextYCoordinate(rootInFraction) <= MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d);
         assertTrue(maxPolylineYCoordinate(rootInFraction) <= MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d);
+        List<Polyline> rootInFractionLines = polylines(rootInFraction);
+        assertEquals(1, rootInFractionLines.stream().filter(line -> line.pointCount() == 2).count(),
+            "root-in-fraction should draw a single fraction rule, not side dashes");
+        Polyline rootInFractionRadical = rootInFractionLines.stream()
+            .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
+            .findFirst()
+            .orElseThrow();
+        Polyline rootInFractionBar = polylines(rootInFraction).stream()
+            .filter(line -> line.pointCount() == 2)
+            .filter(line -> line.x2() - line.x1() > 400)
+            .findFirst()
+            .orElseThrow();
+        assertEquals(13, selectedObjectForPolyline(rootInFraction, rootInFractionRadical),
+            "root-in-fraction radical should keep the dedicated root pen");
+        assertEquals(12, selectedObjectForPolyline(rootInFraction, rootInFractionBar),
+            "root-in-fraction rule should keep the ordinary structure pen");
+        int denominatorBaseline = maxTextYCoordinateBetween(rootInFraction,
+            rootInFractionBar.x1(), rootInFractionBar.x2());
+        assertTrue(denominatorBaseline - rootInFractionBar.y1() >= 180,
+            "sqrt-fraction denominator should sit visibly below the rule instead of splitting it");
         assertFalse(hasCompactRootProfile(simpleRoot),
             "ordinary sqrt roots should not receive the compact sqrt-fraction root profile");
         assertFalse(hasCompactRootProfile(fractionRoot),

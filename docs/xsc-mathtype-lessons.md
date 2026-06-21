@@ -3653,3 +3653,32 @@ batch, then append any useful lesson or pitfall found in that round.
   roots still have a mechanical sharp check. Next work should target fraction
   rule ownership/continuity and root line cap/shoulder geometry, not more global
   scaling.
+- v219 fixes the case10 root-in-fraction "side dash" appearance by treating it
+  as a vertical collision between the sqrt-fraction rule and denominator glyph,
+  not as extra WMF fraction-bar records. `addInsetFractionBar` still emits one
+  ordinary structure-pen rule; the denominator slot now has more clearance
+  (`SQRT_FRACTION_DENOMINATOR_Y_PT = SQRT_FRACTION_ABOVE_PT + 3.0pt`) and the
+  cache key is `v219-sqrt-fraction-denominator-clearance`.
+- v219 tests now assert the root-in-fraction case draws exactly one 2-point
+  fraction rule, that the radical uses root pen object `13`, the fraction rule
+  uses ordinary structure pen object `12`, and the denominator baseline is at
+  least `180` twips below the rule. This preserves the intended single-rule WMF
+  structure instead of hiding the symptom by deleting or splitting lines.
+- v219 validation regenerated final DOCX
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-034436.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v219-final.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v219-final/page-*.png`.
+  Structural reports were saved as `scan-v219-final.json`,
+  `wmf-v219-final.json`, `glyph-v219-final.json`, and
+  `glyph-v219-final.txt`; the clean counts stayed `23` MathType OLE objects,
+  `23` WMF previews, zero visible LaTeX leaks, zero invalid MathType OLE, and
+  zero bitmap/StretchDIB WMFs.
+- v219 visual evidence: `page2-v219-final-root-overview.png` shows case10's
+  fraction rule is continuous and no longer reads as two side dashes around the
+  denominator. `case15-v219-final-text-mixed.png` shows text-heavy mixed
+  fractions remain intact. Remaining gap: nested roots and compact sqrt-body
+  fractions still look mechanically angular; next work should focus on root
+  cap/shoulder geometry and, if needed, splitting root-in-fraction vertical
+  slots from sqrt-body-fraction slots to avoid future shared-constant coupling.

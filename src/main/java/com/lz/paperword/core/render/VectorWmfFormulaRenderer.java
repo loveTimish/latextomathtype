@@ -66,7 +66,7 @@ final class VectorWmfFormulaRenderer {
     private static final double SQRT_FRACTION_HEIGHT_PT = MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT;
     private static final double SQRT_FRACTION_NUMERATOR_Y_PT = 0.0d;
     private static final double SQRT_FRACTION_DENOMINATOR_Y_PT =
-        MathTypeStructureMetrics.SQRT_FRACTION_ABOVE_PT + 1.0d;
+        MathTypeStructureMetrics.SQRT_FRACTION_ABOVE_PT + 3.0d;
     private static final double SQRT_FRACTION_BAR_Y_PT = MathTypeStructureMetrics.SQRT_FRACTION_ABOVE_PT;
     private static final double STANDARD_GLYPH_BASE_FONT_PT = MathTypeStructureMetrics.STANDARD_MAIN_FONT_PT;
     private static final double STANDARD_GLYPH_VISUAL_SCRIPT_RATIO =
