@@ -354,6 +354,8 @@ class VectorWmfFormulaRendererTest {
         assertTrue(nestedRootHorizontalGap >= Math.round((MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT
                 + MathTypeStructureMetrics.SQRT_NESTED_BODY_LEFT_EXTRA_PT) * 20.0d) - 2,
             "nested root bodies should include ordinary body pad plus dedicated horizontal breathing room");
+        assertTrue(nestedRootHorizontalGap > Math.round(MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT * 20.0d),
+            "nested root bodies should not sit at the ordinary sqrt body clearance");
         assertTrue(radicalTopGapTwips(nestedFractionLines) >= Math.round(
                 MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
             "nested fraction root top bars should have visible vertical separation");
@@ -364,6 +366,8 @@ class VectorWmfFormulaRendererTest {
         assertTrue(nestedFractionHorizontalGap >= Math.round((MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT
                 + MathTypeStructureMetrics.SQRT_NESTED_BODY_LEFT_EXTRA_PT) * 20.0d) - 2,
             "nested fraction roots should use the same dedicated horizontal breathing room as simple nested roots");
+        assertTrue(nestedFractionHorizontalGap > Math.round(MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT * 20.0d),
+            "nested fraction roots should not collapse to the ordinary sqrt body clearance");
         Polyline root = lines.get(0);
         Polyline tallRoot = fractionLines.stream()
             .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
@@ -525,10 +529,22 @@ class VectorWmfFormulaRendererTest {
         List<Polyline> radicals = sortedRadicals(lines);
         int outerToMiddleGap = radicalTopY(radicals.get(1)) - radicalTopY(radicals.get(0));
         int middleToInnerGap = radicalTopY(radicals.get(2)) - radicalTopY(radicals.get(1));
+        int expectedNestedHorizontalGap = (int) Math.round((MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT
+            + MathTypeStructureMetrics.SQRT_NESTED_BODY_LEFT_EXTRA_PT) * 20.0d);
+        int outerToMiddleHorizontalGap = radicalTopX(radicals.get(1)) - radicalTopX(radicals.get(0));
+        int middleToInnerHorizontalGap = radicalTopX(radicals.get(2)) - radicalTopX(radicals.get(1));
         assertTrue(outerToMiddleGap > Math.round(MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
             "outer deep-nested root should add depth-scaled top-bar separation");
         assertTrue(middleToInnerGap >= Math.round(MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
             "inner deep-nested roots should keep at least one nested spacing step");
+        assertTrue(outerToMiddleHorizontalGap >= expectedNestedHorizontalGap - 2,
+            "outer deep-nested root should include nested horizontal clearance before the middle root");
+        assertTrue(middleToInnerHorizontalGap >= expectedNestedHorizontalGap - 2,
+            "middle deep-nested root should include nested horizontal clearance before the inner root");
+        assertTrue(radicals.get(0).x2() >= radicals.get(1).x2(),
+            "outer deep-nested root top bar should cover the middle nested body");
+        assertTrue(radicals.get(1).x2() >= radicals.get(2).x2(),
+            "middle deep-nested root top bar should cover the inner nested body");
     }
 
     @Test

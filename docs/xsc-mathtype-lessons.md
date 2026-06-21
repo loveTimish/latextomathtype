@@ -3713,3 +3713,34 @@ batch, then append any useful lesson or pitfall found in that round.
   root bodies. The next useful work should target nested-root body clearance and
   a more MathType-like radical stroke model rather than only adding more
   polyline points.
+- v221 increases only structural nested-root body clearance:
+  `SQRT_NESTED_BODY_LEFT_EXTRA_PT` moved from `2.2pt` to `2.8pt`, with cache
+  key `v221-nested-sqrt-body-clearance`. The guard remains
+  `!compactBodyFraction && hasSqrtCommandOutsideText(bodyText)`, so compact
+  whole-body sqrt-fractions keep their previous slot.
+- v221 tests now assert the nested-root/fraction horizontal gaps exceed the
+  ordinary root body pad, and the three-layer deep nested-root case requires
+  outer-to-middle and middle-to-inner top-x gaps to be at least
+  `SQRT_BODY_LEFT_PAD_PT + SQRT_NESTED_BODY_LEFT_EXTRA_PT` while parent top bars
+  still cover child radicals. This keeps the change measurable as a structural
+  layout decision instead of a page-zoom impression.
+- v221 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-040055.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v221-final.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v221-final/page-*.png`.
+  Structural reports were saved as `scan-v221-final.json`,
+  `wmf-v221-final.json`, `glyph-v221-final.json`, and
+  `glyph-v221-final.txt`; the clean counts stayed `23` MathType OLE objects,
+  `23` WMF previews, zero visible LaTeX leaks, zero invalid MathType OLE, and
+  zero bitmap/StretchDIB WMFs.
+- v221 visual status: `case13-v221-final-tall-nested.png` opens the `x+`,
+  `y+`, and `z` body placement slightly compared with v220, while
+  `page2-v221-final-root-overview.png` keeps the v219/v220 continuous case10
+  fraction rule and `case15-v221-final-text-mixed.png` keeps the CJK mixed
+  fraction intact. This is still not final visual acceptance: case12 compact
+  sqrt-fraction and case13 deep nested radicals remain too ruler-straight and
+  mechanically angular. The next useful pass should tune radical stroke profile
+  and fraction/root local proportions, not continue widening the global nested
+  body gap.
