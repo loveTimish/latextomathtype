@@ -3060,3 +3060,35 @@ batch, then append any useful lesson or pitfall found in that round.
   `SQRT_CHECK_MID_X_PT`. It also noted a future cleanup: the tall-root threshold
   `SQRT_HEIGHT_PT + 4.0` is duplicated between layout and
   `sqrtBottomPadPt(...)`, so extract it before larger radical-shape changes.
+- v195 moves tall radicals from a strict four-point polyline to a five-point
+  multi-segment stroke by adding `SQRT_TALL_CHECK_LOW_X_PT = 1.1` and
+  `SQRT_TALL_CHECK_LOW_Y_RATIO = 0.76`. Ordinary radicals remain four-point.
+  This is the first pass toward a less mechanical radical stroke while staying
+  inside the self-written WMF vector path.
+- v195 required test helpers to stop assuming every radical is exactly four
+  points. Use `isRadicalPolyline(pointCount >= 4)`, `radicalTopX(...)`, and
+  `radicalTopY(...)` when checking radical geometry. A five-point tall radical
+  makes the top turn the penultimate point, not `x(2)/y(2)`. This same mistake
+  already caused failing tests in this round.
+- v195 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260621-235244.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v195.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v195/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v195 visual status: page 2/3 show no broken root, extra short line, or
+  boundary regression, and text glyph metrics remain at the v193/v194
+  positions. The deep nested case 13 outer radical now has a visible shoulder,
+  but the shoulder is still a bit abrupt; future work should tune the low-point
+  ratio or add a second shoulder segment only after keeping the `>=4` radical
+  guards stable.
+- v195 no-context review found no blocking risk. The `pointCount >= 4`
+  radical heuristic is currently safe because renderer polylines are only box
+  sqrt, production normal sqrt, and production tall sqrt; if future bracket or
+  decoration lines also use four-plus-point polylines, add a shape heuristic or
+  explicit structure tag. The JSON field `fourPointPolylineRecords` is now a
+  compatibility name; failure text should say "radical polyline with at least
+  four points".

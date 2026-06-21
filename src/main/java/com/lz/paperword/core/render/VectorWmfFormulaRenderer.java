@@ -3641,13 +3641,25 @@ final class VectorWmfFormulaRenderer {
                 : MathTypeStructureMetrics.SQRT_CHECK_MID_X_PT;
             double checkTopX = tallRoot ? MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT
                 : MathTypeStructureMetrics.SQRT_CHECK_TOP_X_PT;
-            lines.add(LineSegment.polyline(
-                rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
-                rootX + checkMidX,
-                rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
-                rootX + checkTopX, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
-                topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
-            ));
+            if (tallRoot) {
+                lines.add(LineSegment.polyline(
+                    rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
+                    rootX + MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_X_PT,
+                    rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO,
+                    rootX + checkMidX,
+                    rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
+                    rootX + checkTopX, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
+                    topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
+                ));
+            } else {
+                lines.add(LineSegment.polyline(
+                    rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
+                    rootX + checkMidX,
+                    rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
+                    rootX + checkTopX, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
+                    topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
+                ));
+            }
             x += width;
             height = Math.max(height, rootHeight);
             sawSqrt = true;

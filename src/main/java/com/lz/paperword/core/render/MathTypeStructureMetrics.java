@@ -101,7 +101,9 @@ final class MathTypeStructureMetrics {
     static final double SQRT_NESTED_BODY_Y_EXTRA_PT = 3.0d;
     static final double SQRT_WIDTH_PAD_PT = 7.0d;
     static final double SQRT_CHECK_MID_X_PT = 2.0d;
+    static final double SQRT_TALL_CHECK_LOW_X_PT = 1.1d;
     static final double SQRT_TALL_CHECK_MID_X_PT = 1.4d;
+    static final double SQRT_TALL_CHECK_LOW_Y_RATIO = 0.76d;
     static final double SQRT_CHECK_TOP_X_PT = 5.0d;
     static final double SQRT_TALL_CHECK_TOP_X_PT = 4.0d;
     static final double SQRT_TOP_Y_PT = 2.0d;

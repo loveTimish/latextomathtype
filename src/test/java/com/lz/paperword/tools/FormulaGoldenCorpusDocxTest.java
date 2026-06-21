@@ -158,7 +158,8 @@ class FormulaGoldenCorpusDocxTest {
                         int expectedRadicals = countLatexCommand(expected.latex(), "\\sqrt");
                         if (expectedRadicals > 0) {
                             addFailureIf(failures, safety.fourPointPolylineRecords() < expectedRadicals,
-                                expected.id() + " embedded WMF should preserve each radical as a four-point polyline");
+                                expected.id()
+                                    + " embedded WMF should preserve each radical as a polyline with at least four points");
                         }
                     }
                 } else if (name.startsWith("word/embeddings/") && name.endsWith(".bin")) {

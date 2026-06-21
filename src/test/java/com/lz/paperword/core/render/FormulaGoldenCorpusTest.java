@@ -58,7 +58,7 @@ class FormulaGoldenCorpusTest {
             int expectedRadicals = countLatexCommand(formula.latex(), "\\sqrt");
             if (expectedRadicals > 0) {
                 addFailureIf(failures, stats.fourPointPolylineRecords() < expectedRadicals,
-                    formula.id() + " should preserve each radical as a four-point polyline, got "
+                    formula.id() + " should preserve each radical as a polyline with at least four points, got "
                         + stats.fourPointPolylineRecords());
             }
             addFailureIf(failures, stats.stretchDibRecords() != 0, formula.id() + " must not use StretchDIB");
