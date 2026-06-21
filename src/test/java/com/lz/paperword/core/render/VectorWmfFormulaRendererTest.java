@@ -176,6 +176,19 @@ class VectorWmfFormulaRendererTest {
         assertTrue(radical.y(1) < Math.round(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
                 * MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO * 20.0d),
             "compact tall radicals should lift the lower check point without changing the top bar");
+        double lowerTransitionRatio = (double) (radical.x(2) - radical.x1())
+            / (double) (radicalTopX(radical) - radical.x1());
+        double expectedLowerTransitionRatio =
+            MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_X_PT
+                / MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_X_PT;
+        assertTrue(Math.abs(lowerTransitionRatio - expectedLowerTransitionRatio) <= 0.05d,
+            "compact tall radicals should use a metric-driven lower transition point");
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
+            * MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_Y_RATIO, radical.y(2));
+        assertTrue(radical.x(1) < radical.x(2) && radical.x(2) < radical.x(3),
+            "compact lower transition point should stay between the low point and mid point");
+        assertTrue(radical.y(2) < radical.y(1) && radical.y(2) < radical.y(3),
+            "compact lower transition point should soften the lower leg inside the existing bbox");
         int compactTopIndex = radical.pointCount() - 2;
         int compactTopLeadIndex = compactTopIndex - 1;
         int compactShoulderIndex = compactTopLeadIndex - 1;

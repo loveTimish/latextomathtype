@@ -3461,3 +3461,29 @@ batch, then append any useful lesson or pitfall found in that round.
   compact radical stroke profile, such as an extra lower-curve point or
   short diagonal transition inside the same bbox, rather than repeatedly nudging
   a single Y ratio.
+- v211 adds that richer compact radical profile as an internal lower-transition
+  point: `SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_X_PT = 1.28pt` and
+  `SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_Y_RATIO = 0.68`. The point is
+  inserted between the compact low point and mid point for both the main radical
+  and the root-only shadow stroke. It stays inside the existing bbox and does
+  not move `topBarEnd`, `bodyX`, `scaledBodyWidth`, `rootX`, `rootHeight`, or
+  text advances. Cache key: `v211-compact-sqrt-lower-transition`.
+- v211 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-024757.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v211.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v211/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v211 evidence: case12 and case18 glyph metrics are unchanged from v210
+  (`case12 a/b x=19.9pt/right=22.9pt`, `case18 l x=35.9pt`,
+  `g x=34.8pt/right=39.65pt`), proving the extra point did not trigger the
+  v208-style Word preview shrink. Word crops `case12-v211-zoom.png`,
+  `case18-v211-wide.png`, and `case15-v211-text-mixed.png` show a slightly
+  smoother lower leg and no mixed-text regression. Remaining gap: the radical
+  still reads as a mechanical polyline because the parallel shadow stroke traces
+  every segment uniformly. The next useful step is to tune the compact root
+  stroke model itself, for example by limiting the shadow to selected segments
+  or using a dedicated root pen/profile, instead of adding more internal points.
