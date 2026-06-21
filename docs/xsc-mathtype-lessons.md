@@ -3178,3 +3178,33 @@ batch, then append any useful lesson or pitfall found in that round.
   The regression was tightened with a `\sqrt{\sqrt{x}}` control that expects
   the inner top-turn gap to include `SQRT_BODY_LEFT_PAD_PT` plus
   `SQRT_NESTED_BODY_LEFT_EXTRA_PT`.
+- v199 opens the non-compact tall sqrt stroke instead of changing glyph runs:
+  `SQRT_TALL_CHECK_LOW_X_PT`, `SQRT_TALL_CHECK_MID_X_PT`,
+  `SQRT_TALL_CHECK_SHOULDER_X_PT`, and `SQRT_TALL_CHECK_TOP_X_PT` move right
+  to make nested/tall roots less vertical and mechanical. Cache key:
+  `v199-open-tall-sqrt-stroke`.
+- v199 learned that pure sqrt-body fractions cannot share the wider tall-root
+  turn. The first full test run failed because `\sqrt{\frac{l}{g}}` let the
+  fraction bar protrude left of the radical top turn. Compact tall roots now
+  use separate `SQRT_TALL_COMPACT_CHECK_*` point constants that preserve the
+  old narrower coverage, while mixed/nested roots use the opened stroke.
+- v199 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-004100.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v199.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v199/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v199 visual status: case13's outer nested root is visibly less vertical,
+  case18 compact sqrt-fraction remains covered, and case12 has no broken
+  radical or short-line regression. Remaining gap: root strokes still look
+  too straight/hard at the top bar and case12's inner fraction body is still
+  narrow; next passes should address stroke weight/corner shape or nested
+  fraction slot sizing, not widen every root indiscriminately.
+- v199 no-context review found no blocker. It confirmed that the opened tall
+  stroke is scoped away from `compactBodyFraction`, all compact low/shoulder/
+  mid/top X constants are consumed, the fraction-bar protrusion and top-bar
+  coverage guards remain in tests, the new anti-vertical-leg assertion covers
+  the widened tall root, and the v199 DOCX/PDF/PNG paths exist.

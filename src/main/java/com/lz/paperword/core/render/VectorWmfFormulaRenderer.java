@@ -3642,18 +3642,27 @@ final class VectorWmfFormulaRenderer {
             double rootHeight = Math.max(scaledBodyHeight + bodyYOffset + MathTypeStructureMetrics.SQRT_TOP_Y_PT,
                 seededHeight);
             boolean tallRoot = MathTypeStructureMetrics.isTallSqrt(rootHeight);
-            double checkMidX = tallRoot ? MathTypeStructureMetrics.SQRT_TALL_CHECK_MID_X_PT
+            double checkMidX = tallRoot
+                ? (compactBodyFraction ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_MID_X_PT
+                    : MathTypeStructureMetrics.SQRT_TALL_CHECK_MID_X_PT)
                 : MathTypeStructureMetrics.SQRT_CHECK_MID_X_PT;
-            double checkTopX = tallRoot ? MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT
+            double checkTopX = tallRoot
+                ? (compactBodyFraction ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_X_PT
+                    : MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT)
                 : MathTypeStructureMetrics.SQRT_CHECK_TOP_X_PT;
             if (tallRoot) {
+                double lowX = compactBodyFraction ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_LOW_X_PT
+                    : MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_X_PT;
+                double shoulderX = compactBodyFraction
+                    ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_X_PT
+                    : MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_X_PT;
                 lines.add(LineSegment.polyline(
                     rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
-                    rootX + MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_X_PT,
+                    rootX + lowX,
                     rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_Y_RATIO,
                     rootX + checkMidX,
                     rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight),
-                    rootX + MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_X_PT,
+                    rootX + shoulderX,
                     rootHeight * MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_Y_RATIO,
                     rootX + checkTopX, MathTypeStructureMetrics.SQRT_TOP_Y_PT,
                     topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT

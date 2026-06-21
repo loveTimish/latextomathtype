@@ -217,6 +217,8 @@ class VectorWmfFormulaRendererTest {
             / MathTypeStructureMetrics.SQRT_CHECK_TOP_X_PT;
         assertTrue(Math.abs(((double) tallTopX / (double) topX) - expectedTallTopRatio) <= 0.08d,
             "tall sqrt checkmark top turn should be narrower than the ordinary sqrt turn");
+        assertTrue(tallTopX >= Math.round(topX * 0.88d),
+            "tall sqrt checkmark should stay open enough to avoid an almost vertical left leg");
         double expectedTallMidRatio = MathTypeStructureMetrics.SQRT_TALL_CHECK_MID_X_PT
             / MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT;
         assertTrue(Math.abs(((double) tallMidX / (double) tallTopX) - expectedTallMidRatio) <= 0.08d,
