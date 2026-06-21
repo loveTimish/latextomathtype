@@ -248,6 +248,36 @@ class VectorWmfFormulaRendererTest {
     }
 
     @Test
+    void tallSqrtThresholdUsesSharedStructureMetric() throws IOException {
+        double ordinaryHeight = MathTypeStructureMetrics.SQRT_HEIGHT_PT
+            + MathTypeStructureMetrics.SQRT_TALL_EXTRA_HEIGHT_PT;
+        double tallHeight = ordinaryHeight + 0.05d;
+
+        assertFalse(MathTypeStructureMetrics.isTallSqrt(ordinaryHeight));
+        assertTrue(MathTypeStructureMetrics.isTallSqrt(tallHeight));
+        assertEquals(MathTypeStructureMetrics.SQRT_BOTTOM_PAD_PT,
+            MathTypeStructureMetrics.sqrtBottomPadPt(ordinaryHeight));
+        assertEquals(MathTypeStructureMetrics.SQRT_TALL_BOTTOM_PAD_PT,
+            MathTypeStructureMetrics.sqrtBottomPadPt(tallHeight));
+
+        byte[] ordinaryWmf = VectorWmfFormulaRenderer.render("\\sqrt{x}", 34.0d, ordinaryHeight);
+        byte[] tallWmf = VectorWmfFormulaRenderer.render("\\sqrt{1+\\frac{a}{b}}", 54.0d, tallHeight);
+        Polyline ordinaryRoot = polylines(ordinaryWmf).stream()
+            .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
+            .findFirst()
+            .orElseThrow();
+        Polyline tallRoot = polylines(tallWmf).stream()
+            .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
+            .findFirst()
+            .orElseThrow();
+
+        assertEquals(4, ordinaryRoot.pointCount(),
+            "simple roots should still use the ordinary radical stroke");
+        assertTrue(tallRoot.pointCount() > 4,
+            "fraction roots should switch to the tall radical stroke through the shared tall-sqrt predicate");
+    }
+
+    @Test
     void nestedSqrtOffsetRequiresStructuralSqrtCommand() throws IOException {
         byte[] nestedSqrt = VectorWmfFormulaRenderer.render("\\sqrt{1+\\sqrt{x}}", 44.0d,
             MathTypeStructureMetrics.SQRT_HEIGHT_PT);

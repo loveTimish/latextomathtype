@@ -3636,7 +3636,7 @@ final class VectorWmfFormulaRenderer {
                 ? MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT : MathTypeStructureMetrics.SQRT_HEIGHT_PT;
             double rootHeight = Math.max(scaledBodyHeight + bodyYOffset + MathTypeStructureMetrics.SQRT_TOP_Y_PT,
                 seededHeight);
-            boolean tallRoot = rootHeight > MathTypeStructureMetrics.SQRT_HEIGHT_PT + 4.0d;
+            boolean tallRoot = MathTypeStructureMetrics.isTallSqrt(rootHeight);
             double checkMidX = tallRoot ? MathTypeStructureMetrics.SQRT_TALL_CHECK_MID_X_PT
                 : MathTypeStructureMetrics.SQRT_CHECK_MID_X_PT;
             double checkTopX = tallRoot ? MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT

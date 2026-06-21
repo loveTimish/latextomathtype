@@ -3120,3 +3120,33 @@ batch, then append any useful lesson or pitfall found in that round.
 - v196 no-context review could not be spawned because the agent thread limit
   was reached. Treat this as a process gap for the round, not as review
   acceptance.
+- v197 extracts the tall-radical threshold into
+  `SQRT_TALL_EXTRA_HEIGHT_PT` and `isTallSqrt(...)`, then routes both
+  `layoutSqrt(...)` and `sqrtBottomPadPt(...)` through the shared predicate.
+  This removes the duplicated `SQRT_HEIGHT_PT + 4.0` guard that v194 review
+  had flagged before further radical-shape tuning.
+- v197 lowers the tall-root low shoulder by changing
+  `SQRT_TALL_CHECK_LOW_Y_RATIO` from `0.76` to `0.80`. In WMF coordinates this
+  moves the low shoulder downward, making the left-leg bottom turn more
+  concentrated without moving glyph runs or changing ordinary four-point
+  radicals. Cache key: `v197-tall-sqrt-threshold`.
+- v197 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-001710.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v197.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v197/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v197 visual status: page 2/3 and zooms show no broken radical, short-line
+  regression, or fold-back from the lower shoulder. The change is still a
+  local improvement only; case12 nested-fraction roots remain too tight, and
+  case13/case18 still look too straight compared with MathType.
+- v197 no-context review found no blocking issue and confirmed that
+  `isTallSqrt(...)`, `sqrtBottomPadPt(...)`, and `layoutSqrt(...)` now share
+  the same tall-root predicate. The review correctly noted that a renderer
+  threshold test should not assume the requested WMF outer height forces the
+  internal root height; after one failing attempt, the regression now verifies
+  the real routing instead: simple `\sqrt{x}` stays four-point, while
+  `\sqrt{1+\frac{a}{b}}` switches to the multi-point tall radical.
