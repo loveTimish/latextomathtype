@@ -123,6 +123,8 @@ class VectorWmfFormulaRendererTest {
             .orElseThrow();
         assertTrue(radical.x(2) <= fractionBar.x1(),
             "scaled sqrt-body fractions should not protrude left of the radical top turn");
+        assertTrue(fractionBar.x1() - radical.x(2) <= 45,
+            "scaled sqrt-body fractions should sit close to the radical top turn, not float in an oversized slot");
         assertTrue(radical.x2() >= fractionBar.x2(),
             "scaled sqrt-body fractions must keep the radical top bar covering the fraction bar");
         assertTrue(textFontHeightTwips(mixedBodyFraction, "a") >= 220,

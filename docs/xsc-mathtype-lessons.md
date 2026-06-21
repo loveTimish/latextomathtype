@@ -2931,3 +2931,28 @@ batch, then append any useful lesson or pitfall found in that round.
   compact than v188. Word page 3 confirms it is more readable, but visual
   acceptance is still not final: `T=2\pi` to root spacing remains too loose and
   the radical left leg/proportion still does not match MathType quality.
+- v190 narrows the next root-body fraction pass to a small left tuck:
+  `SQRT_BODY_FRACTION_LEFT_ADJUST_PT = -1.6` and cache key
+  `v190-sqrt-body-fraction-tuck`. An attempted `-2.4pt` shift failed the
+  left-protrusion guard, so keep the root-body fraction inside the radical top
+  turn instead of chasing visual tightness by over-shifting.
+- v190 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260621-222902.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v190.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v190/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero visible
+  LaTeX leaks, zero bitmap/StretchDIB WMFs, and zero review-required suspicious
+  WMF text.
+- v190 glyph metrics moved case 18's root-body `l/g` fraction left by about
+  `2.2pt` and reduced record width from about `43.6pt` to `41.35pt` while
+  keeping the shape at `49.77x35.25pt`. Word page 3 shows a small improvement,
+  not final acceptance: the fraction is less floaty, but the radical left leg,
+  root top bar, and MathType-like proportion still need a more principled root
+  drawing pass.
+- No-context v190 review found no blocking issue, but flagged that the new
+  guard is only WMF record/bar-level. Future acceptance should compare glyph
+  ink or at least text-run min/max x against the radical top turn and top bar;
+  a fraction bar can stay inside while numerator/denominator ink protrudes or
+  visually crosses.
