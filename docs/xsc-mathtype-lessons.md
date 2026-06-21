@@ -2826,3 +2826,33 @@ batch, then append any useful lesson or pitfall found in that round.
   `sqrt_nested_fraction` turns are lifted and Word PNG shows shorter descenders,
   but root-in-fraction and nested-root proportions still need separate visual
   calibration. Do not describe v184 as completing radical rendering.
+- v185 is another stage improvement, not acceptance. It adds a nested-root-only
+  body y offset (`SQRT_NESTED_BODY_Y_EXTRA_PT = 2.2pt`) when the body of a
+  `\sqrt{...}` contains another `\sqrt`. Record probes moved nested radical top
+  gaps from `24twips` to `68twips` for simple nested, nested-fraction, and deep
+  nested roots. This reduces the earlier Word visual failure where inner and
+  outer radical bars/stems looked glued together.
+- v185 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-latest.docx`; the leak
+  scanner still reported `23` MathType `Equation.DSMT4` OLE objects, `23` WMF
+  previews, and zero visible LaTeX leaks. `wmf_record_report.py` still reported
+  `23` vector WMFs, zero `StretchDIB`, zero bitmap records, and zero WMF LaTeX
+  leaks. Word COM export plus Poppler PNG render refreshed
+  `analysis/formula-golden-corpus/word-rendered/page-1.png` through
+  `page-4.png`.
+- v185 Word PNG status: page 2 case 11/12 nested radicals are visibly clearer
+  than v184 because the radical bars no longer sit on top of each other. It is
+  still not final. Page 3 case 13 deep nested radicals look too flat/compressed,
+  and page 3 case 18 physics `sqrt_fraction` remains crowded around the root
+  body and fraction. Continue with a per-structure layout model for nested
+  depth, root-in-fraction placement, and radical stroke proportions rather than
+  treating one global nested offset as the final solution.
+- A no-context v185 review caught that `bodyText.contains("\\sqrt")` was too
+  broad for nested-root detection, because text-like command bodies can contain
+  a literal `\sqrt` without being a structural radical. Use
+  `hasSqrtCommandOutsideText(...)` for the nested-root offset so `\text{...}`,
+  `\mathrm{...}`, and related style/text command bodies do not change root body
+  placement. The same review also pointed out that production fixed-height
+  rendering can still compress deep nested radicals even when record-level top
+  gaps improve, so keep a production-envelope test and continue treating Word
+  PNG review as required evidence.

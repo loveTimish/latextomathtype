@@ -115,6 +115,12 @@ class VectorWmfFormulaRendererTest {
         assertEquals(3, nestedFractionLines.size());
         assertTrue(nestedLines.stream().allMatch(line -> line.pointCount() == 4),
             "nested root radicals must keep all four polyline points after layout translation");
+        assertTrue(radicalTopGapTwips(nestedLines) >= Math.round(
+                MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
+            "nested root top bars should have visible vertical separation");
+        assertTrue(radicalTopGapTwips(nestedFractionLines) >= Math.round(
+                MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
+            "nested fraction root top bars should have visible vertical separation");
         assertEquals(2, nestedFractionLines.stream().filter(line -> line.pointCount() == 4).count());
         Polyline root = lines.get(0);
         Polyline tallRoot = fractionLines.stream()
@@ -154,6 +160,34 @@ class VectorWmfFormulaRendererTest {
         assertTrue(minTextXCoordinate(simpleRoot) - rootX >= topX);
         assertTrue(minTextYCoordinate(simpleRoot) >= (int) Math.round(MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT
             * 20.0d));
+    }
+
+    @Test
+    void nestedSqrtOffsetRequiresStructuralSqrtCommand() throws IOException {
+        byte[] nestedSqrt = VectorWmfFormulaRenderer.render("\\sqrt{1+\\sqrt{x}}", 44.0d,
+            MathTypeStructureMetrics.SQRT_HEIGHT_PT);
+
+        assertFalse(VectorWmfFormulaRenderer.hasSqrtCommandOutsideText("\\text{\\sqrt}"));
+        assertFalse(VectorWmfFormulaRenderer.hasSqrtCommandOutsideText("\\mathrm{\\sqrt}+x"));
+        assertTrue(VectorWmfFormulaRenderer.hasSqrtCommandOutsideText("1+\\sqrt{x}"));
+        assertEquals(2, polylines(nestedSqrt).size());
+        assertTrue(radicalTopGapTwips(polylines(nestedSqrt)) >= Math.round(
+                MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
+            "structural nested sqrt should keep the extra vertical separation");
+    }
+
+    @Test
+    void deepNestedSqrtStaysInsideProductionSqrtEnvelope() throws IOException {
+        byte[] deepNested = VectorWmfFormulaRenderer.render("\\sqrt{x+\\sqrt{y+\\sqrt{z}}}", 62.0d,
+            MathTypeStructureMetrics.SQRT_HEIGHT_PT);
+        List<Polyline> lines = polylines(deepNested);
+
+        assertEquals((int) (MathTypeStructureMetrics.SQRT_HEIGHT_PT * 20.0d), windowExtY(deepNested));
+        assertEquals(3, lines.stream().filter(line -> line.pointCount() == 4).count());
+        assertTrue(maxPolylineYCoordinate(deepNested) <= MathTypeStructureMetrics.SQRT_HEIGHT_PT * 20.0d);
+        assertTrue(maxTextYCoordinate(deepNested) <= MathTypeStructureMetrics.SQRT_HEIGHT_PT * 20.0d);
+        assertTrue(radicalTopGapTwips(lines) > Math.round(MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT * 20.0d),
+            "deep nested roots should keep more than the ordinary 1.2pt top-bar gap after production scaling");
     }
 
     @Test
@@ -1849,6 +1883,15 @@ class VectorWmfFormulaRendererTest {
             - (int) Math.round(MathTypeStructureMetrics.SQRT_BOTTOM_PAD_PT * 20.0d);
         return line.y(1) <= oldTurnY - 70
             && rootHeightTwips > (MathTypeStructureMetrics.SQRT_HEIGHT_PT + 4.0d) * 20.0d;
+    }
+
+    private static int radicalTopGapTwips(List<Polyline> lines) {
+        List<Polyline> radicals = lines.stream()
+            .filter(line -> line.pointCount() == 4)
+            .sorted((left, right) -> Integer.compare(left.x1(), right.x1()))
+            .toList();
+        assertTrue(radicals.size() >= 2, "expected nested radical polylines");
+        return radicals.get(1).y(2) - radicals.get(0).y(2);
     }
 
     private record Polyline(int[] points) {

@@ -856,6 +856,37 @@ final class VectorWmfFormulaRenderer {
         return nextFractionCommand(text, 0) >= 0;
     }
 
+    static boolean hasSqrtCommandOutsideText(String text) {
+        return nextCommandOutsideText(text, "\\sqrt", 0) >= 0;
+    }
+
+    private static int nextCommandOutsideText(String text, String command, int cursor) {
+        if (text == null) {
+            return -1;
+        }
+        List<String> textCommands = List.of("\\boldsymbol", "\\textnormal", "\\mathrm", "\\mathbf", "\\mathit",
+            "\\textit", "\\textbf", "\\textrm", "\\emph", "\\text");
+        int i = Math.max(0, cursor);
+        while (i < text.length()) {
+            String textCommand = matchingCommandAt(text, i, textCommands);
+            if (textCommand != null) {
+                int groupStart = skipWhitespaceForward(text, i + textCommand.length());
+                if (groupStart < text.length() && text.charAt(groupStart) == '{') {
+                    int groupEnd = findGroupEnd(text, groupStart);
+                    if (groupEnd >= 0) {
+                        i = groupEnd + 1;
+                        continue;
+                    }
+                }
+            }
+            if (text.startsWith(command, i) && latexCommandBoundary(text, i + command.length())) {
+                return i;
+            }
+            i++;
+        }
+        return -1;
+    }
+
     private static int nextFractionCommand(String text, int cursor) {
         if (text == null) {
             return -1;
@@ -3538,18 +3569,22 @@ final class VectorWmfFormulaRenderer {
             if (groupEnd < 0) {
                 return null;
             }
-            FormulaLayout body = layoutFractionPart(text.substring(groupStart + 1, groupEnd));
+            String bodyText = text.substring(groupStart + 1, groupEnd);
+            FormulaLayout body = layoutFractionPart(bodyText);
             if (body == null) {
                 return null;
             }
+            double bodyYOffset = MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT
+                + (hasSqrtCommandOutsideText(bodyText) ? MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT : 0.0d);
             double rootX = x;
             appendLayout(placed, lines, body, rootX + MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT,
-                MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT);
+                bodyYOffset);
             double topBarEnd = rootX + MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT + body.widthPt() + 0.55d;
             double width = body.widthPt() + MathTypeStructureMetrics.SQRT_WIDTH_PAD_PT + 1.0d;
             double seededHeight = hasFractionCommand(text.substring(groupStart + 1, groupEnd))
                 ? MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT : MathTypeStructureMetrics.SQRT_HEIGHT_PT;
-            double rootHeight = Math.max(body.heightPt() + MathTypeStructureMetrics.SQRT_TOP_Y_PT, seededHeight);
+            double rootHeight = Math.max(body.heightPt() + bodyYOffset + MathTypeStructureMetrics.SQRT_TOP_Y_PT,
+                seededHeight);
             lines.add(LineSegment.polyline(
                 rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
                 rootX + MathTypeStructureMetrics.SQRT_CHECK_MID_X_PT,
