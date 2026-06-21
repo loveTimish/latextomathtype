@@ -150,18 +150,21 @@ class VectorWmfFormulaRendererTest {
             MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
         byte[] rootInFraction = VectorWmfFormulaRenderer.render("\\frac{\\sqrt{a^{2}+b^{2}}}{2}", 54.0d,
             MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        byte[] nestedOnlyRoot = VectorWmfFormulaRenderer.render("\\sqrt{\\sqrt{x}}", 54.0d, 32.0d);
         byte[] nestedRoot = VectorWmfFormulaRenderer.render("\\sqrt{1+\\sqrt{x}}", 64.0d, 32.0d);
         byte[] nestedFractionRoot = VectorWmfFormulaRenderer.render("\\sqrt{1+\\sqrt{\\frac{a}{b}}}", 92.0d,
             58.0d);
         List<Polyline> lines = polylines(simpleRoot);
         List<Polyline> fractionLines = polylines(fractionRoot);
         List<Polyline> rootInFractionLines = polylines(rootInFraction);
+        List<Polyline> nestedOnlyLines = polylines(nestedOnlyRoot);
         List<Polyline> nestedLines = polylines(nestedRoot);
         List<Polyline> nestedFractionLines = polylines(nestedFractionRoot);
 
         assertEquals(1, lines.size());
         assertEquals(2, fractionLines.size());
         assertEquals(2, rootInFractionLines.size());
+        assertEquals(2, nestedOnlyLines.size());
         assertEquals(2, nestedLines.size());
         assertEquals(3, nestedFractionLines.size());
         assertTrue(nestedLines.stream().allMatch(VectorWmfFormulaRendererTest::isRadicalPolyline),
@@ -169,6 +172,12 @@ class VectorWmfFormulaRendererTest {
         assertTrue(radicalTopGapTwips(nestedLines) >= Math.round(
                 MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
             "nested root top bars should have visible vertical separation");
+        List<Polyline> nestedOnlyRadicals = sortedRadicals(nestedOnlyLines);
+        int nestedRootHorizontalGap = radicalTopX(nestedOnlyRadicals.get(1))
+            - radicalTopX(nestedOnlyRadicals.get(0));
+        assertTrue(nestedRootHorizontalGap >= Math.round((MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT
+                + MathTypeStructureMetrics.SQRT_NESTED_BODY_LEFT_EXTRA_PT) * 20.0d) - 2,
+            "nested root bodies should include ordinary body pad plus dedicated horizontal breathing room");
         assertTrue(radicalTopGapTwips(nestedFractionLines) >= Math.round(
                 MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT * 20.0d),
             "nested fraction root top bars should have visible vertical separation");

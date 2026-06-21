@@ -80,7 +80,7 @@ public class LaTeXImageRenderer {
     /** 系统属性：WMF 文本宽度校准。 */
     private static final String WMF_TEXT_WIDTH_SCALE_PROP = "paperword.wmf.textWidth.scale";
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v197-tall-sqrt-threshold";
+    private static final String CACHE_VERSION = "v198-nested-sqrt-body-pad";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(

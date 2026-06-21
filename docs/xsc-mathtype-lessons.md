@@ -3150,3 +3150,31 @@ batch, then append any useful lesson or pitfall found in that round.
   internal root height; after one failing attempt, the regression now verifies
   the real routing instead: simple `\sqrt{x}` stays four-point, while
   `\sqrt{1+\frac{a}{b}}` switches to the multi-point tall radical.
+- v198 adds `SQRT_NESTED_BODY_LEFT_EXTRA_PT = 1.2` and applies it only when a
+  sqrt body contains another structural `\sqrt` and is not the whole-body
+  compact fraction case. The same extra is added to the sqrt layout width, so
+  the body is not moved right without expanding the WMF box. Cache key:
+  `v198-nested-sqrt-body-pad`.
+- v198 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-003415.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v198-final.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v198-final/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v198 glyph evidence shows the nested-root body pad is real, not just page
+  zoom noise: case12 moves `1+` from about `7.15pt` to `7.95pt` and the
+  fraction `a/b` from about `19.35pt` to `19.7pt`; case13 moves the nested
+  `x/y/z` runs right, while case18 pure sqrt-fraction remains unchanged.
+- v198 visual status: page 2/3 and zooms show no broken radicals, short-line
+  regression, or bitmap fallback. This is still only a local improvement:
+  case12 remains too narrow and mechanical, and case13/case18 radicals still
+  need a better root-stroke model rather than more generic spacing tweaks.
+- v198 no-context review found no blocker in the nested-sqrt condition, width
+  accounting, or cache bump, but correctly flagged that the first horizontal
+  gap assertion was too weak because ordinary body pad alone could satisfy it.
+  The regression was tightened with a `\sqrt{\sqrt{x}}` control that expects
+  the inner top-turn gap to include `SQRT_BODY_LEFT_PAD_PT` plus
+  `SQRT_NESTED_BODY_LEFT_EXTRA_PT`.

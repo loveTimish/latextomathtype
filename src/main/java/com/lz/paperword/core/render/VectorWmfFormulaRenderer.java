@@ -3621,6 +3621,10 @@ final class VectorWmfFormulaRenderer {
             double scaledBodyHeight = body.heightPt() * bodyScale;
             double bodyPad = compactBodyFraction ? MathTypeStructureMetrics.SQRT_BODY_FRACTION_LEFT_PAD_PT
                 : MathTypeStructureMetrics.SQRT_BODY_LEFT_PAD_PT;
+            boolean nestedSqrtBody = !compactBodyFraction && hasSqrtCommandOutsideText(bodyText);
+            if (nestedSqrtBody) {
+                bodyPad += MathTypeStructureMetrics.SQRT_NESTED_BODY_LEFT_EXTRA_PT;
+            }
             double bodyX = rootX + bodyPad
                 + (compactBodyFraction ? MathTypeStructureMetrics.SQRT_BODY_FRACTION_LEFT_ADJUST_PT : 0.0d);
             if (compactBodyFraction) {
@@ -3631,7 +3635,8 @@ final class VectorWmfFormulaRenderer {
             }
             double topBarEnd = bodyX + scaledBodyWidth
                 + (compactBodyFraction ? MathTypeStructureMetrics.SQRT_BODY_FRACTION_TOP_PAD_PT : 0.55d);
-            double width = scaledBodyWidth + MathTypeStructureMetrics.SQRT_WIDTH_PAD_PT + 1.0d;
+            double width = scaledBodyWidth + MathTypeStructureMetrics.SQRT_WIDTH_PAD_PT + 1.0d
+                + (nestedSqrtBody ? MathTypeStructureMetrics.SQRT_NESTED_BODY_LEFT_EXTRA_PT : 0.0d);
             double seededHeight = hasFractionCommand(text.substring(groupStart + 1, groupEnd))
                 ? MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT : MathTypeStructureMetrics.SQRT_HEIGHT_PT;
             double rootHeight = Math.max(scaledBodyHeight + bodyYOffset + MathTypeStructureMetrics.SQRT_TOP_Y_PT,

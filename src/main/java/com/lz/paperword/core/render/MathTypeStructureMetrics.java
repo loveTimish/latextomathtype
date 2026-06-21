@@ -97,6 +97,7 @@ final class MathTypeStructureMetrics {
     static final double TEXT_FRACTION_HEIGHT_PT = 33.0d;
     static final double SQRT_BODY_LEFT_PAD_PT = 6.0d;
     static final double SQRT_BODY_FRACTION_LEFT_PAD_PT = 5.4d;
+    static final double SQRT_NESTED_BODY_LEFT_EXTRA_PT = 1.2d;
     static final double SQRT_BODY_Y_OFFSET_PT = 1.2d;
     static final double SQRT_NESTED_BODY_Y_EXTRA_PT = 3.0d;
     static final double SQRT_WIDTH_PAD_PT = 7.0d;
