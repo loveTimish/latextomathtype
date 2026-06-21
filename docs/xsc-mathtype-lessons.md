@@ -3513,3 +3513,31 @@ batch, then append any useful lesson or pitfall found in that round.
   but still a little thin and straight, so the next useful work should tune a
   real compact-root stroke profile or root-only pen width rather than returning
   to full-length shadow copying.
+- v213 adds a compact-root-only upper profile instead of changing the global
+  WMF pen. Because `STRUCTURE_LINE_WIDTH_PT` feeds the single shared
+  `CreatePen`, increasing it would also thicken fraction bars, boxes, arrows,
+  and text-mixed structures. The safer v213 path adds a short 3-point profile
+  along `shoulder -> topLead -> topTurn` with
+  `SQRT_TALL_COMPACT_UPPER_PROFILE_X_OFFSET_PT = -0.12pt` and
+  `SQRT_TALL_COMPACT_UPPER_PROFILE_Y_OFFSET_PT = 0.18pt`. It does not extend to
+  `topBarEnd` and does not change `bodyX`, `scaledBodyWidth`, `rootX`,
+  `rootHeight`, or text advances. Cache key:
+  `v213-compact-sqrt-upper-profile`.
+- v213 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-030122.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v213.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v213/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v213 evidence: case12 and case18 glyph metrics remain unchanged
+  (`case12 a/b x=19.9pt/right=22.9pt`, `case18 l x=35.9pt`,
+  `g x=34.8pt/right=39.65pt`), proving the upper profile did not trigger Word
+  preview rescaling. Word crops `case12-v213-zoom.png`,
+  `case18-v213-wide.png`, and `case15-v213-text-mixed.png` show no new dirty
+  edge or text-mixed regression, and the upper radical has a little more weight.
+  Remaining gap: the visual gain is small. The next round should either tune
+  the profile offset/length from rendered evidence or implement a true
+  root-only pen/profile layer instead of adding more tiny overlay strokes.

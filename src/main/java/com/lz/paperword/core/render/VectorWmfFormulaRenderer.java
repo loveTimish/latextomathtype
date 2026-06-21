@@ -3741,6 +3741,16 @@ final class VectorWmfFormulaRenderer {
                         rootX + checkMidX + shadowX,
                         rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight) + shadowY
                     ));
+                    double upperProfileX = MathTypeStructureMetrics.SQRT_TALL_COMPACT_UPPER_PROFILE_X_OFFSET_PT;
+                    double upperProfileY = MathTypeStructureMetrics.SQRT_TALL_COMPACT_UPPER_PROFILE_Y_OFFSET_PT;
+                    lines.add(LineSegment.polyline(
+                        rootX + shoulderX + upperProfileX,
+                        rootHeight * shoulderYRatio + upperProfileY,
+                        rootX + topLeadX + upperProfileX,
+                        rootHeight * topLeadYRatio + upperProfileY,
+                        rootX + checkTopX + upperProfileX,
+                        MathTypeStructureMetrics.SQRT_TOP_Y_PT + upperProfileY
+                    ));
                 }
                 if (compactBodyFraction) {
                     lines.add(LineSegment.polyline(

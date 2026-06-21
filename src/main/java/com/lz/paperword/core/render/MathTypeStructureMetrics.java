@@ -123,6 +123,8 @@ final class MathTypeStructureMetrics {
     static final double SQRT_TALL_COMPACT_HOOK_END_Y_RATIO = 0.52d;
     static final double SQRT_TALL_COMPACT_SHADOW_X_OFFSET_PT = 0.18d;
     static final double SQRT_TALL_COMPACT_SHADOW_Y_OFFSET_PT = 0.0d;
+    static final double SQRT_TALL_COMPACT_UPPER_PROFILE_X_OFFSET_PT = -0.12d;
+    static final double SQRT_TALL_COMPACT_UPPER_PROFILE_Y_OFFSET_PT = 0.18d;
     static final double SQRT_CHECK_TOP_X_PT = 5.0d;
     static final double SQRT_TALL_CHECK_TOP_X_PT = 4.8d;
     static final double SQRT_TALL_COMPACT_CHECK_TOP_X_PT = 4.0d;

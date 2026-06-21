@@ -132,12 +132,16 @@ class VectorWmfFormulaRendererTest {
             .filter(line -> line.x1() > radical.x1() && line.pointCount() == 4)
             .findFirst()
             .orElseThrow();
+        Polyline upperProfile = lines.stream()
+            .filter(line -> line.pointCount() == 3 && line.x1() < radical.x(radical.pointCount() - 3))
+            .findFirst()
+            .orElseThrow();
         Polyline hook = lines.stream()
             .filter(line -> line.pointCount() == 2 && line.x1() < radical.x1() && line.x2() == radical.x1())
             .findFirst()
             .orElseThrow();
         Polyline fractionBar = lines.stream()
-            .filter(line -> line.pointCount() == 2 && line.x2() > line.x1())
+            .filter(line -> line.pointCount() == 2 && line.x1() >= radicalTopX(radical) && line.x2() > line.x1())
             .findFirst()
             .orElseThrow();
         assertTrue(hook.x1() < radical.x1() && hook.x2() == radical.x1(),
@@ -160,6 +164,17 @@ class VectorWmfFormulaRendererTest {
             "compact radical shadow should stop after the lower/mid leg instead of duplicating the top turn");
         assertTrue(shadow.x2() < radical.x(radical.pointCount() - 3),
             "compact radical shadow should not trace the upper turn where it creates double-line corners");
+        int compactTopIndex = radical.pointCount() - 2;
+        int compactTopLeadIndex = compactTopIndex - 1;
+        int compactShoulderIndex = compactTopLeadIndex - 1;
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_TALL_COMPACT_UPPER_PROFILE_X_OFFSET_PT,
+            upperProfile.x1() - radical.x(compactShoulderIndex));
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_TALL_COMPACT_UPPER_PROFILE_Y_OFFSET_PT,
+            upperProfile.y1() - radical.y(compactShoulderIndex));
+        assertCloseTwips(MathTypeStructureMetrics.SQRT_TALL_COMPACT_UPPER_PROFILE_X_OFFSET_PT,
+            upperProfile.x2() - radical.x(compactTopIndex));
+        assertTrue(upperProfile.x1() > radical.x(3) && upperProfile.x2() < radical.x2(),
+            "compact upper profile should thicken only the upper turn without extending the top bar");
         int radicalTopX = radicalTopX(radical);
         assertTrue(radicalTopX <= fractionBar.x1(),
             "scaled sqrt-body fractions should not protrude left of the radical top turn");
@@ -193,9 +208,6 @@ class VectorWmfFormulaRendererTest {
             "compact lower transition point should stay between the low point and mid point");
         assertTrue(radical.y(2) < radical.y(1) && radical.y(2) < radical.y(3),
             "compact lower transition point should soften the lower leg inside the existing bbox");
-        int compactTopIndex = radical.pointCount() - 2;
-        int compactTopLeadIndex = compactTopIndex - 1;
-        int compactShoulderIndex = compactTopLeadIndex - 1;
         double compactShoulderRatio = (double) (radical.x(compactShoulderIndex) - radical.x1())
             / (double) (radical.x(compactTopIndex) - radical.x1());
         double expectedCompactShoulderRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_X_PT
