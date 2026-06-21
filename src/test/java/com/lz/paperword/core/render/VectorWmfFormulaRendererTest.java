@@ -129,7 +129,7 @@ class VectorWmfFormulaRendererTest {
             .orElseThrow();
         Polyline shadow = lines.stream()
             .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
-            .filter(line -> line.x1() > radical.x1() && line.pointCount() == radical.pointCount() - 1)
+            .filter(line -> line.x1() > radical.x1() && line.pointCount() == 4)
             .findFirst()
             .orElseThrow();
         Polyline hook = lines.stream()
@@ -156,6 +156,10 @@ class VectorWmfFormulaRendererTest {
             / (double) (radicalTopX(radical) - radical.x1());
         assertTrue(Math.abs(actualShadowRatio - expectedShadowRatio) <= 0.05d,
             "compact radical shadow stroke should thicken only the radical, not the fraction bar");
+        assertTrue(shadow.x2() == radical.x(3) + shadow.x1() - radical.x1(),
+            "compact radical shadow should stop after the lower/mid leg instead of duplicating the top turn");
+        assertTrue(shadow.x2() < radical.x(radical.pointCount() - 3),
+            "compact radical shadow should not trace the upper turn where it creates double-line corners");
         int radicalTopX = radicalTopX(radical);
         assertTrue(radicalTopX <= fractionBar.x1(),
             "scaled sqrt-body fractions should not protrude left of the radical top turn");
@@ -2203,9 +2207,9 @@ class VectorWmfFormulaRendererTest {
     }
 
     private static boolean isMainRadicalPolyline(Polyline line) {
-        return line.pointCount() == 4 || (line.pointCount() >= 6
+        return line.pointCount() >= 4
             && line.y(line.pointCount() - 1) == line.y(line.pointCount() - 2)
-            && line.x2() - line.x(line.pointCount() - 2) > 40);
+            && line.x2() - line.x(line.pointCount() - 2) > 40;
     }
 
     private static int radicalTopY(Polyline line) {

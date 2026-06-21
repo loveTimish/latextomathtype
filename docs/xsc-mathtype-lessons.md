@@ -3487,3 +3487,29 @@ batch, then append any useful lesson or pitfall found in that round.
   every segment uniformly. The next useful step is to tune the compact root
   stroke model itself, for example by limiting the shadow to selected segments
   or using a dedicated root pen/profile, instead of adding more internal points.
+- v212 changes the compact tall sqrt-fraction shadow from a full copied radical
+  outline into a local lower-leg stroke. The shadow still starts at
+  `rootX + SQRT_TALL_COMPACT_SHADOW_X_OFFSET_PT` and follows the compact low
+  and lower-transition points, but now stops at the compact mid point instead
+  of duplicating the shoulder, top-lead, and top-turn segments. This keeps the
+  root-only thickening where the lower leg needs weight while reducing the
+  double-line corner effect near the upper turn. Cache key:
+  `v212-compact-sqrt-local-shadow`.
+- v212 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260622-025507.docx`,
+  exported Word PDF
+  `analysis/formula-golden-corpus/formula-golden-corpus-word-export-v212.pdf`,
+  and PNG pages under
+  `analysis/formula-golden-corpus/word-rendered-v212/page-*.png`. Structural
+  scans stayed clean: `23` MathType OLE objects, `23` WMF previews, zero
+  visible LaTeX leaks, zero invalid MathType OLE, zero bitmap/StretchDIB WMFs,
+  and zero review-required suspicious WMF text.
+- v212 evidence: case12 and case18 glyph metrics remain unchanged
+  (`case12 a/b x=19.9pt/right=22.9pt`, `case18 l x=35.9pt`,
+  `g x=34.8pt/right=39.65pt`), so localizing the shadow does not affect Word
+  preview scale. Word crops `case12-v212-zoom.png`, `case18-v212-wide.png`, and
+  `case15-v212-text-mixed.png` show fewer double-line upper-corner artifacts
+  and no text-mixed regression. Remaining gap: the upper radical is now cleaner
+  but still a little thin and straight, so the next useful work should tune a
+  real compact-root stroke profile or root-only pen width rather than returning
+  to full-length shadow copying.

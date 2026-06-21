@@ -3739,12 +3739,7 @@ final class VectorWmfFormulaRenderer {
                         rootX + lowerTransitionX + shadowX,
                         rootHeight * lowerTransitionYRatio + shadowY,
                         rootX + checkMidX + shadowX,
-                        rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight) + shadowY,
-                        rootX + shoulderX + shadowX,
-                        rootHeight * shoulderYRatio + shadowY,
-                        rootX + topLeadX + shadowX,
-                        rootHeight * topLeadYRatio + shadowY,
-                        rootX + checkTopX + shadowX, MathTypeStructureMetrics.SQRT_TOP_Y_PT + shadowY
+                        rootHeight - MathTypeStructureMetrics.sqrtBottomPadPt(rootHeight) + shadowY
                     ));
                 }
                 if (compactBodyFraction) {
