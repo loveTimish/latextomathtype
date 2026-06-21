@@ -177,6 +177,32 @@ class VectorWmfFormulaRendererTest {
         assertEquals((int) (MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT * 20.0d),
             windowExtY(standaloneWmf));
         assertEquals((int) (MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT * 20.0d), windowExtY(mixedWmf));
+        List<Polyline> mixedBars = polylines(mixedWmf);
+        assertEquals(2, mixedBars.size());
+        Polyline mainBar = mixedBars.stream()
+            .filter(line -> line.x2() - line.x1() > 1800)
+            .findFirst()
+            .orElseThrow();
+        Polyline trailingBar = mixedBars.stream()
+            .filter(line -> line.x2() - line.x1() < 700)
+            .findFirst()
+            .orElseThrow();
+        int mainNumeratorBaseline = minTextYCoordinateBetween(mixedWmf, mainBar.x1(), mainBar.x2());
+        int mainDenominatorBaseline = maxTextYCoordinateBetween(mixedWmf, mainBar.x1(), mainBar.x2());
+        int trailingNumeratorBaseline = minTextYCoordinateBetween(mixedWmf, trailingBar.x1(), trailingBar.x2());
+        int trailingDenominatorBaseline = maxTextYCoordinateBetween(mixedWmf, trailingBar.x1(), trailingBar.x2());
+        int mainNumeratorGap = mainBar.y1() - mainNumeratorBaseline;
+        int mainDenominatorGap = mainDenominatorBaseline - mainBar.y1();
+        int trailingNumeratorGap = trailingBar.y1() - trailingNumeratorBaseline;
+        int trailingDenominatorGap = trailingDenominatorBaseline - trailingBar.y1();
+        assertTrue(mainNumeratorGap >= 110,
+            "text-heavy fraction bar should sit visibly below the numerator baseline");
+        assertTrue(mainDenominatorGap >= 110,
+            "text-heavy fraction bar should sit visibly above the denominator baseline");
+        assertTrue(trailingNumeratorGap < mainNumeratorGap,
+            "ordinary trailing fraction in a text-heavy formula should keep ordinary fraction geometry");
+        assertTrue(trailingDenominatorGap < mainDenominatorGap,
+            "ordinary trailing fraction in a text-heavy formula should not use tall text-heavy denominator spacing");
         assertTrue(records(standaloneWmf).contains(0x0325));
         assertTrue(records(mixedWmf).contains(0x0325));
         assertFalse(records(standaloneWmf).contains(0x0F43));
@@ -1689,6 +1715,52 @@ class VectorWmfFormulaRendererTest {
             }
             offset += sizeWords * 2;
         }
+        return max;
+    }
+
+    private static int minTextYCoordinateBetween(byte[] data, int minX, int maxX) {
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        int min = Integer.MAX_VALUE;
+        while (offset + 6 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x0A32 && offset + 14 <= data.length) {
+                int y = word(data, offset + 6);
+                int x = word(data, offset + 8);
+                if (x >= minX && x <= maxX) {
+                    min = Math.min(min, y);
+                }
+            }
+            offset += sizeWords * 2;
+        }
+        assertTrue(min != Integer.MAX_VALUE, "expected ExtTextOut records inside x range");
+        return min;
+    }
+
+    private static int maxTextYCoordinateBetween(byte[] data, int minX, int maxX) {
+        int offset = hasPlaceableHeader(data) ? 22 : 0;
+        offset += 18;
+        int max = Integer.MIN_VALUE;
+        while (offset + 6 <= data.length) {
+            int sizeWords = dword(data, offset);
+            int function = word(data, offset + 4);
+            if (function == 0x0000 || sizeWords <= 0) {
+                break;
+            }
+            if (function == 0x0A32 && offset + 14 <= data.length) {
+                int y = word(data, offset + 6);
+                int x = word(data, offset + 8);
+                if (x >= minX && x <= maxX) {
+                    max = Math.max(max, y);
+                }
+            }
+            offset += sizeWords * 2;
+        }
+        assertTrue(max != Integer.MIN_VALUE, "expected ExtTextOut records inside x range");
         return max;
     }
 

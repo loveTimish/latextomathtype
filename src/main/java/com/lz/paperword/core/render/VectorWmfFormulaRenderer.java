@@ -53,12 +53,9 @@ final class VectorWmfFormulaRenderer {
     private static final double FRACTION_BAR_INSET_PT = 0.65d;
     private static final double FRACTION_HEIGHT_PT = MathTypeStructureMetrics.ORDINARY_FRACTION_HEIGHT_PT;
     private static final double TEXT_FRACTION_HEIGHT_PT = MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT;
-    private static final double TEXT_FRACTION_NUMERATOR_Y_PT =
-        FRACTION_NUMERATOR_Y_PT + MathTypeStructureMetrics.TEXT_FRACTION_VERTICAL_OFFSET_PT;
-    private static final double TEXT_FRACTION_DENOMINATOR_Y_PT =
-        FRACTION_DENOMINATOR_Y_PT + MathTypeStructureMetrics.TEXT_FRACTION_VERTICAL_OFFSET_PT;
-    private static final double TEXT_FRACTION_BAR_Y_PT =
-        FRACTION_BAR_Y_PT + MathTypeStructureMetrics.TEXT_FRACTION_VERTICAL_OFFSET_PT;
+    private static final double TEXT_FRACTION_NUMERATOR_Y_PT = 0.8d;
+    private static final double TEXT_FRACTION_DENOMINATOR_Y_PT = 18.8d;
+    private static final double TEXT_FRACTION_BAR_Y_PT = 16.4d;
     private static final double NESTED_FRACTION_HEIGHT_PT = MathTypeStructureMetrics.NESTED_FRACTION_HEIGHT_PT;
     private static final double NESTED_FRACTION_NUMERATOR_Y_PT = 2.0d;
     private static final double NESTED_FRACTION_BAR_Y_PT = MathTypeStructureMetrics.NESTED_FRACTION_ABOVE_PT;
@@ -2189,6 +2186,9 @@ final class VectorWmfFormulaRenderer {
             if (numerator == null || denominator == null) {
                 return null;
             }
+            boolean textHeavyCurrentFraction = textFractionFamily
+                && (isTextHeavyFractionPart(text.substring(numeratorStart + 1, numeratorEnd))
+                    || isTextHeavyFractionPart(text.substring(denominatorStart + 1, denominatorEnd)));
             double numeratorWidth = numerator.widthPt();
             double denominatorWidth = denominator.widthPt();
             double fractionPad = compactInlineFraction ? 1.6d : 3.0d;
@@ -2208,13 +2208,13 @@ final class VectorWmfFormulaRenderer {
                     COMPACT_FRACTION_BAR_INSET_PT);
             } else {
                 double numeratorY = sqrtFractionFamily ? SQRT_FRACTION_NUMERATOR_Y_PT
-                    : textFractionFamily ? TEXT_FRACTION_NUMERATOR_Y_PT
+                    : textHeavyCurrentFraction ? TEXT_FRACTION_NUMERATOR_Y_PT
                         : nestedFractionFamily ? NESTED_FRACTION_NUMERATOR_Y_PT : FRACTION_NUMERATOR_Y_PT;
                 double denominatorY = sqrtFractionFamily ? SQRT_FRACTION_DENOMINATOR_Y_PT
-                    : textFractionFamily ? TEXT_FRACTION_DENOMINATOR_Y_PT
+                    : textHeavyCurrentFraction ? TEXT_FRACTION_DENOMINATOR_Y_PT
                         : nestedFractionFamily ? NESTED_FRACTION_DENOMINATOR_Y_PT : FRACTION_DENOMINATOR_Y_PT;
                 double barY = sqrtFractionFamily ? SQRT_FRACTION_BAR_Y_PT
-                    : textFractionFamily ? TEXT_FRACTION_BAR_Y_PT
+                    : textHeavyCurrentFraction ? TEXT_FRACTION_BAR_Y_PT
                         : nestedFractionFamily ? NESTED_FRACTION_BAR_Y_PT : FRACTION_BAR_Y_PT;
                 appendLayout(placed, lines, numerator, fractionX + (fractionWidth - numeratorWidth) / 2.0d,
                     numeratorY);

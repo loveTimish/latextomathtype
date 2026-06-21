@@ -2784,3 +2784,26 @@ batch, then append any useful lesson or pitfall found in that round.
   counts alone can pass text-only or collapsed-radical previews. The DOCX gate
   should not compare embedded WMF dimensions to TSV display-box dimensions,
   because `DocxBuilder` recalibrates the actual object size by structure family.
+- v183 is a stage improvement, not visual acceptance. It raised the text-heavy
+  fraction family to `33pt`, made its numerator/bar/denominator y positions
+  explicit, and moved radical bottom/left-descent geometry through
+  `MathTypeStructureMetrics`. The golden DOCX still passes the
+  structural/OLE/vector gates, and Word COM + Poppler render shows case 15
+  text-mixed fractions now read as real long fractions instead of two stacked
+  CJK text rows. Residual visual failures remain obvious: nested radicals and
+  radicals containing fractions are still cramped, with too-close inner/outer
+  root shapes and overlong left descenders.
+- Do not keep derived text-fraction offset constants after switching the family
+  to explicit source-like y positions. A stale
+  `TEXT_FRACTION_VERTICAL_OFFSET_PT` implies ordinary fraction geometry still
+  drives text-heavy fraction layout, which is false and can mislead the next
+  tuning round.
+- A no-context v183 review caught two real risks before commit. First,
+  `STRUCTURE_LINE_WIDTH_PT` is global for all polylines, so changing it to fix
+  one CJK fraction line can also change roots, arrows, boxes, and future grid
+  lines. Keep it at the v178 `0.32pt` until there is a per-structure pen model
+  or visual proof for every affected structure. Second, detecting a
+  text-heavy fraction at formula level must not force ordinary sibling
+  fractions such as trailing `AO/CO` to use text-heavy y coordinates. Compute
+  text-heavy fraction y placement per `\frac{...}{...}` node, while the overall
+  formula can still use the taller text-fraction height family.

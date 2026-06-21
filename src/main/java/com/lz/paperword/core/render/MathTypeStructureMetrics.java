@@ -88,20 +88,18 @@ final class MathTypeStructureMetrics {
     static final double NESTED_FRACTION_HEIGHT_PT = 53.25d;
     static final double NESTED_FRACTION_ABOVE_PT = 30.0d;
     static final double NESTED_FRACTION_BELOW_PT = NESTED_FRACTION_HEIGHT_PT - NESTED_FRACTION_ABOVE_PT;
-    static final double TEXT_FRACTION_HEIGHT_PT = 30.0d;
-    static final double TEXT_FRACTION_VERTICAL_OFFSET_PT =
-        (TEXT_FRACTION_HEIGHT_PT - ORDINARY_FRACTION_HEIGHT_PT) / 2.0d;
+    static final double TEXT_FRACTION_HEIGHT_PT = 33.0d;
     static final double SQRT_BODY_LEFT_PAD_PT = 6.0d;
     static final double SQRT_BODY_Y_OFFSET_PT = 1.2d;
     static final double SQRT_WIDTH_PAD_PT = 7.0d;
     static final double SQRT_CHECK_MID_X_PT = 2.0d;
     static final double SQRT_CHECK_TOP_X_PT = 5.0d;
     static final double SQRT_TOP_Y_PT = 2.0d;
-    static final double SQRT_BOTTOM_PAD_PT = 1.0d;
-    static final double SQRT_LEFT_DESCENT_RATIO = 0.62d;
+    static final double SQRT_BOTTOM_PAD_PT = 4.8d;
+    static final double SQRT_LEFT_DESCENT_RATIO = 0.52d;
     static final double SQRT_BOX_TOP_OFFSET_PT = 1.3d;
     static final double SQRT_BOX_BODY_BASELINE_OFFSET_PT = 0.2d;
-    static final double SQRT_BOX_LEFT_DESCENT_RATIO = 0.58d;
+    static final double SQRT_BOX_LEFT_DESCENT_RATIO = 0.52d;
     static final double STRUCTURE_LINE_WIDTH_PT = 0.32d;
     static final double ARRAY_SOURCE_HEIGHT_PT = 33.0d;
     static final double ARRAY_ROW_HEIGHT_PT = 16.5d;
