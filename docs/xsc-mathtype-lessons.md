@@ -2956,3 +2956,26 @@ batch, then append any useful lesson or pitfall found in that round.
   ink or at least text-run min/max x against the radical top turn and top bar;
   a fraction bar can stay inside while numerator/denominator ink protrudes or
   visually crosses.
+- v191 narrows only tall radical checkmark geometry: ordinary roots keep
+  `SQRT_CHECK_TOP_X_PT = 5.0`, while roots taller than the ordinary family use
+  `SQRT_TALL_CHECK_TOP_X_PT = 4.0`. This lets compact root-body fractions use
+  `SQRT_BODY_FRACTION_LEFT_ADJUST_PT = -2.4` without repeating the old v190
+  left-protrusion failure, because the radical top turn also moved left.
+- v191 review correctly warned that reusing `-2.4pt` looked like the old failed
+  v190 experiment. Do not rely on the parameter value alone; require direct
+  guards that the compact body fraction bar and glyph start at or to the right
+  of the radical top turn, and that nested fraction root top bars still cover
+  their body text after the tall-root branch.
+- v191 validation regenerated
+  `analysis/formula-golden-corpus/formula-golden-corpus-20260621-225053.docx`.
+  Structural scans stayed clean: `23` MathType OLE objects, `23` WMF previews,
+  zero visible LaTeX leaks, zero bitmap/StretchDIB WMFs, and zero
+  review-required suspicious WMF text. Word PNG evidence is under
+  `analysis/formula-golden-corpus/word-rendered-v191/page-*.png`; page 3 case
+  18 has less empty space between the root turn and `l/g`, but the root is still
+  visibly hand-drawn rather than MathType-quality.
+- v191 does not move glyph runs for case 18; `glyph-v191-final.txt` keeps `l`
+  at `x=37.85pt` and `g` at `x=36.75pt`. The improvement comes from the radical
+  polyline geometry and the compact body placement guard, not from character
+  sizing. A future pass still needs a more principled radical stroke model or
+  ink-level comparison, especially for nested radicals.

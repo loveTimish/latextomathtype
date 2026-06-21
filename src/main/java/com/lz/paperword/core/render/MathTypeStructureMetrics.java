@@ -68,7 +68,7 @@ final class MathTypeStructureMetrics {
     static final double SQRT_FRACTION_PREVIEW_WIDTH_SCALE = 0.83d;
     static final double SQRT_FRACTION_MIXED_PREVIEW_WIDTH_SCALE = 1.08d;
     static final double SQRT_BODY_FRACTION_SCALE = 0.78d;
-    static final double SQRT_BODY_FRACTION_LEFT_ADJUST_PT = -1.6d;
+    static final double SQRT_BODY_FRACTION_LEFT_ADJUST_PT = -2.4d;
     static final double SQRT_BODY_FRACTION_TOP_PAD_PT = 2.4d;
 
     static final double SCRIPT_CANDIDATE_HEIGHT_PT = 18.75d;
@@ -101,6 +101,7 @@ final class MathTypeStructureMetrics {
     static final double SQRT_WIDTH_PAD_PT = 7.0d;
     static final double SQRT_CHECK_MID_X_PT = 2.0d;
     static final double SQRT_CHECK_TOP_X_PT = 5.0d;
+    static final double SQRT_TALL_CHECK_TOP_X_PT = 4.0d;
     static final double SQRT_TOP_Y_PT = 2.0d;
     static final double SQRT_BOTTOM_PAD_PT = 4.8d;
     static final double SQRT_TALL_BOTTOM_PAD_PT = 10.5d;

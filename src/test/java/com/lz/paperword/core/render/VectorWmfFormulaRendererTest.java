@@ -123,6 +123,8 @@ class VectorWmfFormulaRendererTest {
             .orElseThrow();
         assertTrue(radical.x(2) <= fractionBar.x1(),
             "scaled sqrt-body fractions should not protrude left of the radical top turn");
+        assertTrue(radical.x(2) <= minTextXCoordinate(simpleBodyFraction),
+            "scaled sqrt-body fraction glyphs should not protrude left of the radical top turn");
         assertTrue(fractionBar.x1() - radical.x(2) <= 45,
             "scaled sqrt-body fractions should sit close to the radical top turn, not float in an oversized slot");
         assertTrue(radical.x2() >= fractionBar.x2(),
@@ -186,6 +188,14 @@ class VectorWmfFormulaRendererTest {
             / MathTypeStructureMetrics.SQRT_CHECK_TOP_X_PT;
         assertTrue(Math.abs(((double) midX / (double) topX) - expectedMidRatio) <= 0.05d,
             "sqrt checkmark x ratio should stay metric-driven");
+        int tallTopX = tallRoot.x(2) - tallRoot.x1();
+        double expectedTallTopRatio = MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT
+            / MathTypeStructureMetrics.SQRT_CHECK_TOP_X_PT;
+        assertTrue(Math.abs(((double) tallTopX / (double) topX) - expectedTallTopRatio) <= 0.08d,
+            "tall sqrt checkmark top turn should be narrower than the ordinary sqrt turn");
+        assertTrue(minTextXCoordinate(fractionRoot) - tallRoot.x1()
+            >= tallTopX,
+            "tall sqrt bodies should remain to the right of the narrowed radical top turn");
         assertCloseTwips(MathTypeStructureMetrics.SQRT_HEIGHT_PT
             - MathTypeStructureMetrics.SQRT_BOTTOM_PAD_PT, root.y(1));
         assertCloseTwips(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT
@@ -197,6 +207,8 @@ class VectorWmfFormulaRendererTest {
             "root inside a fraction should still keep the four-point radical after scaled placement");
         assertTrue(tallNestedFractionRoots.stream().allMatch(VectorWmfFormulaRendererTest::hasLiftedTallRootTurn),
             "nested fraction roots should also use the lifted tall-root checkmark turn");
+        assertTrue(tallNestedFractionRoots.stream().allMatch(line -> line.x2() >= maxTextRightCoordinate(nestedFractionRoot)),
+            "nested fraction root top bars should keep covering the nested body text");
         assertCloseTwips(MathTypeStructureMetrics.SQRT_TOP_Y_PT, root.y(2));
         assertCloseTwips(MathTypeStructureMetrics.SQRT_TOP_Y_PT, root.y(3));
         assertTrue(minTextXCoordinate(simpleRoot) - rootX >= topX);
