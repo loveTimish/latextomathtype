@@ -100,15 +100,17 @@ class VectorWmfFormulaRendererTest {
         assertTrue(maxTextYCoordinate(rootInFraction) <= MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d);
         assertTrue(maxPolylineYCoordinate(rootInFraction) <= MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d);
         List<Polyline> rootInFractionLines = polylines(rootInFraction);
-        assertEquals(1, rootInFractionLines.stream().filter(line -> line.pointCount() == 2).count(),
+        assertEquals(1, rootInFractionLines.stream()
+                .filter(VectorWmfFormulaRendererTest::isFractionBarPolyline)
+                .count(),
             "root-in-fraction should draw a single fraction rule, not side dashes");
         Polyline rootInFractionRadical = rootInFractionLines.stream()
             .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
             .findFirst()
             .orElseThrow();
         Polyline rootInFractionBar = polylines(rootInFraction).stream()
-            .filter(line -> line.pointCount() == 2)
-            .filter(line -> line.x2() - line.x1() > 400)
+            .filter(VectorWmfFormulaRendererTest::isFractionBarPolyline)
+            .filter(line -> line.width() > 400)
             .findFirst()
             .orElseThrow();
         assertEquals(13, selectedObjectForPolyline(rootInFraction, rootInFractionRadical),
@@ -116,7 +118,7 @@ class VectorWmfFormulaRendererTest {
         assertEquals(12, selectedObjectForPolyline(rootInFraction, rootInFractionBar),
             "root-in-fraction rule should keep the ordinary structure pen");
         int denominatorBaseline = maxTextYCoordinateBetween(rootInFraction,
-            rootInFractionBar.x1(), rootInFractionBar.x2());
+            rootInFractionBar.minX(), rootInFractionBar.maxX());
         assertTrue(denominatorBaseline - rootInFractionBar.y1() >= 180,
             "sqrt-fraction denominator should sit visibly below the rule instead of splitting it");
         assertFalse(hasCompactRootProfile(simpleRoot),
@@ -131,10 +133,10 @@ class VectorWmfFormulaRendererTest {
             "ordinary-height roots inside fraction slots should not receive an extra upper profile");
         assertEquals(0, ordinaryTallRootProfileCount(denominatorRootInFraction),
             "ordinary-height denominator roots should not receive an extra upper profile");
-        assertEquals(1, ordinaryTallRootProfileCount(tallRootInFraction),
-            "tall roots inside ordinary fraction slots should receive one ordinary tall-root upper profile");
-        assertEquals(1, ordinaryTallRootProfileCount(tallDenominatorRootInFraction),
-            "tall denominator roots inside ordinary fraction slots should receive one ordinary tall-root upper profile");
+        assertEquals(0, ordinaryTallRootProfileCount(tallRootInFraction),
+            "tall roots inside ordinary fraction slots should not add separate short upper-profile strokes");
+        assertEquals(0, ordinaryTallRootProfileCount(tallDenominatorRootInFraction),
+            "tall denominator roots inside ordinary fraction slots should not add separate short upper-profile strokes");
     }
 
     @Test
@@ -180,7 +182,8 @@ class VectorWmfFormulaRendererTest {
             .findFirst()
             .orElseThrow();
         Polyline fractionBar = lines.stream()
-            .filter(line -> line.pointCount() == 2 && line.x1() >= radicalTopX(radical) && line.x2() > line.x1())
+            .filter(VectorWmfFormulaRendererTest::isFractionBarPolyline)
+            .filter(line -> line.minX() >= radicalTopX(radical) && line.width() > 0)
             .findFirst()
             .orElseThrow();
         List<Integer> penWidths = penWidthsTwips(simpleBodyFraction);
@@ -320,7 +323,7 @@ class VectorWmfFormulaRendererTest {
         List<Polyline> nestedBodyFractionLines = polylines(nestedBodyFraction);
         Polyline innerNestedRoot = sortedRadicals(nestedBodyFractionLines).get(1);
         Polyline nestedFractionBar = nestedBodyFractionLines.stream()
-            .filter(line -> line.pointCount() == 2)
+            .filter(VectorWmfFormulaRendererTest::isFractionBarPolyline)
             .findFirst()
             .orElseThrow();
         assertTrue(radicalTopX(innerNestedRoot) <= nestedFractionBar.x1(),
@@ -364,7 +367,8 @@ class VectorWmfFormulaRendererTest {
             .filter(VectorWmfFormulaRendererTest::isRadicalPolyline)
             .count());
         assertEquals(1, rootInFractionLines.stream()
-            .filter(line -> line.pointCount() == 2 && line.x2() - line.x1() > 400)
+            .filter(VectorWmfFormulaRendererTest::isFractionBarPolyline)
+            .filter(line -> line.width() > 400)
             .count());
         assertEquals(0, ordinaryTallRootProfileCount(rootInFraction));
         assertEquals(2, nestedOnlyLines.stream().filter(VectorWmfFormulaRendererTest::isRadicalPolyline).count());
@@ -372,11 +376,11 @@ class VectorWmfFormulaRendererTest {
         assertTrue(nestedFractionLines.size() >= 3,
             "nested fraction roots may include compact radical hook strokes in addition to required bars");
         assertTrue(nestedLines.stream()
-                .filter(line -> line.pointCount() != 3)
+                .filter(line -> !isFractionBarPolyline(line) && line.pointCount() != 3)
                 .allMatch(VectorWmfFormulaRendererTest::isRadicalPolyline),
             "nested root radicals must keep radical polylines after layout translation");
-        assertTrue(hasNestedTallRootProfile(nestedRoot),
-            "nested tall roots should add a local upper profile to soften the mechanical single-stroke turn");
+        assertFalse(hasOrdinaryTallRootProfile(nestedRoot),
+            "nested tall roots should not add separate short upper-profile strokes");
         assertFalse(hasOrdinaryTallRootProfile(fractionRoot),
             "ordinary mixed sqrt+fraction roots should not get the nested-root profile");
         assertTrue(radicalTopGapTwips(nestedLines) >= Math.round(
@@ -581,11 +585,10 @@ class VectorWmfFormulaRendererTest {
             "outer deep-nested root top bar should cover the middle nested body");
         assertTrue(radicals.get(1).x2() >= radicals.get(2).x2(),
             "middle deep-nested root top bar should cover the inner nested body");
-        long nestedProfileCount = lines.stream()
+        assertEquals(0, lines.stream()
             .filter(VectorWmfFormulaRendererTest::isNestedTallRootProfile)
-            .count();
-        assertTrue(nestedProfileCount >= 2,
-            "deep nested roots should add upper profile strokes for parent radicals without changing the top bars");
+            .count(),
+            "deep nested roots should avoid separate short upper-profile strokes");
     }
 
     @Test
@@ -645,24 +648,26 @@ class VectorWmfFormulaRendererTest {
         List<Polyline> mixedBars = polylines(mixedWmf);
         assertEquals(2, mixedBars.size());
         Polyline mainBar = mixedBars.stream()
-            .filter(line -> line.x2() - line.x1() > 1800)
+            .filter(VectorWmfFormulaRendererTest::isFractionBarPolyline)
+            .filter(line -> line.width() > 1800)
             .findFirst()
             .orElseThrow();
         Polyline trailingBar = mixedBars.stream()
-            .filter(line -> line.x2() - line.x1() < 700)
+            .filter(VectorWmfFormulaRendererTest::isFractionBarPolyline)
+            .filter(line -> line.width() < 700)
             .findFirst()
             .orElseThrow();
-        int mainNumeratorBaseline = minTextYCoordinateBetween(mixedWmf, mainBar.x1(), mainBar.x2());
-        int mainDenominatorBaseline = maxTextYCoordinateBetween(mixedWmf, mainBar.x1(), mainBar.x2());
-        int trailingNumeratorBaseline = minTextYCoordinateBetween(mixedWmf, trailingBar.x1(), trailingBar.x2());
-        int trailingDenominatorBaseline = maxTextYCoordinateBetween(mixedWmf, trailingBar.x1(), trailingBar.x2());
+        int mainNumeratorBaseline = minTextYCoordinateBetween(mixedWmf, mainBar.minX(), mainBar.maxX());
+        int mainDenominatorBaseline = maxTextYCoordinateBetween(mixedWmf, mainBar.minX(), mainBar.maxX());
+        int trailingNumeratorBaseline = minTextYCoordinateBetween(mixedWmf, trailingBar.minX(), trailingBar.maxX());
+        int trailingDenominatorBaseline = maxTextYCoordinateBetween(mixedWmf, trailingBar.minX(), trailingBar.maxX());
         int mainNumeratorGap = mainBar.y1() - mainNumeratorBaseline;
         int mainDenominatorGap = mainDenominatorBaseline - mainBar.y1();
         int trailingNumeratorGap = trailingBar.y1() - trailingNumeratorBaseline;
         int trailingDenominatorGap = trailingDenominatorBaseline - trailingBar.y1();
-        assertTrue(mainBar.x1() <= minTextXCoordinateBetween(mixedWmf, mainBar.x1(), mainBar.x2()) + 6,
+        assertTrue(mainBar.minX() <= minTextXCoordinateBetween(mixedWmf, mainBar.minX(), mainBar.maxX()) + 6,
             "text-heavy fraction bar should start close to the text ink, not after a large inset");
-        assertTrue(mainBar.x2() >= maxTextRightCoordinateBetween(mixedWmf, mainBar.x1(), mainBar.x2()) - 6,
+        assertTrue(mainBar.maxX() >= maxTextRightCoordinateBetween(mixedWmf, mainBar.minX(), mainBar.maxX()) - 6,
             "text-heavy fraction bar should cover the wide CJK numerator/denominator text");
         assertTrue(mainNumeratorGap >= 110,
             "text-heavy fraction bar should sit visibly below the numerator baseline");
@@ -2414,13 +2419,27 @@ class VectorWmfFormulaRendererTest {
     }
 
     private static boolean isRadicalPolyline(Polyline line) {
-        return line.pointCount() >= 4;
+        return line.pointCount() >= 4 && !isFractionBarPolyline(line);
     }
 
     private static boolean isMainRadicalPolyline(Polyline line) {
         return line.pointCount() >= 4
+            && !isFractionBarPolyline(line)
             && line.y(line.pointCount() - 1) == line.y(line.pointCount() - 2)
             && line.x2() - line.x(line.pointCount() - 2) > 40;
+    }
+
+    private static boolean isFractionBarPolyline(Polyline line) {
+        if (line.pointCount() == 2) {
+            return Math.abs(line.y2() - line.y1()) <= 8 && line.x2() > line.x1();
+        }
+        if (line.pointCount() != 5) {
+            return false;
+        }
+        return line.width() > 40
+            && line.height() <= Math.round(MathTypeStructureMetrics.STRUCTURE_LINE_WIDTH_PT * 20.0d) + 4
+            && line.x1() == line.x(line.pointCount() - 1)
+            && line.y1() == line.y(line.pointCount() - 1);
     }
 
     private static boolean hasCompactRootProfile(byte[] data) {
@@ -2489,6 +2508,46 @@ class VectorWmfFormulaRendererTest {
 
         int y(int index) {
             return points[index * 2 + 1];
+        }
+
+        int width() {
+            return maxX() - minX();
+        }
+
+        int height() {
+            return maxY() - minY();
+        }
+
+        int minX() {
+            int min = Integer.MAX_VALUE;
+            for (int i = 0; i < pointCount(); i++) {
+                min = Math.min(min, x(i));
+            }
+            return min;
+        }
+
+        int maxX() {
+            int max = Integer.MIN_VALUE;
+            for (int i = 0; i < pointCount(); i++) {
+                max = Math.max(max, x(i));
+            }
+            return max;
+        }
+
+        int minY() {
+            int min = Integer.MAX_VALUE;
+            for (int i = 0; i < pointCount(); i++) {
+                min = Math.min(min, y(i));
+            }
+            return min;
+        }
+
+        int maxY() {
+            int max = Integer.MIN_VALUE;
+            for (int i = 0; i < pointCount(); i++) {
+                max = Math.max(max, y(i));
+            }
+            return max;
         }
     }
 

@@ -47,9 +47,9 @@ final class VectorWmfFormulaRenderer {
     private static final double COMPACT_FRACTION_BAR_Y_PT = 13.6d;
     private static final double COMPACT_FRACTION_HEIGHT_PT =
         MathTypeStructureMetrics.COMPACT_INLINE_FRACTION_HEIGHT_PT;
-    private static final double FRACTION_NUMERATOR_Y_PT = -2.4d;
-    private static final double FRACTION_DENOMINATOR_Y_PT = 11.8d;
-    private static final double FRACTION_BAR_Y_PT = 12.8d;
+    private static final double FRACTION_NUMERATOR_Y_PT = -3.0d;
+    private static final double FRACTION_DENOMINATOR_Y_PT = 12.8d;
+    private static final double FRACTION_BAR_Y_PT = 13.2d;
     private static final double FRACTION_HEIGHT_PT = MathTypeStructureMetrics.ORDINARY_FRACTION_HEIGHT_PT;
     private static final double TEXT_FRACTION_HEIGHT_PT = MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT;
     private static final double TEXT_FRACTION_NUMERATOR_Y_PT = 0.8d;
@@ -233,19 +233,6 @@ final class VectorWmfFormulaRenderer {
             out -> writeBlackPen(out, MathTypeStructureMetrics.ROOT_STRUCTURE_LINE_WIDTH_PT)); // CreatePen
         builder.record(0x012D, out -> writeWord(out, 0)); // SelectObject
 
-        if (!layout.lines().isEmpty()) {
-            LinePen selectedPen = null;
-            for (LineSegment line : layout.lines()) {
-                if (line.pen() != selectedPen) {
-                    int penIndex = line.pen() == LinePen.ROOT ? ROOT_PEN_OBJECT_INDEX : PEN_OBJECT_INDEX;
-                    builder.record(0x012D, out -> writeWord(out, penIndex)); // SelectObject pen
-                    selectedPen = line.pen();
-                }
-                int[] points = line.toTwips(LEFT_MARGIN_PT + offsetX, TOP_MARGIN_PT + offsetY, previewScale);
-                builder.record(0x0325, out -> writePolyline(out, points));
-            }
-            builder.record(0x012D, out -> writeWord(out, 0));
-        }
         int selectedFont = 0;
         for (PlacedText run : layout.runs()) {
             final int runBaseline = toTwips(TOP_MARGIN_PT + offsetY + run.baselinePt() * previewScale.y());
@@ -270,6 +257,19 @@ final class VectorWmfFormulaRenderer {
                     dxScriptRatio, dxDisplayRatio, standardGlyphModel)
                     * (run.script() ? dxShortScriptWidthScale : 1.0d) * runWidthScale;
             }
+        }
+        if (!layout.lines().isEmpty()) {
+            LinePen selectedPen = null;
+            for (LineSegment line : layout.lines()) {
+                if (line.pen() != selectedPen) {
+                    int penIndex = line.pen() == LinePen.ROOT ? ROOT_PEN_OBJECT_INDEX : PEN_OBJECT_INDEX;
+                    builder.record(0x012D, out -> writeWord(out, penIndex)); // SelectObject pen
+                    selectedPen = line.pen();
+                }
+                int[] points = line.toTwips(LEFT_MARGIN_PT + offsetX, TOP_MARGIN_PT + offsetY, previewScale);
+                builder.record(0x0325, out -> writePolyline(out, points));
+            }
+            builder.record(0x012D, out -> writeWord(out, 0));
         }
         return builder.finish();
     }
@@ -2294,15 +2294,19 @@ final class VectorWmfFormulaRenderer {
                 addInsetFractionBar(lines, fractionX, fractionWidth, COMPACT_FRACTION_BAR_Y_PT,
                     FractionBarProfile.COMPACT);
             } else {
+                boolean trailingPlainFractionInTextFamily = textFractionFamily && !textHeavyCurrentFraction;
                 double numeratorY = sqrtFractionFamily ? SQRT_FRACTION_NUMERATOR_Y_PT
                     : textHeavyCurrentFraction ? TEXT_FRACTION_NUMERATOR_Y_PT
-                        : nestedFractionFamily ? NESTED_FRACTION_NUMERATOR_Y_PT : FRACTION_NUMERATOR_Y_PT;
+                        : nestedFractionFamily ? NESTED_FRACTION_NUMERATOR_Y_PT
+                            : trailingPlainFractionInTextFamily ? -2.4d : FRACTION_NUMERATOR_Y_PT;
                 double denominatorY = sqrtFractionFamily ? SQRT_FRACTION_DENOMINATOR_Y_PT
                     : textHeavyCurrentFraction ? TEXT_FRACTION_DENOMINATOR_Y_PT
-                        : nestedFractionFamily ? NESTED_FRACTION_DENOMINATOR_Y_PT : FRACTION_DENOMINATOR_Y_PT;
+                        : nestedFractionFamily ? NESTED_FRACTION_DENOMINATOR_Y_PT
+                            : trailingPlainFractionInTextFamily ? 11.8d : FRACTION_DENOMINATOR_Y_PT;
                 double barY = sqrtFractionFamily ? SQRT_FRACTION_BAR_Y_PT
                     : textHeavyCurrentFraction ? TEXT_FRACTION_BAR_Y_PT
-                        : nestedFractionFamily ? NESTED_FRACTION_BAR_Y_PT : FRACTION_BAR_Y_PT;
+                        : nestedFractionFamily ? NESTED_FRACTION_BAR_Y_PT
+                            : trailingPlainFractionInTextFamily ? 12.8d : FRACTION_BAR_Y_PT;
                 appendLayout(placed, lines, numerator, fractionX + (fractionWidth - numeratorWidth) / 2.0d,
                     numeratorY);
                 appendLayout(placed, lines, denominator, fractionX + (fractionWidth - denominatorWidth) / 2.0d,
@@ -2677,7 +2681,14 @@ final class VectorWmfFormulaRenderer {
         if (end <= start) {
             end = start + Math.max(0.4d, width);
         }
-        lines.add(new LineSegment(start, y, end, y));
+        double halfStroke = MathTypeStructureMetrics.STRUCTURE_LINE_WIDTH_PT / 2.0d;
+        lines.add(LineSegment.polyline(
+            start, y - halfStroke,
+            end, y - halfStroke,
+            end, y + halfStroke,
+            start, y + halfStroke,
+            start, y - halfStroke
+        ));
     }
 
     private static FormulaLayout layoutLeftBraceArray(String body) {
@@ -3813,18 +3824,6 @@ final class VectorWmfFormulaRenderer {
                         topBarEnd, MathTypeStructureMetrics.SQRT_TOP_Y_PT
                     ));
                 } else {
-                    if (nestedSqrtBody || insideFractionSlot) {
-                        double nestedProfileX = MathTypeStructureMetrics.SQRT_TALL_NESTED_UPPER_PROFILE_X_OFFSET_PT;
-                        double nestedProfileY = MathTypeStructureMetrics.SQRT_TALL_NESTED_UPPER_PROFILE_Y_OFFSET_PT;
-                        lines.add(LineSegment.polyline(
-                            rootX + shoulderX + nestedProfileX,
-                            rootHeight * shoulderYRatio + nestedProfileY,
-                            rootX + ordinaryTopLeadX + nestedProfileX,
-                            rootHeight * ordinaryTopLeadYRatio + nestedProfileY,
-                            rootX + checkTopX + nestedProfileX,
-                            MathTypeStructureMetrics.SQRT_TOP_Y_PT + nestedProfileY
-                        ));
-                    }
                     lines.add(LineSegment.rootPolyline(
                         rootX, rootHeight * MathTypeStructureMetrics.SQRT_LEFT_DESCENT_RATIO,
                         rootX + lowX,

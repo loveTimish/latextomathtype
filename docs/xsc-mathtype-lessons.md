@@ -3846,3 +3846,16 @@ batch, then append any useful lesson or pitfall found in that round.
   short-line/boxy root artifacts, and deep nested roots remain too mechanical.
   The next useful visual pass should redesign radical stroke geometry more
   globally rather than adding more local short profile strokes.
+- v227 fraction/root lesson: do not trust record geometry alone for fraction
+  bars. In case5 the WMF polyline record covered the full numerator/denominator
+  width, but ImageMagick rendered a single horizontal two-point bar as a tiny
+  left dash. Drawing fraction bars as closed thin rectangle polylines preserves
+  vector WMF output and makes extracted previews show the full bar. Tests should
+  identify fraction bars by bbox shape, not by `pointCount == 2`.
+- v227 visual status: display fraction bars and sqrt-body fraction bars now
+  render as continuous visible bars in extracted WMF PNGs. The result is a real
+  improvement over the missing/short-bar v225/v226 previews, but root geometry
+  is still not final: tall roots remain too mechanical, top bars are still too
+  long in `\frac{\sqrt{a^{2}+b^{2}}}{2}`, and sqrt-body fractions sit too far
+  right in `\sqrt{1+\frac{a}{b}}`. Continue with root padding/top-bar redesign
+  instead of adding more profile strokes.
