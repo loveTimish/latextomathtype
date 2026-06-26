@@ -65,13 +65,14 @@ final class MathTypeStructureMetrics {
     static final double LINEAR_PREVIEW_WIDTH_SCALE = 1.12d;
     static final double SQRT_PREVIEW_WIDTH_SCALE = 1.18d;
     static final double SQRT_SCRIPT_PREVIEW_WIDTH_SCALE = 0.96d;
-    static final double SQRT_FRACTION_PREVIEW_WIDTH_SCALE = 0.83d;
+    static final double SQRT_FRACTION_PREVIEW_WIDTH_SCALE = 1.40d;
     static final double SQRT_FRACTION_MIXED_PREVIEW_WIDTH_SCALE = 1.08d;
+    static final double SQRT_NESTED_FRACTION_PREVIEW_WIDTH_SCALE = 1.50d;
     static final double SQRT_BODY_FRACTION_SCALE = 0.78d;
-    static final double SQRT_NESTED_BODY_FRACTION_SCALE = 0.90d;
+    static final double SQRT_NESTED_BODY_FRACTION_SCALE = 1.34d;
     static final double SQRT_BODY_FRACTION_LEFT_ADJUST_PT = -2.4d;
     static final double SQRT_BODY_FRACTION_TOP_PAD_PT = 2.4d;
-    static final double SQRT_NESTED_BODY_FRACTION_LEFT_EXTRA_PT = 0.85d;
+    static final double SQRT_NESTED_BODY_FRACTION_LEFT_EXTRA_PT = 5.2d;
 
     static final double SCRIPT_CANDIDATE_HEIGHT_PT = 18.75d;
     static final double ORDINARY_FRACTION_CANDIDATE_HEIGHT_PT = 30.75d;
@@ -99,10 +100,15 @@ final class MathTypeStructureMetrics {
     static final double TEXT_FRACTION_HEIGHT_PT = 33.0d;
     static final double SQRT_BODY_LEFT_PAD_PT = 6.0d;
     static final double SQRT_BODY_FRACTION_LEFT_PAD_PT = 5.4d;
-    static final double SQRT_NESTED_BODY_LEFT_EXTRA_PT = 2.8d;
+    static final double SQRT_NESTED_BODY_LEFT_EXTRA_PT = 5.4d;
     static final double SQRT_BODY_Y_OFFSET_PT = 1.2d;
+    static final double SQRT_FRACTION_BODY_EXTRA_Y_PT = 1.8d;
+    static final double SQRT_NESTED_FRACTION_BODY_EXTRA_Y_PT = 3.8d;
     static final double SQRT_NESTED_BODY_Y_EXTRA_PT = 3.0d;
+    static final double SQRT_NESTED_PREFIX_BASELINE_Y_PT = 11.0d;
+    static final double SQRT_NESTED_PREFIX_RIGHT_GAP_PT = 8.0d;
     static final double SQRT_WIDTH_PAD_PT = 7.0d;
+    static final double SQRT_FRACTION_TOP_BAR_EXTRA_PT = 2.0d;
     static final double SQRT_CHECK_MID_X_PT = 2.0d;
     static final double SQRT_TALL_CHECK_LOW_X_PT = 1.35d;
     static final double SQRT_TALL_CHECK_SHOULDER_X_PT = 3.15d;
@@ -115,6 +121,13 @@ final class MathTypeStructureMetrics {
     static final double SQRT_TALL_COMPACT_CHECK_MID_X_PT = 1.7d;
     static final double SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_X_PT = 1.48d;
     static final double SQRT_TALL_COMPACT_CHECK_UPPER_TRANSITION_X_PT = 2.24d;
+    static final double SQRT_TALL_NESTED_COMPACT_CHECK_LOW_X_PT = 1.28d;
+    static final double SQRT_TALL_NESTED_COMPACT_CHECK_LOWER_TRANSITION_X_PT = 1.72d;
+    static final double SQRT_TALL_NESTED_COMPACT_CHECK_MID_X_PT = 1.95d;
+    static final double SQRT_TALL_NESTED_COMPACT_CHECK_UPPER_TRANSITION_X_PT = 2.60d;
+    static final double SQRT_TALL_NESTED_COMPACT_CHECK_SHOULDER_X_PT = 3.48d;
+    static final double SQRT_TALL_NESTED_COMPACT_CHECK_TOP_LEAD_X_PT = 4.34d;
+    static final double SQRT_TALL_NESTED_COMPACT_CHECK_TOP_X_PT = 4.55d;
     static final double SQRT_TALL_CHECK_LOW_Y_RATIO = 0.74d;
     static final double SQRT_TALL_COMPACT_CHECK_LOW_Y_RATIO = 0.72d;
     static final double SQRT_TALL_COMPACT_CHECK_LOWER_TRANSITION_Y_RATIO = 0.64d;
@@ -152,6 +165,7 @@ final class MathTypeStructureMetrics {
     static final double FRACTION_BAR_NESTED_INSET_PT = 0.35d;
     static final double FRACTION_BAR_SQRT_INSET_PT = 0.24d;
     static final double FRACTION_BAR_SQRT_OVERHANG_PT = 0.20d;
+    static final double FRACTION_BAR_SQRT_MIN_WIDTH_PT = 8.0d;
     static final double ARRAY_SOURCE_HEIGHT_PT = 33.0d;
     static final double ARRAY_ROW_HEIGHT_PT = 16.5d;
     static final double ARRAY_MIN_HEIGHT_PT = ARRAY_SOURCE_HEIGHT_PT;

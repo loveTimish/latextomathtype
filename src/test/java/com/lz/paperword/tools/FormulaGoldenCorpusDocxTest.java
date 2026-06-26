@@ -114,7 +114,9 @@ class FormulaGoldenCorpusDocxTest {
 
     private void assertFormulaEmbeddingsAreValid(Path docx, List<FormulaCase> expectedCases) throws IOException {
         int expectedFormulaCount = expectedCases.size();
+        boolean emfPreviewEnabled = Boolean.parseBoolean(System.getProperty("paperword.ole.preview.emf", "false"));
         int wmfCount = 0;
+        int emfCount = 0;
         int oleCount = 0;
         int equationDsmt4Count = 0;
         int vectorWmfCount = 0;
@@ -162,6 +164,8 @@ class FormulaGoldenCorpusDocxTest {
                                     + " embedded WMF should preserve each radical as a polyline with at least four points");
                         }
                     }
+                } else if (name.startsWith("word/media/") && name.endsWith(".emf")) {
+                    emfCount++;
                 } else if (name.startsWith("word/embeddings/") && name.endsWith(".bin")) {
                     oleCount++;
                     byte[] ole = zip.getInputStream(entry).readAllBytes();
@@ -171,11 +175,19 @@ class FormulaGoldenCorpusDocxTest {
                 }
             }
         }
-        assertEquals(expectedFormulaCount, wmfCount, "each formula should have a WMF preview");
+        if (emfPreviewEnabled) {
+            assertEquals(expectedFormulaCount, emfCount, "each formula should have an EMF preview");
+            assertEquals(0, wmfCount, "EMF preview mode should not emit WMF media");
+        } else {
+            assertEquals(expectedFormulaCount, wmfCount, "each formula should have a WMF preview");
+            assertEquals(0, emfCount, "default WMF mode should not emit EMF media");
+        }
         assertEquals(expectedFormulaCount, oleCount, "each formula should have an OLE embedding");
         assertEquals(expectedFormulaCount, equationDsmt4Count, "each OLE should be MathType Equation.DSMT4");
-        assertEquals(expectedFormulaCount, vectorWmfCount, "each WMF should contain vector ExtTextOut text");
-        assertEquals(0, bitmapWmfCount, "golden corpus WMFs must not use bitmap fallback records");
+        if (!emfPreviewEnabled) {
+            assertEquals(expectedFormulaCount, vectorWmfCount, "each WMF should contain vector ExtTextOut text");
+            assertEquals(0, bitmapWmfCount, "golden corpus WMFs must not use bitmap fallback records");
+        }
         assertTrue(failures.isEmpty(), String.join(System.lineSeparator(), failures));
     }
 

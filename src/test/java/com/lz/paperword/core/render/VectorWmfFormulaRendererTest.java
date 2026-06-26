@@ -60,6 +60,8 @@ class VectorWmfFormulaRendererTest {
     void limitedStructuredPlaceholdersCanRenderAsVectorText() {
         assertTrue(VectorWmfFormulaRenderer.canRender("x^{\\frac{1}{2}}"));
         assertTrue(VectorWmfFormulaRenderer.canRender("\\sqrt{\\frac{1}{2}}"));
+        assertTrue(VectorWmfFormulaRenderer.canRender("\\sqrt x"));
+        assertTrue(VectorWmfFormulaRenderer.canRender("\\sqrt \\pi"));
         assertTrue(VectorWmfFormulaRenderer.canRender("{\\sqrt{}}"));
         assertFalse(VectorWmfFormulaRenderer.canRender("\\sqrt[3]{8}"),
             "optional root indexes must not be vectorized until they are emitted in WMF");
@@ -320,12 +322,19 @@ class VectorWmfFormulaRendererTest {
         int sqrtBarVisualInset = fractionBar.x1() - minTextXCoordinate(simpleBodyFraction);
         assertTrue(sqrtBarVisualInset <= 12,
             "sqrt-body fraction bars should visually track the glyph width instead of looking like a short dash");
+        assertTrue(fractionBar.width() >= Math.round(
+                MathTypeStructureMetrics.FRACTION_BAR_SQRT_MIN_WIDTH_PT * 20.0d) - 2,
+            "sqrt-body fraction bars should keep a minimum readable width for one-letter fractions");
         List<Polyline> nestedBodyFractionLines = polylines(nestedBodyFraction);
         Polyline innerNestedRoot = sortedRadicals(nestedBodyFractionLines).get(1);
         Polyline nestedFractionBar = nestedBodyFractionLines.stream()
             .filter(VectorWmfFormulaRendererTest::isFractionBarPolyline)
             .findFirst()
             .orElseThrow();
+        assertTrue(nestedFractionBar.width() >= Math.round(
+                MathTypeStructureMetrics.FRACTION_BAR_SQRT_MIN_WIDTH_PT
+                    * MathTypeStructureMetrics.SQRT_NESTED_BODY_FRACTION_SCALE * 20.0d) - 2,
+            "nested sqrt-body fraction bars should keep the scaled minimum readable width");
         assertTrue(radicalTopX(innerNestedRoot) <= nestedFractionBar.x1(),
             "widened nested sqrt-body fraction bars should not protrude left of the inner radical top turn");
         assertTrue(innerNestedRoot.x2() >= nestedFractionBar.x2(),
@@ -336,6 +345,9 @@ class VectorWmfFormulaRendererTest {
         assertTrue(nestedFractionGap >= fractionGap
                 + Math.round(MathTypeStructureMetrics.SQRT_NESTED_BODY_FRACTION_LEFT_EXTRA_PT * 20.0d) - 2,
             "nested sqrt-body fractions should get dedicated inner clearance from the radical turn");
+        assertTrue(minTextYCoordinate(nestedBodyFraction) - minTextYCoordinate(simpleBodyFraction)
+                >= Math.round(MathTypeStructureMetrics.SQRT_NESTED_FRACTION_BODY_EXTRA_Y_PT * 20.0d) - 2,
+            "nested sqrt-body fractions should add vertical breathing room inside the inner radical");
         assertTrue(textFontHeightTwips(mixedBodyFraction, "a") >= 220,
             "mixed root bodies such as 1+frac must not receive the pure-body fraction shrink");
         assertEquals((int) (MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT * 20.0d),
@@ -370,6 +382,13 @@ class VectorWmfFormulaRendererTest {
             .filter(VectorWmfFormulaRendererTest::isFractionBarPolyline)
             .filter(line -> line.width() > 400)
             .count());
+        Polyline mixedRootFractionBar = fractionLines.stream()
+            .filter(VectorWmfFormulaRendererTest::isFractionBarPolyline)
+            .findFirst()
+            .orElseThrow();
+        assertTrue(mixedRootFractionBar.width() >= Math.round(
+                MathTypeStructureMetrics.FRACTION_BAR_SQRT_MIN_WIDTH_PT * 20.0d) - 2,
+            "mixed sqrt bodies like 1+frac should keep a readable a/b fraction rule");
         assertEquals(0, ordinaryTallRootProfileCount(rootInFraction));
         assertEquals(2, nestedOnlyLines.stream().filter(VectorWmfFormulaRendererTest::isRadicalPolyline).count());
         assertEquals(2, nestedLines.stream().filter(VectorWmfFormulaRendererTest::isRadicalPolyline).count());
@@ -500,11 +519,67 @@ class VectorWmfFormulaRendererTest {
             "nested fraction roots should also use the lifted tall-root checkmark turn");
         assertTrue(tallNestedFractionRoots.stream().allMatch(line -> line.x2() >= maxTextRightCoordinate(nestedFractionRoot)),
             "nested fraction root top bars should keep covering the nested body text");
+        assertTrue(tallRoot.x2() - maxTextRightCoordinate(fractionRoot)
+                >= Math.round(MathTypeStructureMetrics.SQRT_FRACTION_TOP_BAR_EXTRA_PT * 20.0d) - 2,
+            "sqrt-fraction top bars should keep extra visual cover over the body text");
+        assertTrue(tallNestedFractionRoots.stream().allMatch(line -> line.x2() - maxTextRightCoordinate(nestedFractionRoot)
+                >= Math.round(MathTypeStructureMetrics.SQRT_FRACTION_TOP_BAR_EXTRA_PT * 20.0d) - 2),
+            "nested sqrt-fraction top bars should keep extra visual cover over the nested body text");
         assertCloseTwips(MathTypeStructureMetrics.SQRT_TOP_Y_PT, root.y(2));
         assertCloseTwips(MathTypeStructureMetrics.SQRT_TOP_Y_PT, root.y(3));
         assertTrue(minTextXCoordinate(simpleRoot) - rootX >= topX);
         assertTrue(minTextYCoordinate(simpleRoot) >= (int) Math.round(MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT
             * 20.0d));
+        assertTrue(minTextYCoordinate(fractionRoot) >= (int) Math.round(
+            (MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT + MathTypeStructureMetrics.SQRT_FRACTION_BODY_EXTRA_Y_PT)
+                * 20.0d));
+    }
+
+    @Test
+    void nestedSqrtFractionKeepsReadableAlignmentAndClearance() throws IOException {
+        byte[] nestedFractionRoot = VectorWmfFormulaRenderer.render("\\sqrt{1+\\sqrt{\\frac{a}{b}}}", 128.0d,
+            78.0d);
+        List<Polyline> lines = polylines(nestedFractionRoot);
+        List<Polyline> radicals = sortedMainRadicals(lines);
+        List<Polyline> bars = lines.stream()
+            .filter(VectorWmfFormulaRendererTest::isFractionBarPolyline)
+            .toList();
+
+        assertEquals(2, radicals.size(), "case12 should contain outer and inner radical strokes");
+        assertEquals(1, bars.size(), "case12 should contain exactly one a/b fraction bar");
+        Polyline outer = radicals.get(0);
+        Polyline inner = radicals.get(1);
+        Polyline fractionBar = bars.get(0);
+
+        assertTrue(outer.x2() >= inner.x2() + 18,
+            "outer radical top bar must visibly cover the nested radical instead of ending flush");
+        assertTrue(inner.x2() >= fractionBar.x2() + 18,
+            "inner radical top bar must visibly cover the a/b fraction bar");
+        assertTrue(fractionBar.x1() - radicalTopX(inner) >= 42,
+            "a/b fraction bar should start after a readable gap from the inner radical turn");
+        assertTrue(fractionBar.width() >= 150,
+            "a/b fraction rule should be long enough to read as a fraction line, not a dash");
+        assertTrue(fractionBar.width() >= Math.round(
+                MathTypeStructureMetrics.FRACTION_BAR_SQRT_MIN_WIDTH_PT
+                    * MathTypeStructureMetrics.SQRT_NESTED_BODY_FRACTION_SCALE * 20.0d) - 2,
+            "case12 should preserve the scaled minimum readable a/b fraction rule");
+        assertTrue(radicalTopY(inner) - radicalTopY(outer) >= 92,
+            "nested radical top bars need vertical separation to avoid a compressed stack");
+        assertTrue(minTextYCoordinate(nestedFractionRoot) - radicalTopY(outer) >= Math.round(
+                MathTypeStructureMetrics.SQRT_NESTED_PREFIX_BASELINE_Y_PT * 20.0d) - 2,
+            "outer sqrt prefix text should align with the nested radical body, not touch the outer top bar");
+        assertTrue(maxTextYCoordinateBetween(nestedFractionRoot, outer.x1(), inner.x1()) - radicalTopY(outer) >= 190,
+            "the 1+ prefix should read on the nested radical baseline instead of floating near the top rule");
+        assertTrue(minTextYCoordinateBetween(nestedFractionRoot, fractionBar.minX(), fractionBar.maxX())
+                - radicalTopY(inner) >= 44,
+            "numerator text should not touch the inner radical top bar");
+        assertTrue(maxTextYCoordinateBetween(nestedFractionRoot, fractionBar.minX(), fractionBar.maxX())
+                - fractionBar.y1() >= 190,
+            "denominator text should sit clearly below the a/b fraction bar");
+        assertTrue(windowExtX(nestedFractionRoot) >= maxTextRightCoordinate(nestedFractionRoot),
+            "case12 text must stay inside the WMF viewport horizontally");
+        assertTrue(windowExtY(nestedFractionRoot) >= maxTextYCoordinate(nestedFractionRoot),
+            "case12 text must stay inside the WMF viewport vertically");
     }
 
     @Test
@@ -1669,13 +1744,27 @@ class VectorWmfFormulaRendererTest {
     @Test
     void symbolCommandsDoNotEncodeAsQuestionMarks() throws IOException {
         byte[] wmf = VectorWmfFormulaRenderer.render(
-            "\\times+\\div+\\leq+\\geq+\\neq+\\pi+\\cdots+\\parallel+\\because", 180.0d, 16.0d);
+            "\\times+\\div+\\leq+\\geq+\\neq+\\pi+\\cdots+\\parallel+\\because+\\nearrow+\\swarrow",
+            220.0d, 16.0d);
         List<byte[]> textRecords = extTextOutBytes(wmf);
 
         assertTrue(VectorWmfFormulaRenderer.canRender(
-            "\\times+\\div+\\leq+\\geq+\\neq+\\pi+\\cdots+\\parallel+\\because"));
+            "\\times+\\div+\\leq+\\geq+\\neq+\\pi+\\cdots+\\parallel+\\because+\\nearrow+\\swarrow"));
         assertFalse(textRecords.isEmpty());
         assertFalse(textRecords.stream().anyMatch(VectorWmfFormulaRendererTest::containsQuestionMark));
+    }
+
+    @Test
+    void unbracedSqrtUsesVectorRadical() throws IOException {
+        byte[] variableRoot = VectorWmfFormulaRenderer.render("\\sqrt x", 28.0d,
+            MathTypeStructureMetrics.SQRT_HEIGHT_PT);
+        byte[] commandRoot = VectorWmfFormulaRenderer.render("\\sqrt \\pi", 28.0d,
+            MathTypeStructureMetrics.SQRT_HEIGHT_PT);
+
+        assertTrue(polylines(variableRoot).stream().anyMatch(VectorWmfFormulaRendererTest::isRadicalPolyline));
+        assertTrue(polylines(commandRoot).stream().anyMatch(VectorWmfFormulaRendererTest::isRadicalPolyline));
+        assertFalse(records(variableRoot).contains(0x0F43));
+        assertFalse(records(commandRoot).contains(0x0F43));
     }
 
     @Test

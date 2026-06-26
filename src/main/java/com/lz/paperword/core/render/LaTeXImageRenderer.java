@@ -3,6 +3,15 @@ package com.lz.paperword.core.render;
 import org.apache.batik.transcoder.TranscoderInput;
 import org.apache.batik.transcoder.TranscoderOutput;
 import org.apache.batik.transcoder.image.PNGTranscoder;
+import org.apache.batik.anim.dom.SAXSVGDocumentFactory;
+import org.apache.batik.bridge.BridgeContext;
+import org.apache.batik.bridge.DocumentLoader;
+import org.apache.batik.bridge.GVTBuilder;
+import org.apache.batik.bridge.UserAgentAdapter;
+import org.apache.batik.gvt.GraphicsNode;
+import org.apache.batik.util.XMLResourceDescriptor;
+import org.freehep.graphicsio.AbstractVectorGraphicsIO;
+import org.freehep.graphicsio.emf.EMFGraphics2D;
 import org.scilab.forge.jlatexmath.TeXConstants;
 import org.scilab.forge.jlatexmath.TeXFormula;
 import org.scilab.forge.jlatexmath.TeXIcon;
@@ -11,6 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -77,10 +87,14 @@ public class LaTeXImageRenderer {
     private static final String CACHE_DIR_PROP = "paperword.render.cache.dir";
     /** 系统属性：是否允许 OLE WMF 预览退化为纯文本矢量图。 */
     private static final String ALLOW_TEXT_FALLBACK_PROP = "paperword.wmf.allowTextFallback";
+    /** 系统属性：是否使用成熟排版库生成 EMF OLE 预览。 */
+    private static final String OLE_EMF_PREVIEW_PROP = "paperword.ole.preview.emf";
+    /** 系统属性：EMF 预览是否把文本转为路径，避免目标机器缺字体导致变形。 */
+    private static final String OLE_EMF_TEXT_AS_SHAPES_PROP = "paperword.ole.preview.emf.textAsShapes";
     /** 系统属性：WMF 文本宽度校准。 */
     private static final String WMF_TEXT_WIDTH_SCALE_PROP = "paperword.wmf.textWidth.scale";
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v227-fraction-boxbar-root-standard";
+    private static final String CACHE_VERSION = "v245-svg-emf-nested-root-fraction-rules";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(
@@ -89,6 +103,14 @@ public class LaTeXImageRenderer {
     private static final float PX_PER_PT = 1.0f / 0.75f;
     /** Keep DIB-backed WMF previews reasonably sized for extremely wide vertical-layout formulas. */
     private static final int MAX_WMF_DIB_SIDE = 4096;
+    /** EMF 画布内边距，避免字形外扩导致 O/b/根号边缘被 Word 裁切。 */
+    private static final int EMF_SAFE_PADDING_PX = 4;
+    /** dvisvgm produces 0.478pt rule rectangles; Word EMF preview needs a stronger minimum. */
+    private static final double EMF_RULE_MIN_HEIGHT_PT = 0.86d;
+    /** Single-symbol fraction rules need a small minimum width to remain readable after Word scaling. */
+    private static final double EMF_RULE_MIN_WIDTH_PT = 8.0d;
+    private static final Pattern DVISVGM_RULE_RECT_PATTERN = Pattern.compile(
+        "<rect\\s+x='([-+0-9.]+)'\\s+y='([-+0-9.]+)'\\s+height='([-+0-9.]+)'\\s+width='([-+0-9.]+)'\\s*/>");
     /** 显式长除法命令提取模式。 */
     private static final Pattern LONG_DIVISION_COMMAND_PATTERN =
         Pattern.compile("\\\\longdiv(?:\\[([^\\]]*)])?\\{([^{}]+)}\\{([^{}]+)}");
@@ -280,6 +302,8 @@ public class LaTeXImageRenderer {
             + "|dvisvgm=" + System.getProperty(DVISVGM_CMD_PROP, "")
             + "|timeout=" + System.getProperty(RENDER_TIMEOUT_PROP, String.valueOf(DEFAULT_TIMEOUT_SECONDS))
             + "|allowTextFallback=" + System.getProperty(ALLOW_TEXT_FALLBACK_PROP, "false")
+            + "|oleEmfPreview=" + System.getProperty(OLE_EMF_PREVIEW_PROP, "false")
+            + "|oleEmfTextAsShapes=" + System.getProperty(OLE_EMF_TEXT_AS_SHAPES_PROP, "true")
             + "|wmfTextWidthScale=" + System.getProperty(WMF_TEXT_WIDTH_SCALE_PROP, "");
     }
 
@@ -475,6 +499,12 @@ public class LaTeXImageRenderer {
 
             int widthPx = Math.max((int) Math.round(widthPt * PX_PER_PT), 4);
             int heightPx = Math.max((int) Math.round(heightPt * PX_PER_PT), 4);
+            if (useEmfOlePreview()) {
+                PreviewImage emfPreview = renderEmfPreviewViaJLatexMath(latex, size, widthPt, heightPt, depthPt);
+                if (emfPreview != null) {
+                    return emfPreview;
+                }
+            }
             if (VectorWmfFormulaRenderer.canRender(latex)) {
                 byte[] wmfData = VectorWmfFormulaRenderer.render(latex, widthPt, heightPt);
                 if (wmfData != null && wmfData.length > 0) {
@@ -495,6 +525,196 @@ public class LaTeXImageRenderer {
             log.error("Self-vector WMF preview render failed: {}", latex, e);
             return null;
         }
+    }
+
+    private boolean useEmfOlePreview() {
+        return Boolean.parseBoolean(System.getProperty(OLE_EMF_PREVIEW_PROP, "false"));
+    }
+
+    private PreviewImage renderEmfPreviewViaJLatexMath(String latex, float size, double targetWidthPt,
+                                                       double targetHeightPt, double fallbackDepthPt) {
+        PreviewImage svgPreview = renderEmfPreviewViaDvisvgm(latex, size, targetWidthPt, targetHeightPt, fallbackDepthPt);
+        if (svgPreview != null) {
+            return svgPreview;
+        }
+        try {
+            String localRenderLatex = normalizeLatexForLocalRender(latex);
+            TeXFormula formula = new TeXFormula(localRenderLatex);
+            TeXIcon icon = formula.createTeXIcon(TeXConstants.STYLE_DISPLAY, size);
+            icon.setInsets(new Insets(0, 0, 0, 0));
+            icon.setForeground(Color.BLACK);
+
+            int iconWidth = icon.getIconWidth();
+            int iconHeight = icon.getIconHeight();
+            if (iconWidth <= 0 || iconHeight <= 0) {
+                return null;
+            }
+
+            int widthPx = Math.max((int) Math.round(targetWidthPt * PX_PER_PT), 4);
+            int heightPx = Math.max((int) Math.round(targetHeightPt * PX_PER_PT), 4);
+            double availableWidth = Math.max(widthPx - EMF_SAFE_PADDING_PX * 2.0d, 1.0d);
+            double availableHeight = Math.max(heightPx - EMF_SAFE_PADDING_PX * 2.0d, 1.0d);
+            double scale = Math.min(availableWidth / iconWidth, availableHeight / iconHeight);
+            if (!Double.isFinite(scale) || scale <= 0d) {
+                return null;
+            }
+
+            double drawWidth = iconWidth * scale;
+            double drawHeight = iconHeight * scale;
+            double drawX = Math.max((widthPx - drawWidth) / 2.0d, 0d);
+            double drawY = Math.max((heightPx - drawHeight) / 2.0d, 0d);
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            EMFGraphics2D emf = new EMFGraphics2D(baos, new Dimension(widthPx, heightPx));
+            Properties properties = new Properties();
+            properties.putAll(EMFGraphics2D.getDefaultProperties());
+            properties.setProperty(AbstractVectorGraphicsIO.TEXT_AS_SHAPES,
+                System.getProperty(OLE_EMF_TEXT_AS_SHAPES_PROP, "true"));
+            emf.setProperties(properties);
+            emf.startExport();
+            emf.setColor(Color.WHITE);
+            emf.fillRect(0, 0, widthPx, heightPx);
+            emf.setColor(Color.BLACK);
+            emf.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            emf.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+            Graphics2D formulaGraphics = (Graphics2D) emf.create();
+            formulaGraphics.translate(drawX, drawY);
+            formulaGraphics.scale(scale, scale);
+            icon.paintIcon(null, formulaGraphics, 0, 0);
+            formulaGraphics.dispose();
+            emf.endExport();
+
+            byte[] data = baos.toByteArray();
+            if (data.length == 0) {
+                return null;
+            }
+            double bottomPaddingPx = Math.max(heightPx - drawY - drawHeight, 0d);
+            double depthPt = Math.max(0d, (bottomPaddingPx + icon.getIconDepth() * scale) / PX_PER_PT);
+            if (!Double.isFinite(depthPt)) {
+                depthPt = fallbackDepthPt;
+            }
+            return new PreviewImage(data, widthPx, heightPx, "emf", "image/x-emf", false,
+                depthPt, targetWidthPt, targetHeightPt);
+        } catch (Exception e) {
+            log.warn("Mature EMF OLE preview render failed, fallback to WMF: {}", latex, e);
+            return null;
+        }
+    }
+
+    private PreviewImage renderEmfPreviewViaDvisvgm(String latex, float size, double targetWidthPt,
+                                                    double targetHeightPt, double fallbackDepthPt) {
+        try {
+            String localRenderLatex = normalizeLatexForLocalRender(latex);
+            byte[] svg = renderSvgViaDvisvgm(localRenderLatex, size);
+            if (svg == null || svg.length == 0) {
+                return null;
+            }
+            svg = strengthenSvgRuleRects(svg);
+
+            SvgDimensions dimensions = extractSvgDisplayDimensions(svg);
+            if (dimensions.widthPt() <= 0f || dimensions.heightPt() <= 0f) {
+                return null;
+            }
+            GraphicsNode svgNode = buildSvgGraphicsNode(svg);
+            Rectangle2D bounds = svgNode.getBounds();
+            double fallbackSourceWidthPx = dimensions.widthPt() * PX_PER_PT;
+            double fallbackSourceHeightPx = dimensions.heightPt() * PX_PER_PT;
+            double sourceWidthPx = bounds != null && bounds.getWidth() > 0d
+                ? bounds.getWidth()
+                : fallbackSourceWidthPx;
+            double sourceHeightPx = bounds != null && bounds.getHeight() > 0d
+                ? bounds.getHeight()
+                : fallbackSourceHeightPx;
+
+            int widthPx = Math.max((int) Math.round(targetWidthPt * PX_PER_PT), 4);
+            int heightPx = Math.max((int) Math.round(targetHeightPt * PX_PER_PT), 4);
+            double availableWidth = Math.max(widthPx - EMF_SAFE_PADDING_PX * 2.0d, 1.0d);
+            double availableHeight = Math.max(heightPx - EMF_SAFE_PADDING_PX * 2.0d, 1.0d);
+            double maxScale = maxSvgEmfScale(latex);
+            double scale = Math.min(maxScale, Math.min(availableWidth / sourceWidthPx, availableHeight / sourceHeightPx));
+            if (!Double.isFinite(scale) || scale <= 0d) {
+                return null;
+            }
+
+            double drawWidth = sourceWidthPx * scale;
+            double drawHeight = sourceHeightPx * scale;
+            double drawX = Math.max((widthPx - drawWidth) / 2.0d, 0d);
+            double drawY = Math.max((heightPx - drawHeight) / 2.0d, 0d);
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            EMFGraphics2D emf = new EMFGraphics2D(baos, new Dimension(widthPx, heightPx));
+            Properties properties = new Properties();
+            properties.putAll(EMFGraphics2D.getDefaultProperties());
+            properties.setProperty(AbstractVectorGraphicsIO.TEXT_AS_SHAPES, "true");
+            emf.setProperties(properties);
+            emf.startExport();
+            emf.setColor(Color.WHITE);
+            emf.fillRect(0, 0, widthPx, heightPx);
+            emf.setColor(Color.BLACK);
+            emf.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            emf.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+            Graphics2D svgGraphics = (Graphics2D) emf.create();
+            svgGraphics.translate(drawX, drawY);
+            svgGraphics.scale(scale, scale);
+            if (bounds != null) {
+                svgGraphics.translate(-bounds.getX(), -bounds.getY());
+            }
+            svgNode.paint(svgGraphics);
+            svgGraphics.dispose();
+            emf.endExport();
+
+            byte[] data = baos.toByteArray();
+            if (data.length == 0) {
+                return null;
+            }
+            return new PreviewImage(data, widthPx, heightPx, "emf", "image/x-emf", false,
+                fallbackDepthPt, targetWidthPt, targetHeightPt);
+        } catch (Exception e) {
+            log.warn("TeX SVG to EMF OLE preview render failed, fallback to JLaTeXMath EMF: {}", latex, e);
+            return null;
+        }
+    }
+
+    private double maxSvgEmfScale(String latex) {
+        return VectorWmfFormulaRenderer.sqrtCommandDepthOutsideText(latex) >= 3 ? 1.22d : 1.0d;
+    }
+
+    private byte[] strengthenSvgRuleRects(byte[] svg) {
+        String text = new String(svg, StandardCharsets.UTF_8);
+        Matcher matcher = DVISVGM_RULE_RECT_PATTERN.matcher(text);
+        StringBuilder out = new StringBuilder(text.length());
+        while (matcher.find()) {
+            double x = Double.parseDouble(matcher.group(1));
+            double y = Double.parseDouble(matcher.group(2));
+            double height = Double.parseDouble(matcher.group(3));
+            double width = Double.parseDouble(matcher.group(4));
+            if (height > 0d && height <= 0.6d && width >= 2.0d) {
+                double nextHeight = Math.max(height, EMF_RULE_MIN_HEIGHT_PT);
+                double nextWidth = Math.max(width, EMF_RULE_MIN_WIDTH_PT);
+                double nextX = x - (nextWidth - width) / 2.0d;
+                double nextY = y - (nextHeight - height) / 2.0d;
+                matcher.appendReplacement(out, Matcher.quoteReplacement(String.format(Locale.ROOT,
+                    "<rect x='%.6f' y='%.6f' height='%.6f' width='%.6f'/>",
+                    nextX, nextY, nextHeight, nextWidth)));
+            } else {
+                matcher.appendReplacement(out, Matcher.quoteReplacement(matcher.group(0)));
+            }
+        }
+        matcher.appendTail(out);
+        return out.toString().getBytes(StandardCharsets.UTF_8);
+    }
+
+    private GraphicsNode buildSvgGraphicsNode(byte[] svg) throws IOException {
+        String parser = XMLResourceDescriptor.getXMLParserClassName();
+        SAXSVGDocumentFactory factory = new SAXSVGDocumentFactory(parser);
+        var document = factory.createDocument(null, new ByteArrayInputStream(svg));
+        UserAgentAdapter userAgent = new UserAgentAdapter();
+        DocumentLoader loader = new DocumentLoader(userAgent);
+        BridgeContext context = new BridgeContext(userAgent, loader);
+        context.setDynamicState(BridgeContext.STATIC);
+        return new GVTBuilder().build(context, document);
     }
 
     private boolean allowTextFallbackWmf() {
@@ -660,7 +880,11 @@ public class LaTeXImageRenderer {
             return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.ARRAY, rows);
         }
         if (text.contains("\\sqrt")) {
-            if (VectorWmfFormulaRenderer.sqrtCommandDepthOutsideText(text) > 2) {
+            int sqrtDepth = VectorWmfFormulaRenderer.sqrtCommandDepthOutsideText(text);
+            if (sqrtDepth > 1 && hasFractionCommand(text)) {
+                return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.SQRT_NESTED);
+            }
+            if (sqrtDepth > 2) {
                 return MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.SQRT_NESTED);
             }
             if (hasFractionCommand(text)) {
@@ -703,6 +927,10 @@ public class LaTeXImageRenderer {
             case SQRT_FRACTION -> !hasTopLevelFraction(latex) && hasTopLevelTextOutsideSqrt(latex)
                 ? MathTypeStructureMetrics.SQRT_FRACTION_MIXED_PREVIEW_WIDTH_SCALE
                 : MathTypeStructureMetrics.SQRT_FRACTION_PREVIEW_WIDTH_SCALE;
+            case SQRT_NESTED -> VectorWmfFormulaRenderer.sqrtCommandDepthOutsideText(latex) > 1
+                && hasFractionCommand(latex)
+                    ? MathTypeStructureMetrics.SQRT_NESTED_FRACTION_PREVIEW_WIDTH_SCALE
+                    : 0.86d;
             default -> switch (previewClass) {
             case "array" -> 0.91d;
             case "textFraction", "text_fraction" -> 1.0d;

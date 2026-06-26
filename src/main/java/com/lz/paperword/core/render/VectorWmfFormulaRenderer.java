@@ -332,6 +332,20 @@ final class VectorWmfFormulaRenderer {
             .replace("\\cdots", "...")
             .replace("\\ldots", "...")
             .replace("\\pm", "±")
+            .replace("\\nearrow", "↗")
+            .replace("\\searrow", "↘")
+            .replace("\\nwarrow", "↖")
+            .replace("\\swarrow", "↙")
+            .replace("\\rightarrow", "→")
+            .replace("\\to", "→")
+            .replace("\\leftarrow", "←")
+            .replace("\\gets", "←")
+            .replace("\\leftrightarrow", "↔")
+            .replace("\\Rightarrow", "⇒")
+            .replace("\\Leftarrow", "⇐")
+            .replace("\\Leftrightarrow", "⇔")
+            .replace("\\uparrow", "↑")
+            .replace("\\downarrow", "↓")
             .replaceAll("\\\\[A-Za-z]+", "");
     }
 
@@ -890,6 +904,35 @@ final class VectorWmfFormulaRenderer {
             cursor = groupEnd + 1;
         }
         return depth;
+    }
+
+    private static int findSqrtTokenEnd(String text, int start) {
+        if (start >= text.length()) {
+            return start;
+        }
+        char first = text.charAt(start);
+        // Handle LaTeX command like \sqrt \alpha or \sqrt \pi
+        if (first == '\\') {
+            int end = start + 1;
+            while (end < text.length() && Character.isLetter(text.charAt(end))) {
+                end++;
+            }
+            return end;
+        }
+        // Handle single token: letter, digit, or greek unicode
+        if (Character.isLetterOrDigit(first)
+            || (first >= 0x03B1 && first <= 0x03C9) // lowercase greek
+            || (first >= 0x0391 && first <= 0x03A9) // uppercase greek
+            || first == '|' || first == '(' || first == '[' // fences
+            || first == '<' || first == '>') {
+            return start + 1;
+        }
+        // Handle common operators
+        if (first == '+' || first == '-' || first == '*' || first == '/'
+            || first == '=' || first == '!' || first == '?') {
+            return start + 1;
+        }
+        return start;
     }
 
     private static int nextCommandOutsideText(String text, String command, int cursor) {
@@ -2217,7 +2260,8 @@ final class VectorWmfFormulaRenderer {
 
     private static FormulaLayout layoutFractions(String text, int sqrtDepth, boolean insideFractionSlot) {
         boolean compactInlineFraction = isCompactInlineFraction(text);
-        boolean sqrtFractionFamily = !compactInlineFraction && text.contains("\\sqrt");
+        boolean sqrtFractionFamily = !compactInlineFraction
+            && (text.contains("\\sqrt") || (sqrtDepth > 0 && !isWholeSimpleFraction(text)));
         boolean textFractionFamily = !compactInlineFraction && !sqrtFractionFamily && hasTextHeavyFraction(text);
         boolean nestedFractionFamily = !compactInlineFraction && !sqrtFractionFamily && !textFractionFamily
             && hasNestedFraction(text);
@@ -2680,6 +2724,11 @@ final class VectorWmfFormulaRenderer {
         double end = x + Math.max(inset, width - inset) + profile.overhangPt();
         if (end <= start) {
             end = start + Math.max(0.4d, width);
+        }
+        if (profile.minWidthPt() > 0.0d && end - start < profile.minWidthPt()) {
+            double center = (start + end) / 2.0d;
+            start = Math.max(x, center - profile.minWidthPt() / 2.0d);
+            end = start + profile.minWidthPt();
         }
         double halfStroke = MathTypeStructureMetrics.STRUCTURE_LINE_WIDTH_PT / 2.0d;
         lines.add(LineSegment.polyline(
@@ -3690,24 +3739,48 @@ final class VectorWmfFormulaRenderer {
                 if (prefix == null) {
                     return null;
                 }
-                appendLayout(placed, lines, prefix, x, 0.0d);
-                x += prefix.widthPt();
-                height = Math.max(height, prefix.heightPt());
+                double prefixY = sqrtDepth > 0 && hasFractionCommand(text.substring(start))
+                    ? MathTypeStructureMetrics.SQRT_NESTED_PREFIX_BASELINE_Y_PT : 0.0d;
+                double prefixGap = prefixY > 0.0d
+                    ? MathTypeStructureMetrics.SQRT_NESTED_PREFIX_RIGHT_GAP_PT : 0.0d;
+                appendLayout(placed, lines, prefix, x, prefixY);
+                x += prefix.widthPt() + prefixGap;
+                height = Math.max(height, prefix.heightPt() + prefixY);
             }
-            int groupStart = skipWhitespaceForward(text, start + marker.length());
-            if (groupStart >= text.length() || text.charAt(groupStart) != '{') {
+            int argStart = skipWhitespaceForward(text, start + marker.length());
+            if (argStart >= text.length()) {
                 return null;
             }
-            int groupEnd = findGroupEnd(text, groupStart);
-            if (groupEnd < 0) {
+            // Explicitly reject optional root indexes \sqrt[n]{x} for now
+            if (text.charAt(argStart) == '[') {
                 return null;
             }
-            String bodyText = text.substring(groupStart + 1, groupEnd);
+            int groupEnd;
+            String bodyText;
+            if (text.charAt(argStart) == '{') {
+                groupEnd = findGroupEnd(text, argStart);
+                if (groupEnd < 0) {
+                    return null;
+                }
+                bodyText = text.substring(argStart + 1, groupEnd);
+            } else {
+                // Support \sqrt a: read single token
+                int tokenEnd = findSqrtTokenEnd(text, argStart);
+                if (tokenEnd <= argStart) {
+                    return null;
+                }
+                bodyText = text.substring(argStart, tokenEnd);
+                groupEnd = tokenEnd;
+            }
             FormulaLayout body = layoutFractionPart(bodyText, sqrtDepth + 1, insideFractionSlot);
             if (body == null) {
                 return null;
             }
+            boolean bodyHasFraction = hasFractionCommand(bodyText);
             double bodyYOffset = MathTypeStructureMetrics.SQRT_BODY_Y_OFFSET_PT
+                + (bodyHasFraction ? MathTypeStructureMetrics.SQRT_FRACTION_BODY_EXTRA_Y_PT : 0.0d)
+                + (sqrtDepth > 0 && bodyHasFraction
+                    ? MathTypeStructureMetrics.SQRT_NESTED_FRACTION_BODY_EXTRA_Y_PT : 0.0d)
                 + sqrtCommandDepthOutsideText(bodyText) * MathTypeStructureMetrics.SQRT_NESTED_BODY_Y_EXTRA_PT;
             double rootX = x;
             boolean compactBodyFraction = isWholeSimpleFraction(bodyText);
@@ -3723,7 +3796,7 @@ final class VectorWmfFormulaRenderer {
             }
             boolean nestedSqrtBody = !compactBodyFraction && hasSqrtCommandOutsideText(bodyText);
             if (nestedSqrtBody) {
-                bodyPad += MathTypeStructureMetrics.SQRT_NESTED_BODY_LEFT_EXTRA_PT;
+                bodyPad += bodyHasFraction ? MathTypeStructureMetrics.SQRT_NESTED_BODY_LEFT_EXTRA_PT : 2.8d;
             }
             double bodyX = rootX + bodyPad
                 + (compactBodyFraction ? MathTypeStructureMetrics.SQRT_BODY_FRACTION_LEFT_ADJUST_PT : 0.0d);
@@ -3734,29 +3807,38 @@ final class VectorWmfFormulaRenderer {
                 appendLayout(placed, lines, body, bodyX, bodyYOffset);
             }
             double topBarEnd = bodyX + scaledBodyWidth
-                + (compactBodyFraction ? MathTypeStructureMetrics.SQRT_BODY_FRACTION_TOP_PAD_PT : 0.55d);
+                + (compactBodyFraction ? MathTypeStructureMetrics.SQRT_BODY_FRACTION_TOP_PAD_PT : 0.55d)
+                + (bodyHasFraction ? MathTypeStructureMetrics.SQRT_FRACTION_TOP_BAR_EXTRA_PT : 0.0d);
             double width = scaledBodyWidth + MathTypeStructureMetrics.SQRT_WIDTH_PAD_PT + 1.0d
+                + (bodyHasFraction ? MathTypeStructureMetrics.SQRT_FRACTION_TOP_BAR_EXTRA_PT : 0.0d)
                 + (compactNestedFractionBody ? MathTypeStructureMetrics.SQRT_NESTED_BODY_FRACTION_LEFT_EXTRA_PT : 0.0d)
-                + (nestedSqrtBody ? MathTypeStructureMetrics.SQRT_NESTED_BODY_LEFT_EXTRA_PT : 0.0d);
-            double seededHeight = hasFractionCommand(text.substring(groupStart + 1, groupEnd))
+                + (nestedSqrtBody ? (bodyHasFraction
+                    ? MathTypeStructureMetrics.SQRT_NESTED_BODY_LEFT_EXTRA_PT : 2.8d) : 0.0d);
+            double seededHeight = bodyHasFraction
                 ? MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT : MathTypeStructureMetrics.SQRT_HEIGHT_PT;
             double rootHeight = Math.max(scaledBodyHeight + bodyYOffset + MathTypeStructureMetrics.SQRT_TOP_Y_PT,
                 seededHeight);
             boolean tallRoot = MathTypeStructureMetrics.isTallSqrt(rootHeight);
             double checkMidX = tallRoot
-                ? (compactBodyFraction ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_MID_X_PT
+                ? (compactNestedFractionBody ? MathTypeStructureMetrics.SQRT_TALL_NESTED_COMPACT_CHECK_MID_X_PT
+                    : compactBodyFraction ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_MID_X_PT
                     : MathTypeStructureMetrics.SQRT_TALL_CHECK_MID_X_PT)
                 : MathTypeStructureMetrics.SQRT_CHECK_MID_X_PT;
             double checkTopX = tallRoot
-                ? (compactBodyFraction ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_X_PT
+                ? (compactNestedFractionBody ? MathTypeStructureMetrics.SQRT_TALL_NESTED_COMPACT_CHECK_TOP_X_PT
+                    : compactBodyFraction ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_X_PT
                     : MathTypeStructureMetrics.SQRT_TALL_CHECK_TOP_X_PT)
                 : MathTypeStructureMetrics.SQRT_CHECK_TOP_X_PT;
             if (tallRoot) {
-                double lowX = compactBodyFraction ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_LOW_X_PT
+                double lowX = compactNestedFractionBody ? MathTypeStructureMetrics.SQRT_TALL_NESTED_COMPACT_CHECK_LOW_X_PT
+                    : compactBodyFraction ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_LOW_X_PT
                     : MathTypeStructureMetrics.SQRT_TALL_CHECK_LOW_X_PT;
                 double shoulderX = compactBodyFraction
                     ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_X_PT
                     : MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_X_PT;
+                if (compactNestedFractionBody) {
+                    shoulderX = MathTypeStructureMetrics.SQRT_TALL_NESTED_COMPACT_CHECK_SHOULDER_X_PT;
+                }
                 double shoulderYRatio = compactBodyFraction
                     ? MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_SHOULDER_Y_RATIO
                     : MathTypeStructureMetrics.SQRT_TALL_CHECK_SHOULDER_Y_RATIO;
@@ -3777,7 +3859,12 @@ final class VectorWmfFormulaRenderer {
                     MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_UPPER_TRANSITION_Y_RATIO;
                 double topLeadX = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_LEAD_X_PT;
                 double topLeadYRatio = MathTypeStructureMetrics.SQRT_TALL_COMPACT_CHECK_TOP_LEAD_Y_RATIO;
-                if (compactBodyFraction) {
+                if (compactNestedFractionBody) {
+                    lowerTransitionX = MathTypeStructureMetrics.SQRT_TALL_NESTED_COMPACT_CHECK_LOWER_TRANSITION_X_PT;
+                    upperTransitionX = MathTypeStructureMetrics.SQRT_TALL_NESTED_COMPACT_CHECK_UPPER_TRANSITION_X_PT;
+                    topLeadX = MathTypeStructureMetrics.SQRT_TALL_NESTED_COMPACT_CHECK_TOP_LEAD_X_PT;
+                }
+                if (compactBodyFraction && !compactNestedFractionBody) {
                     lines.add(LineSegment.polyline(
                         rootX - MathTypeStructureMetrics.SQRT_TALL_COMPACT_HOOK_X_PT,
                         rootHeight * MathTypeStructureMetrics.SQRT_TALL_COMPACT_HOOK_START_Y_RATIO,
@@ -4145,6 +4232,10 @@ final class VectorWmfFormulaRenderer {
             case "Uparrow" -> "⇑";
             case "Downarrow" -> "⇓";
             case "Leftrightarrow" -> "⇔";
+            case "nearrow" -> "↗";
+            case "searrow" -> "↘";
+            case "nwarrow" -> "↖";
+            case "swarrow" -> "↙";
             default -> null;
         };
         if (mapped == null) {
@@ -4824,19 +4915,22 @@ final class VectorWmfFormulaRenderer {
     }
 
     private enum FractionBarProfile {
-        COMPACT(MathTypeStructureMetrics.FRACTION_BAR_COMPACT_INSET_PT, 0.0d),
-        ORDINARY(MathTypeStructureMetrics.FRACTION_BAR_ORDINARY_INSET_PT, 0.0d),
-        TEXT(MathTypeStructureMetrics.FRACTION_BAR_TEXT_INSET_PT, 0.0d),
-        NESTED(MathTypeStructureMetrics.FRACTION_BAR_NESTED_INSET_PT, 0.0d),
+        COMPACT(MathTypeStructureMetrics.FRACTION_BAR_COMPACT_INSET_PT, 0.0d, 0.0d),
+        ORDINARY(MathTypeStructureMetrics.FRACTION_BAR_ORDINARY_INSET_PT, 0.0d, 0.0d),
+        TEXT(MathTypeStructureMetrics.FRACTION_BAR_TEXT_INSET_PT, 0.0d, 0.0d),
+        NESTED(MathTypeStructureMetrics.FRACTION_BAR_NESTED_INSET_PT, 0.0d, 0.0d),
         SQRT(MathTypeStructureMetrics.FRACTION_BAR_SQRT_INSET_PT,
-            MathTypeStructureMetrics.FRACTION_BAR_SQRT_OVERHANG_PT);
+            MathTypeStructureMetrics.FRACTION_BAR_SQRT_OVERHANG_PT,
+            MathTypeStructureMetrics.FRACTION_BAR_SQRT_MIN_WIDTH_PT);
 
         private final double insetPt;
         private final double overhangPt;
+        private final double minWidthPt;
 
-        FractionBarProfile(double insetPt, double overhangPt) {
+        FractionBarProfile(double insetPt, double overhangPt, double minWidthPt) {
             this.insetPt = insetPt;
             this.overhangPt = overhangPt;
+            this.minWidthPt = minWidthPt;
         }
 
         double insetPt() {
@@ -4845,6 +4939,10 @@ final class VectorWmfFormulaRenderer {
 
         double overhangPt() {
             return overhangPt;
+        }
+
+        double minWidthPt() {
+            return minWidthPt;
         }
     }
 

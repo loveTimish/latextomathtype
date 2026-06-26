@@ -10,7 +10,7 @@ k12-sqrt-script-01	k12	sqrt_script	required	56	21	2	1	\sqrt{a^{2}+b^{2}}
 k12-sqrt-fraction-01	k12	sqrt_fraction	required	70	41	3	2	\sqrt{1+\frac{a}{b}}
 k12-fraction-sqrt-01	k12	fraction_sqrt	required	70	41	3	2	\frac{\sqrt{a^{2}+b^{2}}}{2}
 k12-sqrt-nested-01	k12	sqrt_nested	required	64	32	2	2	\sqrt{1+\sqrt{x}}
-k12-sqrt-nested-fraction-01	k12	sqrt_nested_fraction	required	92	58	3	3	\sqrt{1+\sqrt{\frac{a}{b}}}
+k12-sqrt-nested-fraction-01	k12	sqrt_nested_fraction	required	128	78	3	3	\sqrt{1+\sqrt{\frac{a}{b}}}
 k12-sqrt-deep-nested-01	k12	sqrt_nested	required	108	64	3	3	\sqrt{x+\sqrt{y+\sqrt{z}}}
 k12-array-01	k12	matrix_array	required	82	42	4	0	\begin{array}{c}x+y=1\\x-y=2\end{array}
 k12-text-mixed-01	k12	text_mixed	required	160	44	4	2	\frac{三角形ABD的面积}{三角形CBD的面积}=\frac{AO}{CO}

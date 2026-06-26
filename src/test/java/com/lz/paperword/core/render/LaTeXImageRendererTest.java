@@ -108,6 +108,25 @@ class LaTeXImageRendererTest {
     }
 
     @Test
+    void shouldRenderOlePreviewAsEmfWhenMatureBackendIsEnabled() {
+        String oldEmf = System.getProperty("paperword.ole.preview.emf");
+        try {
+            System.setProperty("paperword.ole.preview.emf", "true");
+
+            LaTeXImageRenderer.PreviewImage preview =
+                new LaTeXImageRenderer().renderForOlePreview("\\sqrt{a^{2}+b^{2}}", 56.0d, 21.0d);
+
+            assertEquals("emf", preview.extension());
+            assertEquals("image/x-emf", preview.contentType());
+            assertTrue(preview.data().length > 0);
+            assertEquals(56.0d, preview.widthPt(), 0.01d);
+            assertEquals(21.0d, preview.heightPt(), 0.01d);
+        } finally {
+            restoreProperty("paperword.ole.preview.emf", oldEmf);
+        }
+    }
+
+    @Test
     void vectorHeightEstimatesUseMathTypeStructureMetrics() throws Exception {
         Method method = LaTeXImageRenderer.class.getDeclaredMethod("estimateVectorHeightPt", String.class);
         method.setAccessible(true);
@@ -127,6 +146,8 @@ class LaTeXImageRendererTest {
             (double) method.invoke(renderer, "\\sqrt{2}"), 0.01d);
         assertEquals(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT,
             (double) method.invoke(renderer, "\\sqrt{1+\\frac{a}{b}}"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT,
+            (double) method.invoke(renderer, "\\sqrt{1+\\sqrt{\\frac{a}{b}}}"), 0.01d);
         assertEquals(MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT,
             (double) method.invoke(renderer, "\\sqrt{1+\\sqrt{\\frac{a}{b}+\\sqrt{z}}}"), 0.01d);
         assertEquals(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT,
@@ -154,6 +175,8 @@ class LaTeXImageRendererTest {
             MathTypeStructureMetrics.SQRT_HEIGHT_PT);
         assertCalibratedHeight(renderer, estimate, calibrate, "\\sqrt{1+\\frac{a}{b}}",
             MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\sqrt{1+\\sqrt{\\frac{a}{b}}}",
+            MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT);
         assertCalibratedHeight(renderer, estimate, calibrate, "\\sqrt{1+\\sqrt{\\frac{a}{b}+\\sqrt{z}}}",
             MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT);
         assertCalibratedHeight(renderer, estimate, calibrate, "\\frac{\\sqrt{a^{2}+b^{2}}}{2}",
@@ -208,6 +231,9 @@ class LaTeXImageRendererTest {
         assertFamily(renderer, family, "\\sqrt{1+\\frac{a}{b}}",
             MathTypeStructureMetrics.Family.SQRT_FRACTION,
             MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT, "sqrt_fraction");
+        assertFamily(renderer, family, "\\sqrt{1+\\sqrt{\\frac{a}{b}}}",
+            MathTypeStructureMetrics.Family.SQRT_NESTED,
+            MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT, "sqrt_nested");
         assertFamily(renderer, family, "\\sqrt{1+\\sqrt{\\frac{a}{b}+\\sqrt{z}}}",
             MathTypeStructureMetrics.Family.SQRT_NESTED,
             MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT, "sqrt_nested");
@@ -295,6 +321,10 @@ class LaTeXImageRendererTest {
             40.0d * 0.96d * MathTypeStructureMetrics.SQRT_FRACTION_PREVIEW_WIDTH_SCALE);
         assertCalibratedWidth(renderer, estimate, calibrate, "\\sqrt{x}+\\sqrt{\\frac{a}{b}}", 40.0d,
             40.0d * 0.96d * MathTypeStructureMetrics.SQRT_FRACTION_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "\\sqrt{1+\\sqrt{\\frac{a}{b}}}", 40.0d,
+            40.0d * 0.96d * MathTypeStructureMetrics.SQRT_NESTED_FRACTION_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "\\sqrt{x+\\sqrt{y+\\sqrt{z}}}", 40.0d,
+            40.0d * 0.86d);
     }
 
     private static void assertCalibratedHeight(LaTeXImageRenderer renderer, Method estimate, Method calibrate,

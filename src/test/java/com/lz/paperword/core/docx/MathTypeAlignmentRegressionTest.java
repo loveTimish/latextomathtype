@@ -129,6 +129,22 @@ class MathTypeAlignmentRegressionTest {
     }
 
     @Test
+    void shouldUseEmfPreviewWhenMatureBackendIsEnabled() throws IOException {
+        byte[] docx = withEmfPreviewEnabled(() -> buildDocxWithFormula("\\sqrt{a^{2}+b^{2}}"));
+        Map<String, String> entries = unzipTextEntries(docx);
+        String documentXml = entries.get("word/document.xml");
+        String relsXml = entries.get("word/_rels/document.xml.rels");
+
+        assertNotNull(documentXml);
+        assertNotNull(relsXml);
+        assertTrue(documentXml.contains("<o:OLEObject"), "EMF preview must keep editable MathType OLE");
+        assertEquals("media/image_eq1.emf",
+            extractRelationshipTarget(relsXml, extractFirstImageRelId(documentXml)));
+        ObjectMetrics metrics = extractFirstObjectMetrics(docx);
+        assertEquals("emf", metrics.previewExtension);
+    }
+
+    @Test
     void shouldPackageMathTypeOleWithNativeMtefStream() throws IOException {
         byte[] docx = buildDocxWithFormula("a^2+b^2=25");
         Map<String, byte[]> entries = unzipBinaryEntries(docx);
@@ -313,6 +329,20 @@ class MathTypeAlignmentRegressionTest {
                 System.clearProperty("paperword.wmf.allowTextFallback");
             } else {
                 System.setProperty("paperword.wmf.allowTextFallback", previous);
+            }
+        }
+    }
+
+    private byte[] withEmfPreviewEnabled(ThrowingDocxSupplier supplier) throws IOException {
+        String previous = System.getProperty("paperword.ole.preview.emf");
+        System.setProperty("paperword.ole.preview.emf", "true");
+        try {
+            return supplier.get();
+        } finally {
+            if (previous == null) {
+                System.clearProperty("paperword.ole.preview.emf");
+            } else {
+                System.setProperty("paperword.ole.preview.emf", previous);
             }
         }
     }
