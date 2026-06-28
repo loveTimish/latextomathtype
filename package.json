@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "mathjax:smoke": "node tools/mathjax/render_mathjax_svg.cjs --smoke"
+  },
+  "dependencies": {
+    "mathjax-full": "3.2.2"
+  }
+}

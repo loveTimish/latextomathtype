@@ -177,7 +177,7 @@ class DocxBuilderTest {
         section.setQuestions(List.of(q1, q2, q3));
         request.setSections(List.of(section));
 
-        byte[] docx = withTextFallbackEnabled(() -> builder.build(request));
+        byte[] docx = builder.build(request);
 
         assertNotNull(docx);
         assertTrue(docx.length > 100);
@@ -301,7 +301,7 @@ class DocxBuilderTest {
         section.setQuestions(List.of(q1, q2, q3, q4, q5));
         request.setSections(List.of(section));
 
-        byte[] docx = withTextFallbackEnabled(() -> builder.build(request));
+        byte[] docx = builder.build(request);
         assertNotNull(docx);
 
         Path outputDir = Path.of("E:/lingzhi/extensions/paper-to-word/output");
@@ -375,7 +375,7 @@ class DocxBuilderTest {
 
         request.setSections(List.of(sec1, sec2, sec3));
 
-        byte[] docx = withTextFallbackEnabled(() -> builder.build(request));
+        byte[] docx = builder.build(request);
         assertNotNull(docx);
 
         Path outputDir = Path.of("E:/lingzhi/extensions/paper-to-word/output");
@@ -475,24 +475,5 @@ class DocxBuilderTest {
             }
         }
         return entries;
-    }
-
-    private byte[] withTextFallbackEnabled(ThrowingDocxSupplier supplier) throws IOException {
-        String previous = System.getProperty("paperword.wmf.allowTextFallback");
-        System.setProperty("paperword.wmf.allowTextFallback", "true");
-        try {
-            return supplier.get();
-        } finally {
-            if (previous == null) {
-                System.clearProperty("paperword.wmf.allowTextFallback");
-            } else {
-                System.setProperty("paperword.wmf.allowTextFallback", previous);
-            }
-        }
-    }
-
-    @FunctionalInterface
-    private interface ThrowingDocxSupplier {
-        byte[] get() throws IOException;
     }
 }

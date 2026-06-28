@@ -36,9 +36,6 @@ class XscFullBatch10DocxTest {
     @Test
     void generateTenFullXscDocxFiles() throws IOException {
         Assumptions.assumeTrue(Files.exists(REQUEST_DIR), "Missing request dir: " + REQUEST_DIR);
-        String oldFallback = System.getProperty("paperword.wmf.allowTextFallback");
-        System.setProperty("paperword.wmf.allowTextFallback", "false");
-        try {
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
         Path runOutputDir = RUN_OUTPUT_DIR != null ? RUN_OUTPUT_DIR : OUTPUT_DIR.resolve(timestamp);
         Files.createDirectories(runOutputDir);
@@ -60,12 +57,5 @@ class XscFullBatch10DocxTest {
         }
 
         assertEquals(end - start + 1, generated, "should generate requested documents");
-        } finally {
-            if (oldFallback == null) {
-                System.clearProperty("paperword.wmf.allowTextFallback");
-            } else {
-                System.setProperty("paperword.wmf.allowTextFallback", oldFallback);
-            }
-        }
     }
 }

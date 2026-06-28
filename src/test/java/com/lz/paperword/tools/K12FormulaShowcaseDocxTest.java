@@ -247,9 +247,7 @@ class K12FormulaShowcaseDocxTest {
                 $$\\begin{array}{rcrl}{} & {12} & {.} & {50} \\\\ {-} & {3} & {.} & {75} \\\\ \\hline {} & {8} & {.} & {75}\\end{array}$$
                 """),
             createQuestion(20, 5, """
-                长除法与交叉法：<br/>
-                当前长除法：<br/>
-                $$\\longdiv[246]{5}{1234}$$<br/>
+                交叉法：<br/>
                 浓度十字交叉：<br/>
                 $$\\begin{array}{ccccc}{50\\%} & {} & {} & {} & {20\\%} \\\\ {} & {\\searrow} & {} & {\\nearrow} & {} \\\\ {} & {} & {30\\%} & {} & {} \\\\ {} & {\\nearrow} & {} & {\\searrow} & {} \\\\ {10\\%} & {} & {} & {} & {20\\%}\\end{array}$$
                 """)

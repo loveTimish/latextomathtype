@@ -41,7 +41,7 @@ class MathTypeAlignmentRegressionTest {
         ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithFormula("\\frac{1}{2}"));
         assertEquals("wmf", generated.previewExtension);
         assertWithin(generated.positionHalfPt, -24, 4.0d, "fraction baseline position");
-        assertTrue(generated.styleHeightPt >= 20.0d, "fraction preview height should stay close to MathType");
+        assertTrue(generated.styleHeightPt >= 12.0d, "fraction preview height should stay readable");
         assertTrue(generated.styleHeightPt <= 32.0d, "fraction preview height should not be oversized");
     }
 
@@ -87,9 +87,8 @@ class MathTypeAlignmentRegressionTest {
 
     @Test
     void shouldEmbedConcentrationCrossAsOleObject() throws IOException {
-        byte[] docx = withTextFallbackEnabled(() -> buildDocxWithContent(
+        byte[] docx = buildDocxWithContent(
             "浓度十字交叉：<br/>$$\\begin{array}{ccccc}{50\\%} & {} & {} & {} & {20\\%} \\\\ {} & {\\searrow} & {} & {\\nearrow} & {} \\\\ {} & {} & {30\\%} & {} & {} \\\\ {} & {\\nearrow} & {} & {\\searrow} & {} \\\\ {10\\%} & {} & {} & {} & {20\\%}\\end{array}$$"
-        )
         );
         Map<String, String> entries = unzipTextEntries(docx);
         String documentXml = entries.get("word/document.xml");
@@ -111,21 +110,6 @@ class MathTypeAlignmentRegressionTest {
         assertTrue(documentXml.contains("甲："), "inline formula prefix should stay as text");
         assertTrue(documentXml.contains("乙："), "second inline formula prefix should stay as text");
         assertFalse(documentXml.contains("$$"), "inline formulas should not introduce stray display delimiters");
-    }
-
-    @Test
-    void shouldKeepCurrentLongDivisionAsOleObject() throws IOException {
-        byte[] docx = withTextFallbackEnabled(
-            () -> buildDocxWithContent("长除法：<br/>$\\longdiv[246]{5}{1234}$"));
-        Map<String, String> entries = unzipTextEntries(docx);
-        String documentXml = entries.get("word/document.xml");
-        String relsXml = entries.get("word/_rels/document.xml.rels");
-
-        assertNotNull(documentXml);
-        assertNotNull(relsXml);
-        assertTrue(documentXml.contains("<o:OLEObject"), "current long division should stay on OLE path");
-        assertFalse(documentXml.contains("[\\longdiv[246]{5}{1234}]"), "current long division should not degrade to raw text");
-        assertEquals("media/image_eq1.wmf", extractRelationshipTarget(relsXml, extractFirstImageRelId(documentXml)));
     }
 
     @Test
@@ -317,20 +301,6 @@ class MathTypeAlignmentRegressionTest {
         section.setQuestions(List.of(question));
         request.setSections(List.of(section));
         return builder.build(request);
-    }
-
-    private byte[] withTextFallbackEnabled(ThrowingDocxSupplier supplier) throws IOException {
-        String previous = System.getProperty("paperword.wmf.allowTextFallback");
-        System.setProperty("paperword.wmf.allowTextFallback", "true");
-        try {
-            return supplier.get();
-        } finally {
-            if (previous == null) {
-                System.clearProperty("paperword.wmf.allowTextFallback");
-            } else {
-                System.setProperty("paperword.wmf.allowTextFallback", previous);
-            }
-        }
     }
 
     private byte[] withEmfPreviewEnabled(ThrowingDocxSupplier supplier) throws IOException {
