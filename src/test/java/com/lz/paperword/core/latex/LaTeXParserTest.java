@@ -48,6 +48,42 @@ class LaTeXParserTest {
     }
 
     @Test
+    void testParseSpacedSuperscriptFromDocxToLatex() {
+        LaTeXNode ast = parser.parseLaTeX("45 ^ { \\circ }");
+        assertNotNull(ast);
+        assertEquals(2, ast.getChildren().size());
+        assertEquals("4", flatten(ast.getChildren().get(0)));
+        LaTeXNode sup = ast.getChildren().get(1);
+        assertEquals(LaTeXNode.Type.SUPERSCRIPT, sup.getType());
+        assertEquals("5", flatten(sup.getChildren().get(0)));
+        assertEquals("\\circ", flatten(sup.getChildren().get(1)));
+    }
+
+    @Test
+    void testParseArrayLineBreaksWrittenAsThinSpacesByDocxToLatex() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{c} a=1 \\\\,b=2 \\\\,c=3 \\end{array}");
+        assertNotNull(ast);
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals(3, array.getChildren().size());
+        assertEquals("a=1", flatten(array.getChildren().get(0)));
+        assertEquals("b=2", flatten(array.getChildren().get(1)));
+        assertEquals("c=3", flatten(array.getChildren().get(2)));
+    }
+
+    @Test
+    void testParseArrayLineBreakBeforeCommandKeepsCommand() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{c} 6 \\\\,\\div \\\\,8 \\end{array}");
+        assertNotNull(ast);
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.ARRAY, array.getType());
+        assertEquals(3, array.getChildren().size());
+        assertEquals("6", flatten(array.getChildren().get(0)));
+        assertEquals("\\div", flatten(array.getChildren().get(1)));
+        assertEquals("8", flatten(array.getChildren().get(2)));
+    }
+
+    @Test
     void testParseSubscript() {
         LaTeXNode ast = parser.parseLaTeX("a_{n}");
         assertNotNull(ast);
@@ -248,6 +284,15 @@ class LaTeXParserTest {
         assertEquals(5, array.getChildren().size());
         assertTrue(flatten(array).contains("\\searrow"));
         assertTrue(flatten(array).contains("\\nearrow"));
+    }
+
+    @Test
+    void testPreNormalizeKeepsArrayLineBreakBeforeSpace() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{c}1 \\\\ 2\\end{array}");
+
+        LaTeXNode array = ast.getChildren().get(0);
+        assertEquals(2, array.getChildren().size(),
+            "array row break followed by a space must not be normalized as a control-space command");
     }
 
     @Test
@@ -597,6 +642,50 @@ class LaTeXParserTest {
         assertEquals("\\underbrace", underbrace.getValue());
         assertEquals(1, underbrace.getChildren().size());
         assertEquals("a+b+c", flatten(underbrace.getChildren().get(0)));
+    }
+
+    @Test
+    void testPreNormalizeVisualUnderbraceCounterAsTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("a=1515\\cdots 151004个15︸\\times 333\\cdots 32008个3︸");
+
+        LaTeXNode underbrace = ast.getChildren().get(2);
+        assertEquals(LaTeXNode.Type.SUBSCRIPT, underbrace.getType());
+        assertEquals("\\underbrace", underbrace.getChildren().get(0).getValue());
+        assertEquals("1515\\cdots15", flatten(underbrace.getChildren().get(0).getChildren().get(0)));
+        assertEquals("1004个15", flatten(underbrace.getChildren().get(1)));
+    }
+
+    @Test
+    void testPreNormalizeJoinedVisualUnderbraceCounterAsTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("=505050\\cdots 51004个5和1003个0︸\\times 999\\cdots 92008个9︸");
+
+        LaTeXNode underbrace = ast.getChildren().get(1);
+        assertEquals(LaTeXNode.Type.SUBSCRIPT, underbrace.getType());
+        assertEquals("\\underbrace", underbrace.getChildren().get(0).getValue());
+        assertEquals("505050\\cdots5", flatten(underbrace.getChildren().get(0).getChildren().get(0)));
+        assertEquals("1004个5和1003个0", flatten(underbrace.getChildren().get(1)));
+    }
+
+    @Test
+    void testPreNormalizeCdotVisualUnderbraceCounterAsTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("88\\cdot \\cdot \\cdot 82007个8︸\\times 33\\cdot \\cdot \\cdot 32007个3︸");
+
+        LaTeXNode underbrace = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.SUBSCRIPT, underbrace.getType());
+        assertEquals("\\underbrace", underbrace.getChildren().get(0).getValue());
+        assertEquals("88\\cdot\\cdot\\cdot8", flatten(underbrace.getChildren().get(0).getChildren().get(0)));
+        assertEquals("2007个8", flatten(underbrace.getChildren().get(1)));
+    }
+
+    @Test
+    void testPreNormalizeVariableVisualUnderbraceCounterAsTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("999\\cdots 9k个9︸=1000\\cdots 0k个0︸-1");
+
+        LaTeXNode underbrace = ast.getChildren().get(0);
+        assertEquals(LaTeXNode.Type.SUBSCRIPT, underbrace.getType());
+        assertEquals("\\underbrace", underbrace.getChildren().get(0).getValue());
+        assertEquals("999\\cdots9", flatten(underbrace.getChildren().get(0).getChildren().get(0)));
+        assertEquals("k个9", flatten(underbrace.getChildren().get(1)));
     }
 
     @Test

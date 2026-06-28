@@ -7,6 +7,7 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -88,11 +89,321 @@ class LaTeXImageRendererTest {
         }
     }
 
+    @Test
+    void cacheKeyIncludesWmfRenderProperties() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("cacheKey", String.class, String.class, float.class);
+        method.setAccessible(true);
+        LaTeXImageRenderer renderer = new LaTeXImageRenderer();
+        String oldScale = System.getProperty("paperword.wmf.textWidth.scale");
+        try {
+            System.setProperty("paperword.wmf.textWidth.scale", "1.00");
+            String defaultKey = (String) method.invoke(renderer, "ole-target-10.00x10.00", "x+1", 12f);
+            System.setProperty("paperword.wmf.textWidth.scale", "1.25");
+            String tunedKey = (String) method.invoke(renderer, "ole-target-10.00x10.00", "x+1", 12f);
+
+            assertFalse(defaultKey.equals(tunedKey), "WMF render tuning must invalidate preview cache keys");
+        } finally {
+            restoreProperty("paperword.wmf.textWidth.scale", oldScale);
+        }
+    }
+
+    @Test
+    void shouldRenderOlePreviewAsEmfWhenMatureBackendIsEnabled() {
+        String oldEmf = System.getProperty("paperword.ole.preview.emf");
+        try {
+            System.setProperty("paperword.ole.preview.emf", "true");
+
+            LaTeXImageRenderer.PreviewImage preview =
+                new LaTeXImageRenderer().renderForOlePreview("\\sqrt{a^{2}+b^{2}}", 56.0d, 21.0d);
+
+            assertEquals("emf", preview.extension());
+            assertEquals("image/x-emf", preview.contentType());
+            assertTrue(preview.data().length > 0);
+            assertEquals(56.0d, preview.widthPt(), 0.01d);
+            assertEquals(21.0d, preview.heightPt(), 0.01d);
+        } finally {
+            restoreProperty("paperword.ole.preview.emf", oldEmf);
+        }
+    }
+
+    @Test
+    void vectorHeightEstimatesUseMathTypeStructureMetrics() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("estimateVectorHeightPt", String.class);
+        method.setAccessible(true);
+        LaTeXImageRenderer renderer = new LaTeXImageRenderer();
+
+        assertEquals(MathTypeStructureMetrics.LINEAR_HEIGHT_PT, (double) method.invoke(renderer, "x+1"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.SCRIPT_HEIGHT_PT, (double) method.invoke(renderer, "a^{2}"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.SCRIPT_FRACTION_HEIGHT_PT,
+            (double) method.invoke(renderer, "x^{\\frac{1}{2}}+a^{\\frac{2}{3}}"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.SCRIPT_FRACTION_MIXED_HEIGHT_PT,
+            (double) method.invoke(renderer, "S_{\\frac{1}{4}\\mathrm{圆}}=\\frac{1}{4}\\pi r^{2}"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.ORDINARY_FRACTION_HEIGHT_PT,
+            (double) method.invoke(renderer, "\\frac{1}{2}"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.NESTED_FRACTION_HEIGHT_PT,
+            (double) method.invoke(renderer, "\\frac{1+\\frac{a}{b}}{2}"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.SQRT_HEIGHT_PT,
+            (double) method.invoke(renderer, "\\sqrt{2}"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT,
+            (double) method.invoke(renderer, "\\sqrt{1+\\frac{a}{b}}"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT,
+            (double) method.invoke(renderer, "\\sqrt{1+\\sqrt{\\frac{a}{b}}}"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT,
+            (double) method.invoke(renderer, "\\sqrt{1+\\sqrt{\\frac{a}{b}+\\sqrt{z}}}"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT,
+            (double) method.invoke(renderer, "\\frac{\\sqrt{a^{2}+b^{2}}}{2}"), 0.01d);
+        assertEquals(MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT,
+            (double) method.invoke(renderer, "\\frac{三角形ABD的面积}{三角形CBD的面积}"), 0.01d);
+    }
+
+    @Test
+    void sourceSeededStructureHeightsAreNotScaledTwice() throws Exception {
+        Method estimate = LaTeXImageRenderer.class.getDeclaredMethod("estimateVectorHeightPt", String.class);
+        estimate.setAccessible(true);
+        Method calibrate = LaTeXImageRenderer.class.getDeclaredMethod(
+            "calibratePreviewMetrics", String.class, double.class, double.class, double.class);
+        calibrate.setAccessible(true);
+        LaTeXImageRenderer renderer = new LaTeXImageRenderer();
+
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\frac{1}{2}",
+            MathTypeStructureMetrics.ORDINARY_FRACTION_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\frac{1+\\frac{a}{b}}{2}",
+            MathTypeStructureMetrics.NESTED_FRACTION_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\frac{三角形ABD的面积}{三角形CBD的面积}",
+            MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\sqrt{2}",
+            MathTypeStructureMetrics.SQRT_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\sqrt{1+\\frac{a}{b}}",
+            MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\sqrt{1+\\sqrt{\\frac{a}{b}}}",
+            MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\sqrt{1+\\sqrt{\\frac{a}{b}+\\sqrt{z}}}",
+            MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\frac{\\sqrt{a^{2}+b^{2}}}{2}",
+            MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "x^{\\frac{1}{2}}+a^{\\frac{2}{3}}",
+            MathTypeStructureMetrics.SCRIPT_FRACTION_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate,
+            "S_{\\frac{1}{4}\\mathrm{圆}}=\\frac{1}{4}\\pi r^{2}",
+            MathTypeStructureMetrics.SCRIPT_FRACTION_MIXED_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\begin{array}{c}1\\\\2\\end{array}",
+            MathTypeStructureMetrics.ARRAY_SOURCE_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\begin{cases}1\\\\2\\end{cases}",
+            MathTypeStructureMetrics.ARRAY_SOURCE_HEIGHT_PT);
+        assertCalibratedHeight(renderer, estimate, calibrate, "\\overline{AB}",
+            MathTypeStructureMetrics.ACCENT_HEIGHT_PT);
+    }
+
+    @Test
+    void structureFamilyQueryIsTheSingleMetricsContract() throws Exception {
+        Method family = LaTeXImageRenderer.class.getDeclaredMethod("classifyStructureFamily", String.class);
+        family.setAccessible(true);
+        LaTeXImageRenderer renderer = new LaTeXImageRenderer();
+
+        assertFamily(renderer, family, "x+1", MathTypeStructureMetrics.Family.LINEAR,
+            MathTypeStructureMetrics.LINEAR_HEIGHT_PT, "linear");
+        assertFamily(renderer, family, "a^{2}", MathTypeStructureMetrics.Family.SCRIPT,
+            MathTypeStructureMetrics.SCRIPT_HEIGHT_PT, "script");
+        assertFamily(renderer, family, "x^{\\frac{1}{2}}+a^{\\frac{2}{3}}",
+            MathTypeStructureMetrics.Family.SCRIPT_FRACTION,
+            MathTypeStructureMetrics.SCRIPT_FRACTION_HEIGHT_PT, "script_fraction");
+        assertFamily(renderer, family, "S_{\\frac{1}{4}\\mathrm{圆}}=\\frac{1}{4}\\pi r^{2}",
+            MathTypeStructureMetrics.Family.SCRIPT_FRACTION_MIXED,
+            MathTypeStructureMetrics.SCRIPT_FRACTION_MIXED_HEIGHT_PT, "script_fraction_mixed");
+        assertFamily(renderer, family, "\\frac{1}{2}", MathTypeStructureMetrics.Family.ORDINARY_FRACTION,
+            MathTypeStructureMetrics.ORDINARY_FRACTION_HEIGHT_PT, "fraction");
+        assertFamily(renderer, family, "\\frac{1+\\frac{a}{b}}{2}",
+            MathTypeStructureMetrics.Family.NESTED_FRACTION,
+            MathTypeStructureMetrics.NESTED_FRACTION_HEIGHT_PT, "nested_fraction");
+        assertFamily(renderer, family, "\\frac{三角形ABD的面积}{三角形CBD的面积}",
+            MathTypeStructureMetrics.Family.TEXT_FRACTION,
+            MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT, "text_fraction");
+        assertFamily(renderer, family, "\\frac{三角形ABD的面积}{三角形CBD的面积}=\\frac{AO}{CO}",
+            MathTypeStructureMetrics.Family.TEXT_FRACTION,
+            MathTypeStructureMetrics.TEXT_FRACTION_HEIGHT_PT, "text_fraction");
+        assertFamily(renderer, family, "\\sqrt{2}", MathTypeStructureMetrics.Family.SQRT,
+            MathTypeStructureMetrics.SQRT_HEIGHT_PT, "sqrt");
+        assertFamily(renderer, family, "\\sqrt{1+\\sqrt{x}}", MathTypeStructureMetrics.Family.SQRT,
+            MathTypeStructureMetrics.SQRT_HEIGHT_PT, "sqrt");
+        assertFamily(renderer, family, "\\sqrt{x+\\sqrt{y+\\sqrt{z}}}",
+            MathTypeStructureMetrics.Family.SQRT_NESTED,
+            MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT, "sqrt_nested");
+        assertFamily(renderer, family, "\\sqrt{1+\\frac{a}{b}}",
+            MathTypeStructureMetrics.Family.SQRT_FRACTION,
+            MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT, "sqrt_fraction");
+        assertFamily(renderer, family, "\\sqrt{1+\\sqrt{\\frac{a}{b}}}",
+            MathTypeStructureMetrics.Family.SQRT_NESTED,
+            MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT, "sqrt_nested");
+        assertFamily(renderer, family, "\\sqrt{1+\\sqrt{\\frac{a}{b}+\\sqrt{z}}}",
+            MathTypeStructureMetrics.Family.SQRT_NESTED,
+            MathTypeStructureMetrics.SQRT_NESTED_HEIGHT_PT, "sqrt_nested");
+        assertFamily(renderer, family, "\\frac{\\sqrt{a^{2}+b^{2}}}{2}",
+            MathTypeStructureMetrics.Family.SQRT_FRACTION,
+            MathTypeStructureMetrics.SQRT_FRACTION_HEIGHT_PT, "sqrt_fraction");
+        assertFamily(renderer, family, "\\begin{array}{c}1\\\\2\\end{array}",
+            MathTypeStructureMetrics.Family.ARRAY,
+            MathTypeStructureMetrics.ARRAY_SOURCE_HEIGHT_PT, "array");
+        assertFamily(renderer, family, "\\begin{aligned} V&=abh\\\\ V&=Sh \\end{aligned}",
+            MathTypeStructureMetrics.Family.ARRAY,
+            MathTypeStructureMetrics.ARRAY_SOURCE_HEIGHT_PT, "array");
+        assertFamily(renderer, family,
+            "\\begin{cases} \\frac{x}{y}=\\frac{7}{3}\\\\ \\frac{x+70}{y+70}=\\frac{7}{4} \\end{cases}",
+            MathTypeStructureMetrics.Family.ARRAY,
+            MathTypeStructureMetrics.ARRAY_SOURCE_HEIGHT_PT, "array");
+        assertFamily(renderer, family, "\\overline{AB}", MathTypeStructureMetrics.Family.ACCENT,
+            MathTypeStructureMetrics.ACCENT_HEIGHT_PT, "accent");
+    }
+
+    @Test
+    void sourceSampleMetricsExposeInkEvidenceWithoutChangingHeightContract() {
+        MathTypeStructureMetrics.SourceSampleMetrics script =
+            MathTypeStructureMetrics.sourceSampleMetrics(MathTypeStructureMetrics.Family.SCRIPT);
+        MathTypeStructureMetrics.SourceSampleMetrics fraction =
+            MathTypeStructureMetrics.sourceSampleMetrics(MathTypeStructureMetrics.Family.ORDINARY_FRACTION);
+        MathTypeStructureMetrics.SourceSampleMetrics nestedFraction =
+            MathTypeStructureMetrics.sourceSampleMetrics(MathTypeStructureMetrics.Family.NESTED_FRACTION);
+        MathTypeStructureMetrics.SourceSampleMetrics sqrt =
+            MathTypeStructureMetrics.sourceSampleMetrics(MathTypeStructureMetrics.Family.SQRT);
+        MathTypeStructureMetrics.SourceSampleMetrics linear =
+            MathTypeStructureMetrics.sourceSampleMetrics(MathTypeStructureMetrics.Family.LINEAR);
+
+        assertEquals(MathTypeStructureMetrics.SCRIPT_CANDIDATE_HEIGHT_PT, script.candidateHeightPt(), 0.01d);
+        assertEquals(MathTypeStructureMetrics.SCRIPT_HEIGHT_PT,
+            MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.SCRIPT).heightPt(), 0.01d);
+        assertEquals(0.922d, script.ink().widthRatio(), 0.001d);
+        assertEquals(0.711d, script.ink().heightRatio(), 0.001d);
+        assertEquals(0.487d, script.ink().centerYRatio(), 0.001d);
+        assertEquals(3, script.ink().sampleCount());
+        assertTrue(script.hasInkSamples());
+
+        assertEquals(MathTypeStructureMetrics.ORDINARY_FRACTION_CANDIDATE_HEIGHT_PT,
+            fraction.candidateHeightPt(), 0.01d);
+        assertEquals(MathTypeStructureMetrics.ORDINARY_FRACTION_HEIGHT_PT,
+            MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.ORDINARY_FRACTION).heightPt(), 0.01d);
+        assertEquals(0.889d, fraction.ink().widthRatio(), 0.001d);
+        assertEquals(4, fraction.ink().sampleCount());
+
+        assertEquals(MathTypeStructureMetrics.NESTED_FRACTION_CANDIDATE_HEIGHT_PT,
+            nestedFraction.candidateHeightPt(), 0.01d);
+        assertEquals(MathTypeStructureMetrics.NESTED_FRACTION_HEIGHT_PT,
+            MathTypeStructureMetrics.metrics(MathTypeStructureMetrics.Family.NESTED_FRACTION).heightPt(), 0.01d);
+        assertEquals(0.911d, nestedFraction.ink().widthRatio(), 0.001d);
+        assertEquals(2, nestedFraction.ink().sampleCount());
+
+        assertEquals(MathTypeStructureMetrics.SQRT_HEIGHT_PT, sqrt.candidateHeightPt(), 0.01d);
+        assertEquals(0.750d, sqrt.ink().heightRatio(), 0.001d);
+        assertEquals(5, sqrt.ink().sampleCount());
+
+        assertFalse(linear.hasInkSamples());
+        assertEquals(MathTypeStructureMetrics.LINEAR_HEIGHT_PT, linear.candidateHeightPt(), 0.01d);
+    }
+
+    @Test
+    void previewWidthCalibrationUsesStructureMetricsForLinearAndRoots() throws Exception {
+        LaTeXImageRenderer renderer = new LaTeXImageRenderer();
+        Method estimate = LaTeXImageRenderer.class.getDeclaredMethod("estimateVectorHeightPt", String.class);
+        Method calibrate = LaTeXImageRenderer.class.getDeclaredMethod("calibratePreviewMetrics", String.class,
+            double.class, double.class, double.class);
+        estimate.setAccessible(true);
+        calibrate.setAccessible(true);
+
+        assertCalibratedWidth(renderer, estimate, calibrate, "a+b=c", 40.0d,
+            40.0d * 1.08d * MathTypeStructureMetrics.LINEAR_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "\\sqrt{x+1}", 40.0d,
+            40.0d * MathTypeStructureMetrics.SQRT_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "\\sqrt{a^{2}+b^{2}}", 40.0d,
+            40.0d * 0.96d * MathTypeStructureMetrics.SQRT_SCRIPT_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "\\sqrt{1+\\frac{a}{b}}", 40.0d,
+            40.0d * 0.96d * MathTypeStructureMetrics.SQRT_FRACTION_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "T=2\\pi\\sqrt{\\frac{l}{g}}", 40.0d,
+            40.0d * 0.96d * MathTypeStructureMetrics.SQRT_FRACTION_MIXED_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "\\frac{\\sqrt{a^{2}+b^{2}}}{2}", 40.0d,
+            40.0d * 0.96d * MathTypeStructureMetrics.SQRT_FRACTION_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "\\sqrt{x}+\\sqrt{\\frac{a}{b}}", 40.0d,
+            40.0d * 0.96d * MathTypeStructureMetrics.SQRT_FRACTION_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "\\sqrt{1+\\sqrt{\\frac{a}{b}}}", 40.0d,
+            40.0d * 0.96d * MathTypeStructureMetrics.SQRT_NESTED_FRACTION_PREVIEW_WIDTH_SCALE);
+        assertCalibratedWidth(renderer, estimate, calibrate, "\\sqrt{x+\\sqrt{y+\\sqrt{z}}}", 40.0d,
+            40.0d * 0.86d);
+    }
+
+    private static void assertCalibratedHeight(LaTeXImageRenderer renderer, Method estimate, Method calibrate,
+        String latex, double expectedHeightPt) throws Exception {
+        double estimatedHeight = (double) estimate.invoke(renderer, latex);
+        Object metrics = calibrate.invoke(renderer, latex, 40.0d, estimatedHeight, 4.0d);
+        Method heightPt = metrics.getClass().getDeclaredMethod("heightPt");
+        heightPt.setAccessible(true);
+
+        assertEquals(expectedHeightPt, estimatedHeight, 0.01d);
+        assertEquals(expectedHeightPt, (double) heightPt.invoke(metrics), 0.01d);
+    }
+
+    private static void assertCalibratedWidth(LaTeXImageRenderer renderer, Method estimate, Method calibrate,
+        String latex, double inputWidthPt, double expectedWidthPt) throws Exception {
+        double estimatedHeight = (double) estimate.invoke(renderer, latex);
+        Object metrics = calibrate.invoke(renderer, latex, inputWidthPt, estimatedHeight, 4.0d);
+        Method widthPt = metrics.getClass().getDeclaredMethod("widthPt");
+        widthPt.setAccessible(true);
+
+        assertEquals(expectedWidthPt, (double) widthPt.invoke(metrics), 0.01d);
+    }
+
+    private static void assertFamily(LaTeXImageRenderer renderer, Method method, String latex,
+        MathTypeStructureMetrics.Family expectedFamily, double expectedHeightPt, String expectedPreviewClass)
+        throws Exception {
+        Object metrics = method.invoke(renderer, latex);
+        Method family = metrics.getClass().getDeclaredMethod("family");
+        Method heightPt = metrics.getClass().getDeclaredMethod("heightPt");
+        Method sourceSeededHeight = metrics.getClass().getDeclaredMethod("sourceSeededHeight");
+        Method previewClass = metrics.getClass().getDeclaredMethod("previewClass");
+        family.setAccessible(true);
+        heightPt.setAccessible(true);
+        sourceSeededHeight.setAccessible(true);
+        previewClass.setAccessible(true);
+
+        assertEquals(expectedFamily, family.invoke(metrics));
+        assertEquals(expectedHeightPt, (double) heightPt.invoke(metrics), 0.01d);
+        assertTrue((boolean) sourceSeededHeight.invoke(metrics));
+        assertEquals(expectedPreviewClass, previewClass.invoke(metrics));
+    }
+
+    @Test
+    void runCommandTimesOutWithoutWaitingForStreamClose(@TempDir Path tempDir) throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("runCommand", List.class, Path.class, int.class);
+        method.setAccessible(true);
+        String java = Path.of(System.getProperty("java.home"), "bin", isWindows() ? "java.exe" : "java").toString();
+        long start = System.nanoTime();
+        Object result = method.invoke(
+            new LaTeXImageRenderer(),
+            List.of(java, "-cp", System.getProperty("java.class.path"), HangingProcess.class.getName()),
+            tempDir,
+            1
+        );
+        long elapsedMs = (System.nanoTime() - start) / 1_000_000L;
+        Method exitCode = result.getClass().getDeclaredMethod("exitCode");
+        exitCode.setAccessible(true);
+
+        assertEquals(-1, exitCode.invoke(result));
+        assertTrue(elapsedMs < 5000, "runCommand timeout must not wait for the child stream to close");
+    }
+
+    public static class HangingProcess {
+        public static void main(String[] args) throws Exception {
+            System.out.print("started");
+            System.out.flush();
+            Thread.sleep(60_000L);
+        }
+    }
+
     private void restoreProperty(String name, String value) {
         if (value == null) {
             System.clearProperty(name);
         } else {
             System.setProperty(name, value);
         }
+    }
+
+    private boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
     }
 }

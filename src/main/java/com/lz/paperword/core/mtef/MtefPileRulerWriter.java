@@ -1,6 +1,7 @@
 package com.lz.paperword.core.mtef;
 
 import com.lz.paperword.core.latex.LaTeXNode;
+import com.lz.paperword.core.latex.LaTeXParser;
 import com.lz.paperword.core.layout.VerticalLayoutSpec;
 import com.lz.paperword.core.layout.VerticalLayoutSpec.TabStopKind;
 import com.lz.paperword.core.layout.VerticalLayoutSpec.VerticalRow;
@@ -15,6 +16,7 @@ import java.util.List;
  * 竖式专用的 PILE/RULER MTEF writer。
  */
 public class MtefPileRulerWriter {
+    private final LaTeXParser latexParser = new LaTeXParser();
 
     @FunctionalInterface
     public interface NodeSerializer {
@@ -131,6 +133,13 @@ public class MtefPileRulerWriter {
     private LaTeXNode buildGroup(String text) {
         LaTeXNode group = new LaTeXNode(LaTeXNode.Type.GROUP);
         if (text == null) {
+            return group;
+        }
+        LaTeXNode parsed = latexParser.parseLaTeX(text);
+        if (!parsed.getChildren().isEmpty()) {
+            for (LaTeXNode child : parsed.getChildren()) {
+                group.addChild(child);
+            }
             return group;
         }
         for (char ch : text.toCharArray()) {

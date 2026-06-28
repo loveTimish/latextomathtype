@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build and test commands
 
-- Build runnable jar: `mvn clean package`
-- Run all tests: `mvn test`
-- Run one test class: `mvn -Dtest=LaTeXParserTest test`
-- Run one test method: `mvn -Dtest=VerticalLayoutCompilerTest#shouldCompileExplicitLongDivisionHeaderAndSteps test`
+- Build runnable jar: `.\\.mvn\\apache-maven-3.9.12\\bin\\mvn.cmd clean package`
+- Run all tests: `.\\.mvn\\apache-maven-3.9.12\\bin\\mvn.cmd test`
+- Run one test class: `.\\.mvn\\apache-maven-3.9.12\\bin\\mvn.cmd -Dtest=LaTeXParserTest test`
+- Run one test method: `.\\.mvn\\apache-maven-3.9.12\\bin\\mvn.cmd -Dtest=VerticalLayoutCompilerTest#shouldCompileExplicitLongDivisionHeaderAndSteps test`
 - Run the app locally: `java -jar target/paper-to-word-1.0.0.jar`
-- Dev mode via Spring Boot plugin: `mvn spring-boot:run`
-- Evaluate the current artifact name if needed: `mvn -q -DskipTests help:evaluate -Dexpression=project.build.finalName -DforceStdout`
+- Dev mode via Spring Boot plugin: `.\\.mvn\\apache-maven-3.9.12\\bin\\mvn.cmd spring-boot:run`
+- Evaluate the current artifact name if needed: `.\\.mvn\\apache-maven-3.9.12\\bin\\mvn.cmd -q -DskipTests help:evaluate -Dexpression=project.build.finalName -DforceStdout`
 
 ## What this project does
 
@@ -173,6 +173,6 @@ There are also many focused debug/regression tests for long division and MTEF ou
 
 Useful validation commands:
 
-- Generate the current K12 showcase DOCX: `mvn "-Dtest=K12FormulaShowcaseDocxTest" test`
-- Generate the focused vertical-layout sample DOCX: `mvn "-Dtest=GenerateVisibleVerticalWordTest" test`
-- Run focused writer/layout/docx regressions: `mvn "-Dtest=VerticalLayoutCompilerTest,MtefWriterTest,MathTypeAlignmentRegressionTest" test`
+- Generate the current K12 showcase DOCX: `.\\.mvn\\apache-maven-3.9.12\\bin\\mvn.cmd "-Dtest=K12FormulaShowcaseDocxTest" test`
+- Generate the focused vertical-layout sample DOCX: `.\\.mvn\\apache-maven-3.9.12\\bin\\mvn.cmd "-Dtest=GenerateVisibleVerticalWordTest" test`
+- Run focused writer/layout/docx regressions: `.\\.mvn\\apache-maven-3.9.12\\bin\\mvn.cmd "-Dtest=VerticalLayoutCompilerTest,MtefWriterTest,MathTypeAlignmentRegressionTest" test`

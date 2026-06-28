@@ -42,7 +42,7 @@ class FractionReferenceComparisonTest {
         Metrics reference = extractMetrics(Files.readAllBytes(REFERENCE_DOCX));
         Metrics current = extractMetrics(generated);
 
-        assertTrue(current.previewExtension.equals("png"));
+        assertTrue(current.previewExtension.equals("wmf"));
         assertTrue(current.heightPt <= reference.heightPt * 1.25d,
             "generated formula should not be much taller than reference");
         assertTrue(current.heightPt >= reference.heightPt * 0.65d,

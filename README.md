@@ -13,7 +13,7 @@
 - 通过 `POST /api/export/word` 把 `PaperExportRequest` 导出为 Word。
 - 将公式写入 MathType 兼容的 OLE2 对象，并在 `Equation Native` 流中保存 MTEF 数据。
 - 将“公式可编辑本体”和“Word 页面上的显示框”分开处理，避免为了调版式而在 OLE/MTEF 里硬指定公式字号。
-- 优先使用 TeX/dvisvgm 渲染公式预览图，缺少 TeX 环境时回退到 JLaTeXMath。
+- 使用 TeX/dvisvgm 生成公式预览，并以 WMF 媒体嵌入 OLE 显示面；OLE 预览失败时直接报错，不回退到 PNG。
 - 可重复重建 `rebuild-assets/external/fraction-split-reference.docx` 参考文档。
 - 用 OLE 直接检查、Word/MathType 抽查、`docx2tex` 回切和公式框尺寸对比做验收。
 
@@ -86,11 +86,10 @@ Invoke-WebRequest `
 
 ## Linux 和 Docker
 
-Linux 使用纯 Java 的 MTEF/OLE 写入路径：
+服务使用纯 Java 的 MTEF/OLE 写入路径：
 
 ```bash
 java \
-  -Dmathtype.windows.enabled=false \
   -Dpaperword.render.cache.enabled=true \
   -Dpaperword.render.cache.dir=/var/cache/latextomathtype/formula-render \
   -jar target/paper-to-word-1.0.0.jar
@@ -161,6 +160,102 @@ Windows 上运行完整验收链路：
 target/reference-roundtrip/fraction-split-reference-regenerated.docx
 ```
 
+## xsc 全量验收
+
+xsc 测试集用于验证“完整 DOCX 重建”，不是只导出公式。默认源目录：
+
+```text
+F:\资料\xsc资料\word_files
+```
+
+推荐流水线：
+
+```powershell
+# 1. 先用 docxtolatex 重建 LaTeX corpus
+.\scripts\run_xsc_docxtolatex.ps1 `
+  -Start 1 `
+  -End 155 `
+  -OutRoot D:\latextomathtype\analysis\xsc-latex
+
+# 2. 从 LaTeX corpus 生成完整 PaperExportRequest
+python .\scripts\make_full_batch10_requests.py `
+  --start 1 `
+  --end 155 `
+  --latex-root D:\latextomathtype\analysis\xsc-latex `
+  --out-dir D:\latextomathtype\analysis\batch10-full-requests
+
+# 3. 分批生成 DOCX 并验收。大 corpus 建议按 10 个文件一批跑。
+.\scripts\run_xsc_acceptance.ps1 `
+  -Start 141 `
+  -End 155 `
+  -LatexRoot D:\latextomathtype\analysis\xsc-latex
+
+# 4. 汇总所有批次验收报告，作为 1% 尺寸门槛
+python .\scripts\summarize_xsc_full_acceptance.py
+```
+
+`summarize_xsc_full_acceptance.py` 默认会从 `D:\latextomathtype\analysis\acceptance-summary` 自动选择每个分段的最新报告。需要固定某次验收证据时，可传入 `--manifest`，文件格式为 JSON 数组：
+
+```json
+[
+  {"stamp": "20260612-064944", "start": 141, "end": 155}
+]
+```
+
+聚合脚本会检查：
+
+- 覆盖 `1..155`，无缺段、无重复段。
+- 生成侧预览全部是 WMF。
+- 成对公式的 WMF 目标物理宽高均在测试集 `1%` 误差内。
+- MTEF 对比对象数与尺寸对比对象数一致。
+
+最近一次全量验收报告：
+
+```text
+D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
+```
+
+关键指标：
+
+| 检查项 | 结果 |
+| --- | --- |
+| 覆盖范围 | `1..155` |
+| 成对公式对象 | `39551` |
+| WMF 宽度 1% 内 | `39551/39551` |
+| WMF 高度 1% 内 | `39551/39551` |
+| 生成侧非 WMF | `0` |
+| MTEF clean pairs | `39248/39551` |
+| MTEF 允许的源头/样式前缀差异 | `176`，按公式头/样式前缀差异单独统计 |
+| MTEF 剩余 hard suspects | `75` |
+| MTEF 剩余 low-tail failures | `51` |
+| MTEF 剩余结构缺口 | `126` |
+
+增量 MTEF writer 回归：`20260612-074744` 的 doc41-doc43 验证中，平坦 `\div` 等式链、多字符单除法和一位数乘法等式改用 MathType `TM_BOX 0x1e` 片段后，WMF 目标尺寸为 `862/862` 在 `1%` 内且非 WMF 为 `0`。doc41 hard suspects 从 `6` 降到 `3`、low-tail failures 从 `12` 降到 `6`；doc43 大数乘法保持平坦写法，hard suspects 从误泛化时的 `7` 回到 `4`。
+
+符号语义回归：`20260612-081037` 的 doc41-doc43 验证中，特殊平坦 `\div`/`\times` 写入路径统一走命令映射，避免把 LaTeX 命令首字符 `\` 写成变量字符。doc41 四条 `164\div82=...` / `128\div64=...` 抽查从旧生成的 `0200835c00` 变为 MathType Symbol `÷` 记录 `020486f700b8`；doc41-doc43 的 WMF 目标尺寸仍为 `862/862` 在 `1%` 内且非 WMF 为 `0`。
+
+解析结构回归：`20260612-083107` 的 doc41-doc43 验证中，`preNormalizeLatex` 不再把 array 行分隔后的 `\\ ` 误当成 control-space，十字交叉等多行 array 会保留行结构并继续写入 MT Extra 斜箭头。相关 `LaTeXParser`/`MathIR`/`MtefWriter`/`VerticalLayoutCompiler` 测试通过；doc41-doc43 的 WMF 目标尺寸仍为 `862/862` 在 `1%` 内且非 WMF 为 `0`。
+
+下括注结构回归：`20260612-084603` 的 doc12 验证中，xsc/docxtolatex 输出的 `1515\cdots 151004个15︸`、`505050\cdots 51004个5和1003个0︸` 等视觉下括号计数串会在解析前规范化为 `\underbrace{...}_{...}`，从平铺字符恢复到 MathType `TM_HBRACE` 模板路径。doc12 的 hard suspect 从旧批次 `8` 降到 `2`；WMF 目标尺寸保持 `223/223` 在 `1%` 内且非 WMF 为 `0`。
+
+下括注补洞回归：`20260612-085409` 继续覆盖 `88\cdot \cdot \cdot 82007个8︸` 与 `999\cdots 9k个9︸` 两类剩余计数下括注，doc12 hard suspect 从 `2` 降到 `0`，clean pairs 为 `223/223`；WMF 目标尺寸仍为宽 `223/223`、高 `223/223` 在 `1%` 内且非 WMF 为 `0`。
+
+方程编号括号回归：`20260612-090833` 的 doc22 验证中，`\left ( { 1 } \right )-\left ( { 2 } \right )` 等单数字方程编号括号会保留 MathType `TM_PAREN` 模板，而不是退化为全角平铺括号。doc22 hard suspect 从旧批次 `4` 降到 `0`，clean pairs 为 `1056/1056`；WMF 目标尺寸为宽 `1056/1056`、高 `1056/1056` 在 `1%` 内且非 WMF 为 `0`。
+
+源样式前缀分类回归：`20260612-063347` 的 doc131-doc140 复核中，doc135 的 `6\times 6` 源 MTEF 只比生成侧多出颜色/字体状态前缀（如 `Black` 定义），主体公式尾部一致，因此验收脚本将短平坦算式的这类差异归入 `source_header_or_style_prefix`，不再作为 hard structure gap。该批 hard suspects 从 `1` 降到 `0`；WMF 目标尺寸为宽 `1919/1919`、高 `1919/1919` 在 `1%` 内且非 WMF 为 `0`。
+
+短乘法等式回归：`20260612-092653` 的 doc11-doc12 验证中，13pt 普通行内算式 `7\times 9=63`、`9\times 6=54` 会保持 MathType 平坦字符流，不再误套 `TM_BOX 0x1e` 操作数模板；两条记录的 MTEF `recordCosine/tailRecordCosine` 均恢复到 `1.000000`。同时 `20260612-092536` 的 doc41-doc43 复核中，18pt 候选式 `3\times 4=12`、`3\times 4+9=21` 仍保持 box 模板路径，核心样本相似度为 `0.997434`/`0.996872`；doc11-doc12 clean pairs 为 `562/562`，WMF 目标尺寸为宽 `562/562`、高 `562/562` 在 `1%` 内且非 WMF 为 `0`。
+
+乘法候选式模板回归：`20260612-093622` 的 doc41-doc50 验证中，18pt 字母/数字混合候选式会按测试集写入 `TM_BOX 0x1e` 操作数模板，覆盖 `A\times B=5D`、`5\times F+9=GH`、`E\times F+9=5H`、`E\times F+9=G5` 等模式；这些样本的 MTEF `recordCosine/tailRecordCosine` 均为 `1.000000`。同批 hard suspects 从 `14` 降到 `10`，low-tail failures 从 `11` 降到 `10`；全量剩余结构缺口降到 `75`，WMF 目标尺寸仍为宽 `39551/39551`、高 `39551/39551` 在 `1%` 内且非 WMF 为 `0`。
+
+分数字号状态回归：`20260612-093949` 与 `20260612-093951` 的 doc1-doc10、doc13-doc20 复核中，简单分数如 `\frac{5}{8}`、`\frac{1}{2}`、`\frac{17}{5}`、`\frac{3}{1}3` 的主体 `TM_FRACT` 模板和分子/分母字符一致，差异集中在 MathType 分数槽位的 `SUB/SUB2/SIZE` 状态记录，因此验收脚本归入 `fraction_size_state_gap` 而非 hard structure gap。全量剩余结构缺口降到 `70`；复杂分数表达式与小数括号除法仍保留为真实待修缺口。
+
+线性字号状态回归：`20260612-094716` 与 `20260612-094718` 的 doc81-doc90、doc101-doc110 复核中，`4\times 18=72`、`9\times 11=99`、`12+1=13` 等短平坦算式的主体字符流一致，差异集中在源 MathType 行首显式 `SIZE 65 50 01` 状态记录；验收脚本归入 `linear_size_state_gap` 并从 low-tail 结构缺口中排除。全量剩余结构缺口降到 `63`，WMF 目标尺寸仍为宽 `39551/39551`、高 `39551/39551` 在 `1%` 内且非 WMF 为 `0`。
+
+短公式颜色状态回归：`20260612-062027` 与 `20260612-064944` 的 doc121-doc130、doc141-doc155 复核中，`4\times 2`、`2\times 2`、`3\times 3` 等短平坦公式的源 MTEF 只额外写入 `COLOR_DEF Black`/`COLOR` 状态，主体字符流一致；验收脚本归入 `source_header_or_style_prefix`。doc141-doc155 hard suspects 降到 `0`，doc121-doc130 hard suspects 从 `4` 降到 `1`；全量剩余结构缺口降到 `57`。
+
+线性除法装箱回归：`20260612-101353` 的 doc21-doc30 复核中，`90\div 10=9`、`70\div 10=7`、`80\div 16=5` 等 13pt 普通线性除法不再套用高公式 box 写法，MTEF hard suspects 从 `5` 降到 `2`；全量剩余结构缺口降到 `54`，WMF 目标尺寸仍为宽 `39551/39551`、高 `39551/39551` 在 `1%` 内且非 WMF 为 `0`。
+
 ## 验证命令
 
 检查生成 Word 中的 MathType/OLE 对象：
@@ -205,7 +300,6 @@ python rebuild\verify_docx2tex_formula_fragments.py `
 
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
-| `mathtype.windows.enabled` | `false` | 是否转发给外部 Windows MathType 服务 |
 | `paperword.latex.command` | `latex` | 原生 TeX 渲染命令 |
 | `paperword.dvisvgm.command` | `dvisvgm` | DVI 转 SVG 命令 |
 | `paperword.latex.timeout.seconds` | `15` | 原生 TeX 渲染超时 |
@@ -217,7 +311,7 @@ python rebuild\verify_docx2tex_formula_fragments.py `
 ```text
 src/main/java/com/lz/paperword
   controller/        REST 接口
-  service/           导出服务和可选 Windows MathType 桥接
+  service/           导出服务
   core/docx/         Word 文档构建和 MathType 嵌入
   core/latex/        LaTeX 分词、解析和内容切分
   core/mathml/       中间数学表示和降级转换

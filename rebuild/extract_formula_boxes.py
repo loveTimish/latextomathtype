@@ -40,6 +40,7 @@ class FormulaBox:
     ole_target: str | None
     image_rid: str | None
     image_target: str | None
+    image_title: str | None
     prog_id: str | None
     context: str
 
@@ -172,6 +173,7 @@ def extract_boxes(docx: Path) -> list[FormulaBox]:
                     ole_target=rels.get(ole_rid or ""),
                     image_rid=image_rid,
                     image_target=rels.get(image_rid or ""),
+                    image_title=attr(image_tag, "o:title"),
                     prog_id=attr(ole_tag, "ProgID"),
                     context=context,
                 )

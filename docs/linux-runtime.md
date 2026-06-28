@@ -1,10 +1,9 @@
 # Linux Runtime
 
-`latextomathtype` can run on Linux in pure-Java export mode. Set:
+`latextomathtype` uses the pure-Java MTEF/OLE export path. Start it with:
 
 ```bash
 java \
-  -Dmathtype.windows.enabled=false \
   -Dpaperword.render.cache.enabled=true \
   -Dpaperword.render.cache.dir=/var/cache/latextomathtype/formula-render \
   -jar target/paper-to-word-1.0.0.jar
@@ -37,7 +36,7 @@ For a direct Linux host smoke test after packaging:
 sh scripts/linux-smoke.sh
 ```
 
-The script starts the jar with `mathtype.windows.enabled=false`, verifies that the cache directory is writable, checks `/api/export/health`, and stops the process.
+The script starts the jar, verifies that the cache directory is writable, checks `/api/export/health`, and stops the process.
 
 If Docker cannot pull `eclipse-temurin`, build a local smoke image from the already available Debian-based `postgres:16` image, then run the same smoke test:
 
@@ -53,7 +52,7 @@ This path installs OpenJDK 21 and `curl` once in a local helper image, then runs
 The renderer first tries a native TeX pipeline:
 
 ```text
-latex -> dvisvgm -> SVG -> PNG
+latex -> dvisvgm -> SVG -> WMF
 ```
 
 Install these packages on Debian/Ubuntu-style systems:
@@ -63,7 +62,7 @@ apt-get update
 apt-get install -y openjdk-21-jre-headless texlive-latex-base texlive-latex-extra texlive-fonts-recommended dvisvgm
 ```
 
-If `latex` or `dvisvgm` is not installed, the service falls back to JLaTeXMath. That fallback still runs on Linux, but previews can differ slightly from native TeX and MathType.
+If `latex` or `dvisvgm` is not installed, OLE preview generation fails fast instead of falling back to a bitmap renderer.
 
 Override command paths when needed:
 
@@ -77,9 +76,7 @@ java \
 
 ## MathType Boundary
 
-`mathtype.windows.enabled=false` uses this project's pure-Java MTEF/OLE writer and is the Linux-compatible mode.
-
-`mathtype.windows.enabled=true` is only for routing conversion to an external Windows MathType service. Linux cannot run desktop MathType locally.
+The service does not route through a Windows MathType bridge. It always uses this project's pure-Java MTEF/OLE writer.
 
 ## Cache
 

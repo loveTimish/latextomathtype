@@ -28,6 +28,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.apache.xmlbeans.XmlBoolean;
 
 /**
@@ -85,6 +87,10 @@ public class DocxBuilder {
     private static final double COMPACT_TITLE_FONT_SIZE_PT = 11.0d;
     private static final String COMPACT_BODY_FONT = "宋体";
     private static final String COMPACT_ANSWER_FONT = "楷体_GB2312";
+    private static final Pattern EQUALS_ANSWER_BLANK_PATTERN = Pattern.compile(
+        "([=＝])\\s*(?:_{3,}|([.．])(?![.．\\d]))([。．.])?");
+    private static final Pattern STANDALONE_ANSWER_BLANK_PATTERN = Pattern.compile(
+        "(?:(?<=[:：])\\s*|(?<=\\s))_{3,}(?=\\s|[。．.]|$)");
     private static final String FONT_TABLE_CONTENT_TYPE =
         "application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml";
     private static final String FONT_TABLE_RELATION =
@@ -105,6 +111,7 @@ public class DocxBuilder {
      */
     private final boolean embedMathTypeOle;
     private boolean compactLayoutContext;
+    private boolean hideQuestionTypeMetadataContext;
 
     /**
      * 默认构造函数：启用 MathType OLE 嵌入。
@@ -188,12 +195,16 @@ public class DocxBuilder {
      */
     public byte[] build(PaperExportRequest request) throws IOException {
         try (XWPFDocument doc = new XWPFDocument()) {
+            mathEmbedder.resetDocumentFormulaCounter();
             compactLayoutContext = isCompactLayout(request);
+            hideQuestionTypeMetadataContext = request != null
+                    && request.getPaper() != null
+                    && Boolean.TRUE.equals(request.getPaper().getHideQuestionTypeMetadata());
             initializeStyles(doc);
             // 设置 A4 页面和默认页边距
             setPageMargins(doc, compactLayoutContext);
             if (compactLayoutContext) {
-                addCompactFooter(doc);
+                addCompactFooter(doc, request.getPaper());
             }
 
             // 1. 写入试卷标题
@@ -312,7 +323,7 @@ public class DocxBuilder {
         }
     }
 
-    private void addCompactFooter(XWPFDocument doc) {
+    private void addCompactFooter(XWPFDocument doc, PaperExportRequest.PaperInfo paper) {
         try {
             XWPFHeaderFooterPolicy policy = doc.createHeaderFooterPolicy();
             XWPFFooter footer = policy.createFooter(XWPFHeaderFooterPolicy.DEFAULT);
@@ -329,7 +340,7 @@ public class DocxBuilder {
             para.setSpacingAfter(0);
             configureFooterTabs(para);
             XWPFRun left = para.createRun();
-            left.setText("1-2-2-1. 分数裂项. 题库");
+            left.setText(compactFooterLeftText(paper));
             setFooterRunStyle(left);
             para.createRun().addTab();
             XWPFRun center = para.createRun();
@@ -347,6 +358,13 @@ public class DocxBuilder {
         } catch (Exception e) {
             log.warn("Failed to add compact footer", e);
         }
+    }
+
+    private String compactFooterLeftText(PaperExportRequest.PaperInfo paper) {
+        if (paper != null && paper.getSourceName() != null && !paper.getSourceName().isBlank()) {
+            return paper.getSourceName().replaceFirst("(?i)\\.docx$", "");
+        }
+        return "题库";
     }
 
     private void configureFooterTabs(XWPFParagraph para) {
@@ -514,7 +532,7 @@ public class DocxBuilder {
             for (int i = 0; i < contentLines.size(); i++) {
                 XWPFParagraph qPara = doc.createParagraph();
                 qPara.setStyle(STYLE_BODY_TEXT);
-                qPara.setSpacingBefore(i == 0 ? compactSpacing(100, 0) : 0);
+                qPara.setSpacingBefore(i == 0 ? compactSpacing(100, 35) : 0);
                 qPara.setSpacingAfter(0);
                 applyCompactParagraphRhythm(qPara);
 
@@ -535,10 +553,13 @@ public class DocxBuilder {
         }
 
         // ---- 题目配图（渲染在题干之后、选项之前，居中显示） ----
-        if (isNumberedQuestion(question) && question.getImages() != null && !question.getImages().isEmpty()) {
+        if (question.getImages() != null && !question.getImages().isEmpty()) {
             for (String imagePath : question.getImages()) {
-                writeQuestionImage(doc, imagePath, 200, ParagraphAlignment.CENTER);
+                writeQuestionImage(doc, imagePath, compactLayoutContext ? 520 : 200, ParagraphAlignment.CENTER);
             }
+        }
+        if (question.getUnresolvedImages() != null && !question.getUnresolvedImages().isEmpty()) {
+            writeInlineLabeledSection(doc, "【缺失图片】", String.join("、", question.getUnresolvedImages()));
         }
 
         // ---- 选项（选择题：type 1=单选, 2=多选, 3=判断） ----
@@ -551,7 +572,8 @@ public class DocxBuilder {
             int type = question.getQuestionType();
             if (type == 4) {
                 // 填空题：题目内容中已包含下划线占位符，不需要额外空间
-            } else if ((type == 5 || type == 6) && isNumberedQuestion(question) && !hasResolvedContent(question)) {
+            } else if (!hideQuestionTypeMetadataContext && (type == 5 || type == 6)
+                    && isNumberedQuestion(question) && !hasResolvedContent(question)) {
                 // 简答题/计算题：在题目后添加 3 行空白区域供答题
                 addAnswerSpace(doc, 3);
             }
@@ -652,6 +674,7 @@ public class DocxBuilder {
         para.setAlignment(alignment);
         para.setSpacingBefore(compactSpacing(50, 0));
         para.setSpacingAfter(0);
+        applyCompactContinuationRhythm(para);
         XWPFRun run = para.createRun();
         try (FileInputStream fis = new FileInputStream(f)) {
             run.addPicture(fis, pictureType, f.getName(),
@@ -782,12 +805,11 @@ public class DocxBuilder {
 
         if (htmlContent == null || htmlContent.isBlank()) return;
 
-        boolean containsAnswerLine = htmlContent.contains(ANSWER_LINE_MARKER);
-        String contentForParsing = containsAnswerLine
-            ? htmlContent.replace(ANSWER_LINE_MARKER, "")
-            : htmlContent;
         // 解析 HTML 内容，提取纯文本段和 LaTeX 数学公式段
-        List<ContentSegment> segments = latexParser.parseHtml(contentForParsing);
+        List<ContentSegment> segments = latexParser.parseHtml(htmlContent);
+        boolean containsAnswerLine = segments.stream()
+            .filter(seg -> !seg.isMath())
+            .anyMatch(seg -> normalizeAnswerLineMarkers(seg.rawText()).contains(ANSWER_LINE_MARKER));
         boolean firstSegment = true;
 
         for (ContentSegment seg : segments) {
@@ -805,11 +827,9 @@ public class DocxBuilder {
                         double maxWidthPt = resolveCompactFormulaMaxWidth(seg.rawText(), containsAnswerLine,
                             firstSegment);
                         mathEmbedder.embedEquation(para, mathRun, seg.ast(), seg.rawText(),
-                            displayScale, maxWidthPt);
+                            displayScale, maxWidthPt, seg.metrics(), seg.styleHints());
                     } catch (Exception e) {
-                        // 嵌入失败时降级为纯文本显示
-                        log.error("Failed to embed formula, falling back to text: {}", seg.rawText(), e);
-                        mathRun.setText("$" + seg.rawText() + "$");
+                        throw new IllegalStateException("Failed to embed formula: " + seg.rawText(), e);
                     }
                 } else {
                     // 草稿模式：保留 $...$ 标记，供 Windows 端 MathType 后处理器批量转换
@@ -817,36 +837,16 @@ public class DocxBuilder {
                 }
             } else {
                 // ---- 纯文本段：直接写入 ----
-                writeTextSegment(para, seg.rawText(), firstSegment, textFontFamily, textFontSizePt);
+                writeTextSegment(para, normalizeAnswerLineMarkers(seg.rawText()), firstSegment,
+                    textFontFamily, textFontSizePt);
             }
             firstSegment = false;
-        }
-        if (containsAnswerLine) {
-            writeAnswerLineRun(para);
         }
     }
 
     private double resolveCompactFormulaDisplayScale(String rawLatex, boolean containsAnswerLine,
                                                      boolean firstSegment) {
-        if (!compactLayoutContext) {
-            return 1.0d;
-        }
-        String latex = rawLatex == null ? "" : rawLatex;
-        double scale;
-        if (isArrayLikeFormula(latex)) {
-            scale = firstSegment ? 1.02d : 0.88d;
-        } else if (containsFractionFormula(latex)) {
-            boolean denseFraction = isDenseFractionFormula(latex);
-            scale = isLongFormula(latex)
-                ? (firstSegment ? (denseFraction ? 0.95d : 0.98d) : 0.86d)
-                : 0.95d;
-        } else {
-            scale = 0.90d;
-        }
-        if (containsAnswerLine) {
-            scale *= isLongFormula(latex) ? 0.92d : 0.96d;
-        }
-        return scale;
+        return 1.0d;
     }
 
     private double resolveCompactFormulaMaxWidth(String rawLatex, boolean containsAnswerLine,
@@ -904,6 +904,30 @@ public class DocxBuilder {
         return count;
     }
 
+    private String normalizeAnswerLineMarkers(String htmlContent) {
+        if (htmlContent == null || htmlContent.isBlank() || htmlContent.contains(ANSWER_LINE_MARKER)) {
+            return htmlContent;
+        }
+        String normalized = replaceEqualsAnswerBlanks(htmlContent);
+        return STANDALONE_ANSWER_BLANK_PATTERN.matcher(normalized).replaceAll(ANSWER_LINE_MARKER);
+    }
+
+    private String replaceEqualsAnswerBlanks(String text) {
+        Matcher matcher = EQUALS_ANSWER_BLANK_PATTERN.matcher(text);
+        StringBuffer buffer = new StringBuffer();
+        while (matcher.find()) {
+            String punctuation = "";
+            if (matcher.group(3) != null) {
+                punctuation = matcher.group(3);
+            } else if (matcher.group(2) != null) {
+                punctuation = matcher.group(2);
+            }
+            matcher.appendReplacement(buffer, Matcher.quoteReplacement(matcher.group(1) + ANSWER_LINE_MARKER + punctuation));
+        }
+        matcher.appendTail(buffer);
+        return buffer.toString();
+    }
+
     private void writeTextSegment(XWPFParagraph para, String text, boolean firstSegment) {
         writeTextSegment(para, text, firstSegment, COMPACT_BODY_FONT, COMPACT_BODY_FONT_SIZE_PT);
     }
@@ -923,25 +947,20 @@ public class DocxBuilder {
                 .compile("^(【例\\s*\\d+】|【巩固】)(.*)$", java.util.regex.Pattern.DOTALL)
                 .matcher(text);
             if (matcher.matches()) {
-                boolean exampleLabel = matcher.group(1).startsWith("【例");
                 XWPFRun labelRun = para.createRun();
                 labelRun.setText(matcher.group(1));
                 labelRun.setBold(true);
                 labelRun.setFontSize(runFontSizePt(COMPACT_TITLE_FONT_SIZE_PT));
                 labelRun.setFontFamily(COMPACT_BODY_FONT);
-                if (exampleLabel) {
-                    labelRun.setColor("C00000");
-                }
+                labelRun.setColor("C00000");
                 String remainder = matcher.group(2);
                 if (remainder != null && !remainder.isEmpty()) {
                     XWPFRun remainderRun = para.createRun();
                     remainderRun.setText(remainder);
                     remainderRun.setFontSize(runFontSizePt(COMPACT_TITLE_FONT_SIZE_PT));
                     remainderRun.setFontFamily(COMPACT_BODY_FONT);
-                    if (exampleLabel) {
-                        remainderRun.setBold(true);
-                        remainderRun.setColor("C00000");
-                    }
+                    remainderRun.setBold(true);
+                    remainderRun.setColor("C00000");
                 }
                 return;
             }
@@ -976,10 +995,10 @@ public class DocxBuilder {
 
     private void writeAnswerLineRun(XWPFParagraph para) {
         XWPFRun lineRun = para.createRun();
-        lineRun.setText("\u00A0\u00A0\u00A0\u00A0");
+        lineRun.setText("       ");
         lineRun.setFontSize(runFontSizePt(COMPACT_TITLE_FONT_SIZE_PT));
         lineRun.setFontFamily(COMPACT_BODY_FONT);
-        lineRun.setColor("C00000");
+        lineRun.setColor("000000");
         lineRun.setUnderline(UnderlinePatterns.SINGLE);
     }
 
@@ -995,7 +1014,7 @@ public class DocxBuilder {
     private void writeAnswerSection(XWPFDocument doc, String correct) {
         XWPFParagraph para = doc.createParagraph();
         para.setStyle(STYLE_BODY_TEXT);
-        para.setSpacingBefore(compactSpacing(100, 0));
+        para.setSpacingBefore(compactSpacing(100, 45));
         para.setSpacingAfter(0);
         applyCompactParagraphRhythm(para);
 
@@ -1025,7 +1044,7 @@ public class DocxBuilder {
         for (int i = 0; i < lines.size(); i++) {
             XWPFParagraph para = doc.createParagraph();
             para.setStyle(STYLE_BODY_TEXT);
-            para.setSpacingBefore(compactSpacing(100, 0));
+            para.setSpacingBefore(i == 0 ? compactSpacing(100, 45) : 0);
             para.setSpacingAfter(0);
             if (i == 0) {
                 applyCompactParagraphRhythm(para);
@@ -1049,7 +1068,7 @@ public class DocxBuilder {
         if (question.getDifficulty() != null && !question.getDifficulty().isBlank()) {
             values.add(new LabeledValue("【难度】", question.getDifficulty()));
         }
-        if (isNumberedQuestion(question) && question.getQuestionType() != null) {
+        if (!hideQuestionTypeMetadataContext && isNumberedQuestion(question) && question.getQuestionType() != null) {
             values.add(new LabeledValue("【题型】", questionTypeName(question.getQuestionType())));
         }
         if (question.getTags() != null && !question.getTags().isEmpty()) {
@@ -1121,32 +1140,28 @@ public class DocxBuilder {
         if (!compactLayoutContext) {
             return;
         }
-        para.setSpacingBetween(1.22d, LineSpacingRule.AUTO);
-        CTPPr pPr = para.getCTP().isSetPPr() ? para.getCTP().getPPr() : para.getCTP().addNewPPr();
-        CTSpacing spacing = pPr.isSetSpacing() ? pPr.getSpacing() : pPr.addNewSpacing();
-        spacing.setLine(BigInteger.valueOf(293));
-        spacing.setLineRule(STLineSpacingRule.AUTO);
+        applyCompactLineHeight(para, 255);
     }
 
     private void applyCompactContinuationRhythm(XWPFParagraph para) {
         if (!compactLayoutContext) {
             return;
         }
-        para.setSpacingBetween(1.14d, LineSpacingRule.AUTO);
-        CTPPr pPr = para.getCTP().isSetPPr() ? para.getCTP().getPPr() : para.getCTP().addNewPPr();
-        CTSpacing spacing = pPr.isSetSpacing() ? pPr.getSpacing() : pPr.addNewSpacing();
-        spacing.setLine(BigInteger.valueOf(274));
-        spacing.setLineRule(STLineSpacingRule.AUTO);
+        applyCompactLineHeight(para, 250);
     }
 
     private void applyCompactFormulaContinuationRhythm(XWPFParagraph para) {
         if (!compactLayoutContext) {
             return;
         }
-        para.setSpacingBetween(1.20d, LineSpacingRule.AUTO);
+        applyCompactLineHeight(para, 265);
+    }
+
+    private void applyCompactLineHeight(XWPFParagraph para, int lineTwips) {
+        para.setSpacingBetween(1.0d, LineSpacingRule.AUTO);
         CTPPr pPr = para.getCTP().isSetPPr() ? para.getCTP().getPPr() : para.getCTP().addNewPPr();
         CTSpacing spacing = pPr.isSetSpacing() ? pPr.getSpacing() : pPr.addNewSpacing();
-        spacing.setLine(BigInteger.valueOf(288));
+        spacing.setLine(BigInteger.valueOf(lineTwips));
         spacing.setLineRule(STLineSpacingRule.AUTO);
     }
 

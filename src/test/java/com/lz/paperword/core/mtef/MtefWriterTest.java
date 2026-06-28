@@ -2,6 +2,8 @@ package com.lz.paperword.core.mtef;
 
 import com.lz.paperword.core.latex.LaTeXNode;
 import com.lz.paperword.core.latex.LaTeXParser;
+import com.lz.paperword.core.latex.LaTeXParser.FormulaMetrics;
+import com.lz.paperword.core.latex.LaTeXParser.FormulaStyleHints;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -698,6 +700,92 @@ class MtefWriterTest {
     }
 
     @Test
+    void testWriteEquationNumberFencesInsideExpressionUseParenTemplates() {
+        LaTeXNode ast = parser.parseLaTeX("\\left ( { 1 } \\right )-\\left ( { 2 } \\right )");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN}) >= 2,
+            "single-digit equation number fences inside expressions should keep MathType's tmPAREN templates");
+    }
+
+    @Test
+    void testExplicitParenFenceWithSourceMetricsUsesTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\left ( { a,b } \\right )");
+        FormulaStyleHints hints = FormulaStyleHints.empty().withSourceMetrics(new FormulaMetrics(28.0d, 13.0d));
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN}),
+            "xsc reference objects keep explicit \\left...\\right parens as MathType fence templates");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x28, 0x00}),
+            "explicit paren template should write an expandable left paren");
+    }
+
+    @Test
+    void testArithmeticDigitFencesStayFlat() {
+        LaTeXNode ast = parser.parseLaTeX("5\\times (1)-(2)");
+        byte[] mtef = writer.write(ast);
+        int baselineParenTemplates = countOccurrences(writer.write(parser.parseLaTeX("5\\times 1-2")),
+            new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN});
+
+        assertNotNull(mtef);
+        assertEquals(baselineParenTemplates,
+            countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN}),
+            "single-digit arithmetic operands should stay as flat parenthesis characters, not equation-number templates");
+    }
+
+    @Test
+    void testSourceFlatParenTemplateHintUsesTmParen() {
+        LaTeXNode ast = parser.parseLaTeX("(105-5)");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, true, false, false, false, null);
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN, 0x00, 0x04}),
+            "source objects that use MathType's flat tmPAREN wrapper should preserve it via style hints");
+    }
+
+    @Test
+    void testSourceFlatParenTemplateHintKeepsDecimalParensFlat() {
+        LaTeXNode ast = parser.parseLaTeX("(0.099+0.111)\\div 2=0.105");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, true, false, false, false, null);
+        byte[] mtef = writer.write(ast, hints);
+        int baselineParenTemplates = countOccurrences(writer.write(parser.parseLaTeX("0.099+0.111\\div 2=0.105"), hints),
+            new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN});
+
+        assertNotNull(mtef);
+        assertEquals(baselineParenTemplates,
+            countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN}),
+            "decimal arithmetic parentheses should stay as flat source characters even when the source file has flat paren template hints");
+    }
+
+    @Test
+    void testSourceLetterGroupObarHintWrapsAlphabeticRuns() {
+        LaTeXNode ast = parser.parseLaTeX("(abc+def)");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, false, true, false, false, null);
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        assertEquals(2,
+            countOccurrences(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_OBAR, 0x00, 0x00}),
+            "source objects that wrap alphabetic groups with tmOBAR should preserve those templates");
+    }
+
+    @Test
+    void testCjkCharactersUseFarEastTextTypeface() {
+        LaTeXNode ast = parser.parseLaTeX("S_{和}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) (MtefRecord.FN_TEXT_FE | 0x80), (byte) 0x8C, 0x54}),
+            "CJK text inside formulas should use MathType's Far East text typeface instead of variable italics");
+    }
+
+    @Test
     void testWriteReversedIntervalFenceUsesTmInterval() {
         LaTeXNode ast = parser.parseLaTeX("\\left] x \\right(");
         byte[] mtef = writer.write(ast);
@@ -1218,6 +1306,191 @@ class MtefWriterTest {
             "{}^{n}_{i}x should normalize to the same tmSUBSUP + tvSU_PRECEDES encoding");
     }
 
+    @Test
+    void testDivisionEquationChainUsesMathTypeBoxSegments() {
+        LaTeXNode ast = parser.parseLaTeX("AB\\div C=DE\\div F=GH\\div I=3");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(3, countOccurrences(mtef, box),
+            "MathType encodes divisor-chain operands as tmBOX 0x1e segments");
+        assertTrue(containsBytes(mtef, new byte[]{0x02, 0x04, (byte) ((MtefRecord.FN_SYMBOL & 0x7F) | 0x80), (byte) 0xF7, 0x00, (byte) 0xB8}),
+            "flat division chain should write \\div as the MathType Symbol division glyph");
+        assertFalse(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) MtefRecord.FN_VARIABLE, 0x5C, 0x00}),
+            "flat division chain must not serialize the LaTeX command backslash as a variable");
+    }
+
+    @Test
+    void testSingleDivisionUsesMathTypeBoxSegment() {
+        LaTeXNode ast = parser.parseLaTeX("12\\div 3");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(1, countOccurrences(mtef, box),
+            "MathType also boxes the divisor operand in a single division expression");
+    }
+
+    @Test
+    void testSingleLetterDivisionStaysFlat() {
+        LaTeXNode ast = parser.parseLaTeX("a\\div b");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(0, countOccurrences(mtef, box),
+            "single-letter variable division in the xsc corpus matches the flat MathType body better");
+    }
+
+    @Test
+    void testMultiplicationEquationUsesMathTypeBoxSegments() {
+        LaTeXNode ast = parser.parseLaTeX("3\\times 4=12");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(3, countOccurrences(mtef, box),
+            "MathType boxes the post-times operand and each result digit in simple multiplication equations");
+        assertTrue(containsBytes(mtef, new byte[]{0x02, 0x04, (byte) ((MtefRecord.FN_SYMBOL & 0x7F) | 0x80), (byte) 0xD7, 0x00, (byte) 0xB4}),
+            "flat multiplication equation should write \\times as the MathType Symbol multiplication glyph");
+        assertFalse(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) MtefRecord.FN_VARIABLE, 0x5C, 0x00}),
+            "flat multiplication equation must not serialize the LaTeX command backslash as a variable");
+    }
+
+    @Test
+    void testShortMultiplicationEquationWithLinearMetricsStaysFlat() {
+        LaTeXNode ast = parser.parseLaTeX("7\\times 9=63");
+        FormulaStyleHints hints = FormulaStyleHints.empty().withSourceMetrics(new FormulaMetrics(43.0d, 13.0d));
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(0, countOccurrences(mtef, box),
+            "13pt xsc inline arithmetic uses a flat MathType character stream, not boxed operand templates");
+        assertTrue(containsBytes(mtef, new byte[]{0x02, 0x04, (byte) ((MtefRecord.FN_SYMBOL & 0x7F) | 0x80), (byte) 0xD7, 0x00, (byte) 0xB4}),
+            "flat multiplication equation should still write \\times as the MathType Symbol multiplication glyph");
+    }
+
+    @Test
+    void testFullwidthParenthesesUseFarEastTextRecords() {
+        LaTeXNode ast = parser.parseLaTeX("（n> m）");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) 0x8C, 0x08, (byte) 0xFF}));
+        assertTrue(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) 0x8C, 0x09, (byte) 0xFF}));
+        assertFalse(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) MtefRecord.FN_VARIABLE, 0x08, (byte) 0xFF}));
+    }
+
+    @Test
+    void testBoxedZeroWidthPlaceholderWritesEmptySlot() {
+        LaTeXNode ast = parser.parseLaTeX("\\boxed{\u200d\u200d\u200d \u200d}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertEquals(1, countOccurrences(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00
+        }));
+        assertFalse(containsBytes(mtef, new byte[]{0x02, 0x00, (byte) MtefRecord.FN_VARIABLE, 0x0D, 0x20}));
+    }
+
+    @Test
+    void testAsciiFlatParensOverrideFlatParenTemplateHint() {
+        LaTeXNode ast = parser.parseLaTeX("=(110+126)\\times 17\\div 2=2006");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, true, false, false, false, null);
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        String chars = extractCharStream(mtef);
+        assertTrue(chars.contains("=(110+126)"),
+            "asciiFlatParens must preserve literal paren order even when flatParenTemplate is also present");
+        assertFalse(chars.contains("=110+126()"),
+            "asciiFlatParens must not move literal parens after the content");
+    }
+
+    @Test
+    void testAsciiFlatParensDoesNotFlattenExplicitFenceWithSourceMetrics() {
+        LaTeXNode ast = parser.parseLaTeX("\\left(110+126\\right)");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, true, false, false, false, new FormulaMetrics(80.0d, 20.0d));
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN}),
+            "explicit fences with source metrics still need a MathType fence template");
+    }
+
+    @Test
+    void testShortMultiplicationEquationWithTallMetricsUsesBoxSegments() {
+        LaTeXNode ast = parser.parseLaTeX("3\\times 4=12");
+        FormulaStyleHints hints = FormulaStyleHints.empty().withSourceMetrics(new FormulaMetrics(60.0d, 18.0d));
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(3, countOccurrences(mtef, box),
+            "18pt xsc multiplication candidates match MathType's boxed operand template pattern");
+    }
+
+    @Test
+    void testTallVariableMultiplicationCandidateBoxesAllOperands() {
+        LaTeXNode ast = parser.parseLaTeX("E\\times F+9=G5");
+        FormulaStyleHints hints = FormulaStyleHints.empty().withSourceMetrics(new FormulaMetrics(75.0d, 18.0d));
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(4, countOccurrences(mtef, box),
+            "18pt letter/digit multiplication candidates box both factors and each result character");
+    }
+
+    @Test
+    void testMultiplicationEquationLeavesAddendFlat() {
+        LaTeXNode ast = parser.parseLaTeX("3\\times 4+9=21");
+        FormulaStyleHints hints = FormulaStyleHints.empty().withSourceMetrics(new FormulaMetrics(75.0d, 18.0d));
+        byte[] mtef = writer.write(ast, hints);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(4, countOccurrences(mtef, box),
+            "MathType keeps the +9 addend flat while boxing both factors and result digits");
+    }
+
+    @Test
+    void testVariableMultiplicationEquationStaysFlat() {
+        LaTeXNode ast = parser.parseLaTeX("H\\times M=36");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(0, countOccurrences(mtef, box),
+            "variable multiplication equations did not match the boxed numeric pattern in the corpus");
+    }
+
+    @Test
+    void testRepeatedMultiplicationEquationStaysFlat() {
+        LaTeXNode ast = parser.parseLaTeX("1\\times 2\\times 3\\times 6=36");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(0, countOccurrences(mtef, box),
+            "multi-factor multiplication equations need a separate MathType pattern");
+    }
+
+    @Test
+    void testLargeNumberMultiplicationEquationStaysFlat() {
+        LaTeXNode ast = parser.parseLaTeX("454\\times 229=103966");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
+        assertEquals(0, countOccurrences(mtef, box),
+            "large-number multiplication equations do not follow the one-digit boxed operand pattern");
+    }
+
     private boolean containsRecord(byte[] bytes, int recordType) {
         for (int i = 12; i < bytes.length; i++) {
             if ((bytes[i] & 0xFF) == recordType) {
@@ -1263,6 +1536,30 @@ class MtefWriterTest {
             i += ((options & MtefRecord.OPT_CHAR_ENC_CHAR_8) != 0) ? 5 : 4;
         }
         return digits.toString();
+    }
+
+    private String extractCharStream(byte[] bytes) {
+        StringBuilder chars = new StringBuilder();
+        for (int i = 0; i <= bytes.length - 5; i++) {
+            if ((bytes[i] & 0xFF) != MtefRecord.CHAR) {
+                continue;
+            }
+            int options = bytes[i + 1] & 0xFF;
+            if ((options & MtefRecord.OPT_CHAR_ENC_NO_MTCODE) != 0) {
+                continue;
+            }
+            int pos = i + 2;
+            if ((options & MtefRecord.OPT_NUDGE) != 0) {
+                pos += (pos < bytes.length && (bytes[pos] & 0xFF) == 0x80) ? 6 : 2;
+            }
+            if (pos + 2 >= bytes.length) {
+                continue;
+            }
+            int mtcode = (bytes[pos + 1] & 0xFF) | ((bytes[pos + 2] & 0xFF) << 8);
+            chars.append((char) mtcode);
+            i += ((options & MtefRecord.OPT_CHAR_ENC_CHAR_8) != 0) ? 5 : 4;
+        }
+        return chars.toString();
     }
 
     private int countOccurrences(byte[] bytes, byte[] needle) {

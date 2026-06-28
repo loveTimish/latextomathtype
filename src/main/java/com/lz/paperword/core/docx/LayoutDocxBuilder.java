@@ -51,6 +51,7 @@ public class LayoutDocxBuilder {
 
     public byte[] build(LayoutDocumentRequest request) throws IOException {
         try (XWPFDocument doc = new XWPFDocument()) {
+            mathEmbedder.resetDocumentFormulaCounter();
             setPageMargins(doc, request.getDocument());
             List<LayoutDocumentRequest.Page> pages = request.getPages() == null
                 ? List.of()
@@ -371,7 +372,7 @@ public class LayoutDocxBuilder {
             : latexParser.parseText(text);
         for (ContentSegment segment : segments) {
             if (segment.isMath() && segment.ast() != null) {
-                writeMathAst(para, segment.rawText(), segment.ast(), style);
+                writeMathAst(para, segment.rawText(), segment.ast(), style, segment.styleHints());
             } else {
                 writeTextSegment(para, segment.rawText(), style);
             }
@@ -389,14 +390,20 @@ public class LayoutDocxBuilder {
 
     private void writeMathAst(XWPFParagraph para, String rawLatex, LaTeXNode ast,
                               LayoutDocumentRequest.Style style) {
+        writeMathAst(para, rawLatex, ast, style, com.lz.paperword.core.latex.LaTeXParser.FormulaStyleHints.empty());
+    }
+
+    private void writeMathAst(XWPFParagraph para, String rawLatex, LaTeXNode ast,
+                              LayoutDocumentRequest.Style style,
+                              com.lz.paperword.core.latex.LaTeXParser.FormulaStyleHints styleHints) {
         XWPFRun mathRun = para.createRun();
         applyMathRunStyle(mathRun, style);
         if (embedMathTypeOle) {
             try {
-                mathEmbedder.embedEquation(para, mathRun, ast, rawLatex);
+                mathEmbedder.embedEquation(para, mathRun, ast, rawLatex, 1.0d, Double.MAX_VALUE, null,
+                    styleHints);
             } catch (Exception e) {
-                log.error("Failed to embed formula, falling back to text: {}", rawLatex, e);
-                writeTextPreserveLineBreaks(mathRun, "$" + rawLatex + "$");
+                throw new IllegalStateException("Failed to embed formula: " + rawLatex, e);
             }
         } else {
             writeTextPreserveLineBreaks(mathRun, "$" + rawLatex + "$");

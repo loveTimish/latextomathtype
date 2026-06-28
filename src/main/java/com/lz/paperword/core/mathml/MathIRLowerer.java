@@ -136,6 +136,13 @@ public class MathIRLowerer {
             command.addChild(lowerArgument(node.child(0)));
             return command;
         }
+        if (!isUnderOverOperator(node.child(0))) {
+            LaTeXNode sub = new LaTeXNode(LaTeXNode.Type.SUBSCRIPT, "_");
+            copyMetadata(node, sub);
+            sub.addChild(lowerArgument(node.child(0)));
+            sub.addChild(lowerArgument(node.child(1)));
+            return sub;
+        }
         return lowerBigOperatorScript(node, false);
     }
 
@@ -146,6 +153,13 @@ public class MathIRLowerer {
             copyMetadata(node, command);
             command.addChild(lowerArgument(node.child(0)));
             return command;
+        }
+        if (!isUnderOverOperator(node.child(0))) {
+            LaTeXNode sup = new LaTeXNode(LaTeXNode.Type.SUPERSCRIPT, "^");
+            copyMetadata(node, sup);
+            sup.addChild(lowerArgument(node.child(0)));
+            sup.addChild(lowerArgument(node.child(1)));
+            return sup;
         }
         return lowerBigOperatorScript(node, true);
     }

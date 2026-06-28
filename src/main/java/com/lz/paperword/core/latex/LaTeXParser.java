@@ -71,6 +71,12 @@ public class LaTeXParser {
      * </ul>
      */
     private static final Pattern LATEX_PATTERN = Pattern.compile("\\$\\$(.+?)\\$\\$|\\$(.+?)\\$", Pattern.DOTALL);
+    private static final Pattern METRICS_PATTERN = Pattern.compile(
+        "^\\\\pwmetrics\\{([0-9]+(?:\\.[0-9]+)?)\\s*,\\s*([0-9]+(?:\\.[0-9]+)?)(?:\\s*,\\s*([0-9]+(?:\\.[0-9]+)?)\\s*,\\s*([0-9]+(?:\\.[0-9]+)?))?\\}\\s*",
+        Pattern.DOTALL);
+    private static final Pattern STYLE_HINT_PATTERN = Pattern.compile(
+        "^\\\\pwstyle\\{([^}]*)\\}\\s*",
+        Pattern.DOTALL);
 
     /**
      * 数学函数命令集合。
@@ -97,7 +103,46 @@ public class LaTeXParser {
      * @param rawText 原始文本：纯文本段为文本内容，数学段为去掉 $ 分隔符后的 LaTeX 源码
      * @param ast     数学公式的 AST 根节点；纯文本段此字段为 null
      */
-    public record ContentSegment(boolean isMath, String rawText, LaTeXNode ast) {}
+    public record ContentSegment(boolean isMath, String rawText, LaTeXNode ast, FormulaMetrics metrics,
+                                 FormulaStyleHints styleHints) {
+        public ContentSegment(boolean isMath, String rawText, LaTeXNode ast) {
+            this(isMath, rawText, ast, null, FormulaStyleHints.empty());
+        }
+    }
+
+    public record FormulaMetrics(double wmfWidthPt, double wmfHeightPt,
+                                 double shapeWidthPt, double shapeHeightPt) {
+        public FormulaMetrics(double widthPt, double heightPt) {
+            this(widthPt, heightPt, widthPt, heightPt);
+        }
+
+        public double widthPt() {
+            return wmfWidthPt;
+        }
+
+        public double heightPt() {
+            return wmfHeightPt;
+        }
+    }
+    public record FormulaStyleHints(boolean asciiFlatParens, boolean explicitScriptFullSize,
+                                    boolean explicitFractionFullSize, boolean explicitTopFullSize,
+                                    boolean forceExplicitFenceTemplate, boolean explicitBlackColor,
+                                    boolean flatParenTemplate, boolean letterGroupObarTemplate,
+                                    boolean textFeComma, boolean fullwidthTextParen,
+                                    FormulaMetrics sourceMetrics) {
+        public static FormulaStyleHints empty() {
+            return new FormulaStyleHints(false, false, false, false, false, false, false, false, false, false, null);
+        }
+
+        public FormulaStyleHints withSourceMetrics(FormulaMetrics metrics) {
+            if (metrics == null) {
+                return this;
+            }
+            return new FormulaStyleHints(asciiFlatParens, explicitScriptFullSize, explicitFractionFullSize,
+                explicitTopFullSize, forceExplicitFenceTemplate, explicitBlackColor, flatParenTemplate,
+                letterGroupObarTemplate, textFeComma, fullwidthTextParen, metrics);
+        }
+    }
 
     /** 词法分析器实例，用于将 LaTeX 字符串拆分为 Token 序列 */
     private final LaTeXTokenizer tokenizer = new LaTeXTokenizer();
@@ -159,9 +204,13 @@ public class LaTeXParser {
             }
             // group(1) = 行间公式 $$...$$ 的内容, group(2) = 行内公式 $...$ 的内容
             String latex = matcher.group(1) != null ? matcher.group(1).trim() : matcher.group(2).trim();
+            ParsedFormulaMetrics parsedMetrics = stripFormulaMetrics(latex);
+            latex = parsedMetrics.latex();
+            ParsedFormulaStyle parsedStyle = stripFormulaStyle(latex);
+            latex = parsedStyle.latex();
             // 将 LaTeX 源码解析为 AST
             LaTeXNode ast = parseLaTeX(latex);
-            segments.add(new ContentSegment(true, latex, ast));
+            segments.add(new ContentSegment(true, latex, ast, parsedMetrics.metrics(), parsedStyle.styleHints()));
             lastEnd = matcher.end();
         }
 
@@ -175,6 +224,77 @@ public class LaTeXParser {
 
         return segments;
     }
+
+    private ParsedFormulaMetrics stripFormulaMetrics(String latex) {
+        Matcher matcher = METRICS_PATTERN.matcher(latex == null ? "" : latex);
+        if (!matcher.find()) {
+            return new ParsedFormulaMetrics(latex, null);
+        }
+        try {
+            FormulaMetrics metrics = new FormulaMetrics(
+                Double.parseDouble(matcher.group(1)),
+                Double.parseDouble(matcher.group(2)),
+                matcher.group(3) != null ? Double.parseDouble(matcher.group(3)) : Double.parseDouble(matcher.group(1)),
+                matcher.group(4) != null ? Double.parseDouble(matcher.group(4)) : Double.parseDouble(matcher.group(2))
+            );
+            return new ParsedFormulaMetrics(latex.substring(matcher.end()).trim(), metrics);
+        } catch (NumberFormatException e) {
+            return new ParsedFormulaMetrics(latex, null);
+        }
+    }
+
+    private record ParsedFormulaMetrics(String latex, FormulaMetrics metrics) {}
+
+    private ParsedFormulaStyle stripFormulaStyle(String latex) {
+        Matcher matcher = STYLE_HINT_PATTERN.matcher(latex == null ? "" : latex);
+        if (!matcher.find()) {
+            return new ParsedFormulaStyle(latex, FormulaStyleHints.empty());
+        }
+        FormulaStyleHints hints = parseStyleHints(matcher.group(1));
+        return new ParsedFormulaStyle(latex.substring(matcher.end()).trim(), hints);
+    }
+
+    private FormulaStyleHints parseStyleHints(String encoded) {
+        boolean asciiFlatParens = false;
+        boolean explicitScriptFullSize = false;
+        boolean explicitFractionFullSize = false;
+        boolean explicitTopFullSize = false;
+        boolean forceExplicitFenceTemplate = false;
+        boolean explicitBlackColor = false;
+        boolean flatParenTemplate = false;
+        boolean letterGroupObarTemplate = false;
+        boolean textFeComma = false;
+        boolean fullwidthTextParen = false;
+        for (String part : encoded.split(",")) {
+            String hint = part.trim();
+            if ("asciiFlatParens".equals(hint)) {
+                asciiFlatParens = true;
+            } else if ("explicitScriptFullSize".equals(hint)) {
+                explicitScriptFullSize = true;
+            } else if ("explicitFractionFullSize".equals(hint)) {
+                explicitFractionFullSize = true;
+            } else if ("explicitTopFullSize".equals(hint)) {
+                explicitTopFullSize = true;
+            } else if ("forceExplicitFenceTemplate".equals(hint)) {
+                forceExplicitFenceTemplate = true;
+            } else if ("explicitBlackColor".equals(hint)) {
+                explicitBlackColor = true;
+            } else if ("flatParenTemplate".equals(hint)) {
+                flatParenTemplate = true;
+            } else if ("letterGroupObarTemplate".equals(hint)) {
+                letterGroupObarTemplate = true;
+            } else if ("textFeComma".equals(hint)) {
+                textFeComma = true;
+            } else if ("fullwidthTextParen".equals(hint)) {
+                fullwidthTextParen = true;
+            }
+        }
+        return new FormulaStyleHints(asciiFlatParens, explicitScriptFullSize, explicitFractionFullSize,
+            explicitTopFullSize, forceExplicitFenceTemplate, explicitBlackColor, flatParenTemplate,
+            letterGroupObarTemplate, textFeComma, fullwidthTextParen, null);
+    }
+
+    private record ParsedFormulaStyle(String latex, FormulaStyleHints styleHints) {}
 
     /**
      * 标准化数学分隔符：将 LaTeX 的 \[...\] 和 \(...\) 转换为 $$...$$ 和 $...$。
@@ -223,7 +343,7 @@ public class LaTeXParser {
      * @return AST 根节点（类型为 ROOT）
      */
     public LaTeXNode parseLaTeX(String latex) {
-        List<Token> tokens = tokenizer.tokenize(latex);
+        List<Token> tokens = tokenizer.tokenize(preNormalizeLatex(latex));
         TokenStream stream = new TokenStream(tokens);
         LaTeXNode root = new LaTeXNode(LaTeXNode.Type.ROOT);
         parseExpression(stream, root);
@@ -231,10 +351,491 @@ public class LaTeXParser {
     }
 
     /**
+     * 解析前的字符串级标准化，吸收 docxtolatex 输出里的兼容性写法：
+     *
+     * <ul>
+     *   <li>{@code \rm}/{@code \bf}/{@code \it} 旧式字体切换：MTEF 层不支持，直接剥离，
+     *       内容本身保留（如 {@code { \rm{ 2 } } } → {@code { { 2 } } }）。</li>
+     *   <li>{@code \left \begin{...}}：缺失定界符，补 {@code \left.}。</li>
+     *   <li>顶层（不在任何环境或花括号内）的 {@code \\} 换行：MathType 原对象是 pile，
+     *       整体包一层 {@code \begin{array}{l}...\end{array}} 还原多行结构。</li>
+     * </ul>
+     */
+    public static String preNormalizeLatex(String latex) {
+        if (latex == null || latex.isBlank()) {
+            return latex;
+        }
+        String normalized = latex
+            .replaceAll("\\\\(?:rm|bf|it|cal)\\b", "")
+            .replaceAll("\\\\lt\\b", "<")
+            .replaceAll("\\\\gt\\b", ">")
+            .replaceAll("\\\\euro\\s*\\{\\s*}", "")
+            .replaceAll("\\\\left\\s+(?=\\\\begin\\b)", "\\\\left. ");
+        normalized = normalizeTensorScripts(normalized);
+        normalized = normalizeFrownOverset(normalized);
+        normalized = normalizeBottomLeftArtifacts(normalized);
+        normalized = normalizeUnderRightArrow(normalized);
+        normalized = normalizeControlSpaces(normalized);
+        normalized = normalizeVisualUnderbraceCounters(normalized);
+        normalized = normalizeArrayLineBreakSpacing(normalized);
+        if (hasTopLevelLineBreak(normalized)) {
+            normalized = "\\begin{array}{l} " + normalized + " \\end{array}";
+        }
+        return normalized;
+    }
+
+    private static String normalizeTensorScripts(String latex) {
+        String marker = "\\tensor*";
+        if (latex == null || latex.indexOf(marker) < 0) {
+            return latex;
+        }
+        StringBuilder out = new StringBuilder(latex.length());
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int start = latex.indexOf(marker, cursor);
+            if (start < 0) {
+                out.append(latex.substring(cursor));
+                break;
+            }
+            out.append(latex, cursor, start);
+            int firstStart = skipWhitespace(latex, start + marker.length());
+            if (firstStart >= latex.length() || latex.charAt(firstStart) != '[') {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            int firstEnd = findMatching(latex, firstStart, '[', ']');
+            int secondStart = firstEnd < 0 ? -1 : skipWhitespace(latex, firstEnd + 1);
+            int secondEnd = secondStart >= 0 && secondStart < latex.length() && latex.charAt(secondStart) == '{'
+                ? findMatching(latex, secondStart, '{', '}') : -1;
+            int thirdStart = secondEnd < 0 ? -1 : skipWhitespace(latex, secondEnd + 1);
+            int thirdEnd = thirdStart >= 0 && thirdStart < latex.length() && latex.charAt(thirdStart) == '{'
+                ? findMatching(latex, thirdStart, '{', '}') : -1;
+            int fourthStart = thirdEnd < 0 ? -1 : skipWhitespace(latex, thirdEnd + 1);
+            boolean fourthIsGroup = fourthStart >= 0 && fourthStart < latex.length() && latex.charAt(fourthStart) == '{';
+            int fourthEnd = fourthIsGroup ? findMatching(latex, fourthStart, '{', '}') : findTensorTrailingEnd(latex, fourthStart);
+            if (firstEnd < 0 || secondEnd < 0 || thirdEnd < 0) {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            out.append(normalizeTensorScriptSpec(latex.substring(firstStart + 1, firstEnd)));
+            out.append(latex, secondStart + 1, secondEnd);
+            out.append(latex, thirdStart + 1, thirdEnd);
+            if (fourthEnd < 0) {
+                cursor = thirdEnd + 1;
+                continue;
+            }
+            if (fourthIsGroup) {
+                out.append(latex, fourthStart + 1, fourthEnd);
+                cursor = fourthEnd + 1;
+            } else {
+                out.append(latex, fourthStart, fourthEnd);
+                cursor = fourthEnd;
+            }
+        }
+        return out.toString();
+    }
+
+    private static String normalizeUnderRightArrow(String latex) {
+        String marker = "\\underrightarrow";
+        if (latex == null || latex.indexOf(marker) < 0) {
+            return latex;
+        }
+        StringBuilder out = new StringBuilder(latex.length());
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int start = latex.indexOf(marker, cursor);
+            if (start < 0) {
+                out.append(latex.substring(cursor));
+                break;
+            }
+            out.append(latex, cursor, start);
+            int groupStart = skipWhitespace(latex, start + marker.length());
+            if (groupStart >= latex.length() || latex.charAt(groupStart) != '{') {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            int groupEnd = findMatching(latex, groupStart, '{', '}');
+            if (groupEnd < 0) {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            out.append(latex, groupStart + 1, groupEnd).append("\\rightarrow");
+            cursor = groupEnd + 1;
+        }
+        return out.toString();
+    }
+
+    private static int findTensorTrailingEnd(String text, int start) {
+        if (start < 0 || start >= text.length()) {
+            return -1;
+        }
+        int cursor = start;
+        while (cursor < text.length()) {
+            char ch = text.charAt(cursor);
+            if (Character.isWhitespace(ch) || ch == ',' || ch == ';' || ch == ')' || ch == ']' || ch == '}') {
+                break;
+            }
+            if (ch == '\\') {
+                break;
+            }
+            cursor++;
+        }
+        return cursor > start ? cursor : -1;
+    }
+
+    private static String normalizeFrownOverset(String latex) {
+        String marker = "\\overset";
+        if (latex == null || latex.indexOf(marker) < 0 || latex.indexOf("\\frown") < 0) {
+            return latex;
+        }
+        StringBuilder out = new StringBuilder(latex.length());
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int start = latex.indexOf(marker, cursor);
+            if (start < 0) {
+                out.append(latex.substring(cursor));
+                break;
+            }
+            out.append(latex, cursor, start);
+            int firstStart = skipWhitespace(latex, start + marker.length());
+            if (firstStart >= latex.length() || latex.charAt(firstStart) != '{') {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            int firstEnd = findMatching(latex, firstStart, '{', '}');
+            int secondStart = firstEnd < 0 ? -1 : skipWhitespace(latex, firstEnd + 1);
+            int secondEnd = secondStart >= 0 && secondStart < latex.length() && latex.charAt(secondStart) == '{'
+                ? findMatching(latex, secondStart, '{', '}') : -1;
+            if (firstEnd < 0 || secondEnd < 0 || !"\\frown".equals(latex.substring(firstStart + 1, firstEnd).trim())) {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            out.append("\\overarc{");
+            out.append(latex, secondStart + 1, secondEnd);
+            out.append('}');
+            cursor = secondEnd + 1;
+        }
+        return out.toString();
+    }
+
+    private static String normalizeBottomLeftArtifacts(String latex) {
+        String marker = "\\bottom";
+        if (latex == null || latex.indexOf(marker) < 0) {
+            return latex;
+        }
+        StringBuilder out = new StringBuilder(latex.length());
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int start = latex.indexOf(marker, cursor);
+            if (start < 0) {
+                out.append(latex.substring(cursor));
+                break;
+            }
+            out.append(latex, cursor, start);
+            int afterBottom = skipWhitespace(latex, start + marker.length());
+            if (!latex.startsWith("left", afterBottom)) {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            int groupStart = skipWhitespace(latex, afterBottom + "left".length());
+            if (groupStart >= latex.length() || latex.charAt(groupStart) != '{') {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            int groupEnd = findMatching(latex, groupStart, '{', '}');
+            if (groupEnd < 0) {
+                out.append(marker);
+                cursor = start + marker.length();
+                continue;
+            }
+            String body = latex.substring(groupStart + 1, groupEnd);
+            out.append(flattenInlineArrayArtifact(body));
+            cursor = groupEnd + 1;
+        }
+        return out.toString();
+    }
+
+    private static String flattenInlineArrayArtifact(String text) {
+        if (text == null || !text.contains("\\begin{array}")) {
+            return text;
+        }
+        return text
+            .replaceAll("\\\\begin\\{array}\\{[^}]*}", "")
+            .replaceAll("\\\\end\\{array}", "")
+            .replace('&', ' ')
+            .replaceAll("\\s+", " ")
+            .trim();
+    }
+
+    private static String normalizeTensorScriptSpec(String spec) {
+        if (spec == null || spec.isBlank()) {
+            return "";
+        }
+        return spec.replaceAll("\\^\\s*\\{\\s*}", "")
+            .replaceAll("_\\s*\\{\\s*}", "");
+    }
+
+    private static int skipWhitespace(String text, int index) {
+        int cursor = index;
+        while (cursor < text.length() && Character.isWhitespace(text.charAt(cursor))) {
+            cursor++;
+        }
+        return cursor;
+    }
+
+    private static int findMatching(String text, int open, char openChar, char closeChar) {
+        int depth = 0;
+        for (int i = open; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '\\') {
+                i++;
+                continue;
+            }
+            if (ch == openChar) {
+                depth++;
+            } else if (ch == closeChar) {
+                depth--;
+                if (depth == 0) {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    private static String normalizeControlSpaces(String latex) {
+        if (latex == null || latex.indexOf("\\ ") < 0) {
+            return latex;
+        }
+        StringBuilder out = new StringBuilder(latex.length());
+        for (int i = 0; i < latex.length(); i++) {
+            char ch = latex.charAt(i);
+            if (ch == '\\' && i + 1 < latex.length() && latex.charAt(i + 1) == ' '
+                    && (i == 0 || latex.charAt(i - 1) != '\\')) {
+                out.append(' ');
+                i++;
+                continue;
+            }
+            out.append(ch);
+        }
+        return out.toString();
+    }
+
+    private static final Pattern VISUAL_UNDERBRACE_COUNTER =
+        Pattern.compile("(?<body>(?:\\\\mathrm\\{[0-9]\\}|[0-9])+\\s*(?:\\\\cdots|\\.\\.\\.)\\s*(?:\\\\mathrm\\{[0-9]\\}|[0-9])+)\\s*(?<note>\\d+个(?:\\\\mathrm\\{[0-9]\\}|[0-9])+(?:和\\d+个(?:\\\\mathrm\\{[0-9]\\}|[0-9])+)?|\\d+个[0-9]+(?:和\\d+个[0-9]+)?)︸");
+
+    private static String normalizeVisualUnderbraceCounters(String latex) {
+        if (latex == null || latex.indexOf('︸') < 0) {
+            return latex;
+        }
+        String joinedVisualCounters = normalizeJoinedVisualUnderbraceCounters(latex);
+
+        Matcher matcher = VISUAL_UNDERBRACE_COUNTER.matcher(joinedVisualCounters);
+        StringBuffer out = new StringBuffer(joinedVisualCounters.length());
+        while (matcher.find()) {
+            String body = matcher.group("body").trim();
+            String note = matcher.group("note").trim();
+            matcher.appendReplacement(out, Matcher.quoteReplacement("\\underbrace{" + body + "}_{" + note + "}"));
+        }
+        matcher.appendTail(out);
+        return out.toString();
+    }
+
+    private static String normalizeJoinedVisualUnderbraceCounters(String latex) {
+        StringBuilder out = new StringBuilder(latex.length());
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int brace = latex.indexOf('︸', cursor);
+            if (brace < 0) {
+                out.append(latex.substring(cursor));
+                break;
+            }
+            int ellipsis = lastEllipsisBefore(latex, cursor, brace);
+            if (ellipsis < 0) {
+                out.append(latex, cursor, brace + 1);
+                cursor = brace + 1;
+                continue;
+            }
+            int suffixStart = ellipsis + ellipsisLengthAt(latex, ellipsis);
+            int ge = latex.indexOf('个', suffixStart);
+            if (ge < 0 || ge > brace) {
+                out.append(latex, cursor, brace + 1);
+                cursor = brace + 1;
+                continue;
+            }
+            while (suffixStart < ge && Character.isWhitespace(latex.charAt(suffixStart))) {
+                suffixStart++;
+            }
+            String tail = latex.substring(suffixStart, ge);
+            String unit = readCounterUnit(latex, ge + 1, brace);
+            if (unit.isEmpty() || !tail.startsWith(unit) || tail.length() == unit.length()) {
+                out.append(latex, cursor, brace + 1);
+                cursor = brace + 1;
+                continue;
+            }
+            String count = tail.substring(unit.length());
+            if (!isCounterCount(count)) {
+                out.append(latex, cursor, brace + 1);
+                cursor = brace + 1;
+                continue;
+            }
+            int bodyStart = findVisualUnderbraceBodyStart(latex, cursor, ellipsis);
+            String body = latex.substring(bodyStart, suffixStart) + unit;
+            String note = count + latex.substring(ge, brace);
+            out.append(latex, cursor, bodyStart);
+            out.append("\\underbrace{")
+                .append(body)
+                .append("}_{")
+                .append(note)
+                .append("}");
+            cursor = brace + 1;
+        }
+        return out.toString();
+    }
+
+    private static int ellipsisLengthAt(String latex, int index) {
+        if (latex.startsWith("\\cdot \\cdot \\cdot", index)) {
+            return "\\cdot \\cdot \\cdot".length();
+        }
+        if (latex.startsWith("\\cdots", index)) {
+            return "\\cdots".length();
+        }
+        return "...".length();
+    }
+
+    private static int findVisualUnderbraceBodyStart(String latex, int from, int ellipsis) {
+        int best = from;
+        String[] delimiters = {"\\times", "\\div", "=", "+", "-", "("};
+        for (String delimiter : delimiters) {
+            int idx = latex.lastIndexOf(delimiter, ellipsis);
+            if (idx >= from) {
+                best = Math.max(best, idx + delimiter.length());
+            }
+        }
+        while (best < ellipsis && Character.isWhitespace(latex.charAt(best))) {
+            best++;
+        }
+        return best;
+    }
+
+    private static int lastEllipsisBefore(String latex, int from, int to) {
+        int cdots = latex.lastIndexOf("\\cdots", to);
+        int dots = latex.lastIndexOf("...", to);
+        int cdotDots = latex.lastIndexOf("\\cdot \\cdot \\cdot", to);
+        int best = Math.max(Math.max(cdots, dots), cdotDots);
+        return best >= from ? best : -1;
+    }
+
+    private static String readCounterUnit(String latex, int from, int to) {
+        int i = from;
+        if (latex.startsWith("\\mathrm{", i)) {
+            int close = latex.indexOf('}', i + "\\mathrm{".length());
+            if (close > i && close < to) {
+                return latex.substring(i, close + 1);
+            }
+        }
+        while (i < to && (Character.isDigit(latex.charAt(i)) || isAsciiLetter(latex.charAt(i)))) {
+            i++;
+        }
+        return i > from ? latex.substring(from, i) : "";
+    }
+
+    private static boolean isCounterCount(String value) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            if (!Character.isDigit(ch) && !isAsciiLetter(ch)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isAsciiLetter(char ch) {
+        return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
+    }
+
+    private static String normalizeArrayLineBreakSpacing(String latex) {
+        if (latex == null || latex.indexOf("\\begin{array}") < 0 || latex.indexOf("\\,") < 0) {
+            return latex;
+        }
+        StringBuilder out = new StringBuilder(latex.length());
+        int envDepth = 0;
+        for (int i = 0; i < latex.length(); i++) {
+            if (latex.startsWith("\\begin{array}", i)) {
+                envDepth++;
+                out.append("\\begin{array}");
+                i += "\\begin{array}".length() - 1;
+                continue;
+            }
+            if (latex.startsWith("\\end{array}", i)) {
+                envDepth = Math.max(0, envDepth - 1);
+                out.append("\\end{array}");
+                i += "\\end{array}".length() - 1;
+                continue;
+            }
+            if (envDepth > 0 && latex.startsWith("\\\\,", i)) {
+                out.append("\\\\ ");
+                i += 2;
+                continue;
+            }
+            out.append(latex.charAt(i));
+        }
+        return out.toString();
+    }
+
+    /** 检测不在花括号分组或 begin/end 环境内的 {@code \\} 换行。 */
+    private static boolean hasTopLevelLineBreak(String latex) {
+        int braceDepth = 0;
+        int envDepth = 0;
+        for (int i = 0; i < latex.length(); i++) {
+            char c = latex.charAt(i);
+            if (c == '\\' && i + 1 < latex.length()) {
+                char next = latex.charAt(i + 1);
+                if (next == '\\') {
+                    if (braceDepth == 0 && envDepth == 0) {
+                        return true;
+                    }
+                    i++;
+                    continue;
+                }
+                if (next == '{' || next == '}') {
+                    i++;
+                    continue;
+                }
+                if (latex.startsWith("\\begin", i)) {
+                    envDepth++;
+                } else if (latex.startsWith("\\end", i)) {
+                    envDepth--;
+                }
+                continue;
+            }
+            if (c == '{') {
+                braceDepth++;
+            } else if (c == '}') {
+                braceDepth = Math.max(braceDepth - 1, 0);
+            }
+        }
+        return false;
+    }
+
+    /**
      * 将 LaTeX 直接解析为 MathML-aligned IR，供 Phase 3 之后的语义层和诊断使用。
      */
     public MathIRNode parseMathIR(String latex) {
-        return mathIRConverter.convert(parseLaTeX(latex));
+        ParsedFormulaMetrics parsedMetrics = stripFormulaMetrics(latex);
+        ParsedFormulaStyle parsedStyle = stripFormulaStyle(parsedMetrics.latex());
+        return mathIRConverter.convert(parseLaTeX(parsedStyle.latex()));
     }
 
     /**
@@ -346,8 +947,9 @@ public class LaTeXParser {
                  "\\overbrace", "\\underbrace", "\\overbracket", "\\underbracket",
                  "\\boxed", "\\cancel", "\\bcancel", "\\xcancel" -> parseUnaryCommand(stream, cmd);
             case "\\xrightarrow", "\\xleftarrow" -> parseExtensibleArrowCommand(stream, cmd);
+            case "\\overset", "\\underset" -> parseBinaryCommand(stream, cmd);
             case "\\braket" -> parseBraketCommand(stream, cmd);
-            case "\\text", "\\mathrm", "\\mathbf", "\\mathit",
+            case "\\text", "\\mathrm", "\\mathbf", "\\mathit", "\\textit", "\\textbf", "\\emph", "\\boldsymbol",
                  "\\mathcal", "\\mathbb" -> parseTextCommand(stream, cmd);
             case "\\sum", "\\sumop", "\\int", "\\intop", "\\iint", "\\iiint", "\\oint",
                  "\\prod", "\\coprod", "\\bigcup", "\\bigcap", "\\bigvee", "\\bigwedge",
@@ -381,6 +983,13 @@ public class LaTeXParser {
             return parseArrayEnvironment(stream, envName, null);
         }
         return new LaTeXNode(LaTeXNode.Type.COMMAND, "\\begin{" + envName + "}");
+    }
+
+    private LaTeXNode parseBinaryCommand(TokenStream stream, String cmd) {
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.COMMAND, cmd);
+        node.addChild(parseRequiredGroup(stream));
+        node.addChild(parseRequiredGroup(stream));
+        return node;
     }
 
     private boolean isMatrixLikeEnvironment(String envName) {
@@ -441,6 +1050,11 @@ public class LaTeXParser {
             }
 
             Token token = stream.peek();
+            if (!seenContent && currentCell.getChildren().isEmpty()
+                    && token.type() == TokenType.CHAR && ",".equals(token.value())) {
+                stream.next();
+                continue;
+            }
             if (token.type() == TokenType.COMMAND && "\\hline".equals(token.value())) {
                 stream.next();
                 rowLines.set(rowLines.size() - 1, 1);
@@ -753,7 +1367,8 @@ public class LaTeXParser {
      */
     private LaTeXNode parseLeftRight(TokenStream stream) {
         LaTeXNode node = new LaTeXNode(LaTeXNode.Type.COMMAND, "\\left");
-        // 读取左定界符字符
+        // 读取左定界符字符；docxtolatex 常输出 "\left ("，空白不属于定界符。
+        stream.skipWhitespace();
         String leftDelim = "(";
         if (stream.hasNext()) {
             Token delim = stream.next();
@@ -772,6 +1387,7 @@ public class LaTeXParser {
             Token t = stream.peek();
             if (t.type() == TokenType.COMMAND && t.value().equals("\\right")) {
                 stream.next(); // 消费 \right
+                stream.skipWhitespace();
                 if (stream.hasNext()) {
                     node.setMetadata("rightDelimiter", normalizeDelimiter(stream.next().value()));
                 }
@@ -1058,6 +1674,12 @@ public class LaTeXParser {
      */
     private LaTeXNode parseScripts(TokenStream stream, LaTeXNode base) {
         while (stream.hasNext()) {
+            int scriptLookahead = stream.position();
+            stream.skipWhitespace();
+            if (!stream.hasNext()) {
+                stream.setPosition(scriptLookahead);
+                break;
+            }
             Token t = stream.peek();
             if (t.type() == TokenType.CARET) {
                 // 上标运算符 ^
@@ -1075,6 +1697,7 @@ public class LaTeXParser {
                 base = sub; // 更新 base，支持链式上下标
             } else {
                 // 既不是上标也不是下标，退出循环
+                stream.setPosition(scriptLookahead);
                 break;
             }
         }
@@ -1202,6 +1825,14 @@ public class LaTeXParser {
          */
         Token next() {
             return tokens.get(pos++);
+        }
+
+        int position() {
+            return pos;
+        }
+
+        void setPosition(int position) {
+            pos = Math.max(0, Math.min(position, tokens.size()));
         }
 
         void skipWhitespace() {
