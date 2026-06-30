@@ -1,5 +1,7 @@
 # latextomathtype
 
+[中文说明](README.zh-CN.md)
+
 Export exam data and LaTeX formulas to Word `.docx` with editable MathType OLE equations.
 
 This is not a formula screenshot generator. The service writes MathType-compatible OLE objects, generates Word-visible previews, and validates the result with OLE inspection, Word/MathType spot checks, and `docx2tex` round trips.
