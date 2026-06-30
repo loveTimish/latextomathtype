@@ -1,71 +1,98 @@
 # latextomathtype
 
-`latextomathtype` 用来把试卷数据和 LaTeX 公式导出为 Word `.docx`，并把公式嵌入为可编辑的 MathType OLE 对象。当前项目的核心验收链路是：
+`latextomathtype` is a Java/Spring Boot service for exporting exam data and LaTeX formulas to Word `.docx` files with editable MathType OLE equations.
+
+It is not a formula screenshot tool. The core goal is to generate Word documents whose formulas can still be opened by MathType on Windows, while preserving enough semantic structure for `docx2tex` round-trip validation.
 
 ```text
-参考 DOCX -> docx2tex -> PaperExportRequest -> 重新生成 DOCX -> MathType/OLE/docx2tex/版式检查
+PaperExportRequest
+  -> LaTeX tokenizer/parser
+  -> Math IR
+  -> MTEF v5 writer
+  -> OLE2 MathType object
+  -> WMF preview and Word display box
+  -> DOCX
 ```
 
-这不是一个只生成公式图片的工具。它的主要目标是：生成的公式在 Word 中仍然是 MathType OLE，Windows 上可以用 MathType 打开编辑，同时生成文档还能被 `docx2tex` 切回正确 LaTeX。
+## Status
 
-## 能力
+This repository currently focuses on production-style Word export for K12 math papers and DOCX reconstruction experiments.
 
-- 通过 `POST /api/export/word` 把 `PaperExportRequest` 导出为 Word。
-- 将公式写入 MathType 兼容的 OLE2 对象，并在 `Equation Native` 流中保存 MTEF 数据。
-- 将“公式可编辑本体”和“Word 页面上的显示框”分开处理，避免为了调版式而在 OLE/MTEF 里硬指定公式字号。
-- 使用 TeX/dvisvgm 生成公式预览，并以 WMF 媒体嵌入 OLE 显示面；OLE 预览失败时直接报错，不回退到 PNG。
-- 可重复重建 `rebuild-assets/external/fraction-split-reference.docx` 参考文档。
-- 用 OLE 直接检查、Word/MathType 抽查、`docx2tex` 回切和公式框尺寸对比做验收。
-
-## 环境要求
-
-| 工具 | 用途 |
+| Area | Current state |
 | --- | --- |
-| JDK 21 | 运行、构建和测试 |
-| Maven 3.9.x | 构建和测试，仓库内置 `.mvn/apache-maven-3.9.12` |
-| TeX Live 或 MiKTeX，包含 `latex` 和 `dvisvgm` | 推荐的公式预览渲染器 |
-| Python 3 | 参考文档重建、版式对比和回归脚本 |
-| docx2tex | DOCX 到 LaTeX 的回切验证 |
-| Microsoft Word + MathType | Windows 上的公式 OLE 可编辑性抽查 |
-| Docker | Linux/容器环境验收 |
+| Runtime | Spring Boot 3.3, Java 21 |
+| Main output | `.docx` with MathType-compatible OLE formulas |
+| Formula body | Pure Java MTEF/OLE writer, no desktop MathType dependency in the service path |
+| OLE preview | Strict vector-preview path for MathType objects; preview failure is treated as an error |
+| Validation | Java tests, OLE/POIFS inspection, Word/MathType spot checks, `docx2tex` round trips, physical-size comparison |
+| Linux | Supported for service/runtime validation; final GUI editability checks still require Windows + Word + MathType |
 
-Windows 验证脚本默认使用 `J:\docx2tex\d2t.bat`。如果本机路径不同，改脚本里的路径即可。
+## What It Does
 
-## 构建
+- Exports `PaperExportRequest` JSON to Word through `POST /api/export/word`.
+- Embeds formulas as MathType-compatible OLE2 objects with an `Equation Native` MTEF stream.
+- Separates editable formula data from the visible Word display box, so layout can be calibrated without hardcoding formula font size inside MTEF.
+- Generates OLE preview media as WMF and checks that generated DOCX files do not silently degrade to bitmap-only formula output.
+- Supports a layout-oriented Word export endpoint for OCR/PDF reconstruction workflows.
+- Provides reproducible validation scripts for reference DOCX round-trip, xsc corpus acceptance, OLE inspection, and `docx2tex` coverage.
 
-优先使用仓库内置 Maven，避免依赖系统 Maven 配置：
+## What It Is Not
+
+- It does not try to produce byte-identical DOCX files.
+- It does not require desktop MathType to run the server.
+- It does not claim full LaTeX coverage. Unsupported or weakly covered constructs should be added with parser, MTEF, preview, and round-trip tests.
+- It does not use PNG screenshots as the primary MathType equation representation.
+
+## Requirements
+
+| Tool | Use |
+| --- | --- |
+| JDK 21 | Build, test, and run the service |
+| Maven 3.9.x | Build and test; the repository includes `.mvn/apache-maven-3.9.12` |
+| Node.js | MathJax SVG worker for formula preview generation |
+| `mathjax-full` | Installed by `npm install`; used by `tools/mathjax/render_mathjax_svg.cjs` |
+| TeX Live or MiKTeX | Native TeX rendering path where enabled, including `latex` and `dvisvgm` |
+| Python 3 | Reference rebuild and acceptance scripts |
+| `docx2tex` | DOCX to LaTeX round-trip validation |
+| Microsoft Word + MathType | Windows GUI spot check for double-click editability |
+| Docker | Optional Linux/container smoke validation |
+
+Windows validation scripts currently assume `docx2tex` is available at `J:\docx2tex\d2t.bat`. If your machine uses another path, update the script parameter or local script configuration before running full validation.
+
+## Quick Start
+
+Install the Node dependency used by the MathJax preview worker:
+
+```powershell
+npm install
+npm run mathjax:smoke
+```
+
+Build the Java service with the bundled Maven:
 
 ```powershell
 .\.mvn\apache-maven-3.9.12\bin\mvn.cmd clean package
 ```
 
-Linux 下对应命令：
-
-```bash
-./.mvn/apache-maven-3.9.12/bin/mvn clean package
-```
-
-运行 Java 回归测试：
+Run the test suite:
 
 ```powershell
 .\.mvn\apache-maven-3.9.12\bin\mvn.cmd test
 ```
 
-## 运行服务
-
-启动 Spring Boot：
+Start the service:
 
 ```powershell
 .\.mvn\apache-maven-3.9.12\bin\mvn.cmd spring-boot:run
 ```
 
-检查服务状态：
+Check the health endpoint:
 
 ```powershell
 Invoke-WebRequest http://127.0.0.1:8081/api/export/health
 ```
 
-导出一个试卷：
+Export the sample paper:
 
 ```powershell
 Invoke-WebRequest `
@@ -76,199 +103,119 @@ Invoke-WebRequest `
   -OutFile target\paper.docx
 ```
 
-主要接口：
-
-| 接口 | 方法 | 说明 |
-| --- | --- | --- |
-| `/api/export/health` | `GET` | 健康检查 |
-| `/api/export/word` | `POST` | 将 `PaperExportRequest` 导出为带 MathType OLE 公式的 Word |
-| `/api/export/layout-word` | `POST` | 面向 OCR/PDF 重建链路的块级版式 Word 导出 |
-
-## Linux 和 Docker
-
-服务使用纯 Java 的 MTEF/OLE 写入路径：
+Linux uses the same Maven wrapper path:
 
 ```bash
-java \
-  -Dpaperword.render.cache.enabled=true \
-  -Dpaperword.render.cache.dir=/var/cache/latextomathtype/formula-render \
-  -jar target/paper-to-word-1.0.0.jar
+./.mvn/apache-maven-3.9.12/bin/mvn clean package
+java -jar target/paper-to-word-1.0.0.jar
 ```
 
-打包后构建并运行容器：
+## API
 
-```bash
-docker build -t latextomathtype:local .
-docker run --rm -p 8081:8081 \
-  -v latextomathtype-cache:/var/cache/latextomathtype/formula-render \
-  latextomathtype:local
+Base path: `/api/export`
+
+| Endpoint | Method | Response | Purpose |
+| --- | --- | --- | --- |
+| `/health` | `GET` | Text | Service health check |
+| `/word` | `POST` | `.docx` | Export a structured paper request to Word with MathType OLE formulas |
+| `/layout-word` | `POST` | `.docx` | Export block-level layout data for OCR/PDF reconstruction workflows |
+
+Minimal request shape:
+
+```json
+{
+  "paper": {
+    "name": "2026 Math Paper",
+    "subjectType": 1,
+    "stage": 2,
+    "score": 100,
+    "suggestTime": 90
+  },
+  "sections": [
+    {
+      "headline": "I. Multiple Choice",
+      "questions": [
+        {
+          "serialNumber": 1,
+          "questionType": 1,
+          "content": "Solve $x=\\frac{-b\\pm\\sqrt{b^2-4ac}}{2a}$.",
+          "options": [
+            { "prefix": "A", "content": "$1$" },
+            { "prefix": "B", "content": "$2$" }
+          ],
+          "correct": "A",
+          "score": 5,
+          "analyze": "Example analysis with $\\frac{1}{2}$."
+        }
+      ]
+    }
+  ]
+}
 ```
 
-Linux 主机快速冒烟：
+See [exam-template.json](exam-template.json) for a fuller Chinese exam sample.
 
-```bash
-sh scripts/linux-smoke.sh
-```
+## Architecture
 
-带 TeX 工具链的参考文档验收镜像：
+| Module | Responsibility |
+| --- | --- |
+| `controller` | REST endpoints for standard and layout-oriented Word export |
+| `service` | Request orchestration and export service boundaries |
+| `core/latex` | Text/formula splitting, tokenization, and LaTeX parsing |
+| `core/mathml` | Intermediate math representation and normalization |
+| `core/mtef` | MathType MTEF v5 records, templates, character mapping, and writer tests |
+| `core/ole` | OLE2 compound object packaging |
+| `core/render` | MathJax/TeX preview rendering, WMF generation, and render caching |
+| `core/docx` | DOCX construction, OLE embedding, VML shape sizing, and baseline placement |
+| `core/layout` | Block-level layout export support |
 
-```powershell
-docker build -f Dockerfile.render-test -t latextomathtype:render-test .
-```
-
-更多 Linux 运行说明见 [docs/linux-runtime.md](docs/linux-runtime.md)。
-
-## 参考文档重建
-
-当前参考版式基准：
+The important design boundary is:
 
 ```text
-rebuild-assets/external/fraction-split-reference.docx
+MTEF/OLE body       controls MathType editability and semantic equation structure
+Word display box   controls visible width, height, and baseline on the page
+WMF preview        controls what Word paints before the OLE object is opened
 ```
 
-Windows 上运行完整验收链路：
+Changing formula size inside MTEF is treated as a last resort. Most visual calibration belongs in the Word object display box and preview layer.
+
+## Validation
+
+The main acceptance chain is:
+
+```text
+reference DOCX
+  -> docx2tex
+  -> PaperExportRequest
+  -> regenerated DOCX
+  -> OLE, MathType, docx2tex, WMF, and layout checks
+```
+
+Run the reference round-trip on Windows:
 
 ```powershell
 .\scripts\verify-reference-roundtrip.ps1
 ```
 
-脚本会执行：
-
-1. 用 `docx2tex` 将参考 DOCX 转为 LaTeX。
-2. 生成 `target/reference-roundtrip/fraction-split-reference.request.json`。
-3. 调用 `ReferenceRoundTripDocxTest` 生成 `target/reference-roundtrip/fraction-split-reference-regenerated.docx`。
-4. 提取参考文档和生成文档的公式显示框。
-5. 按参考对象顺序校准 `v:shape`、`w:dxaOrig/w:dyaOrig` 和 `w:position`。
-6. 在可用时通过 Word COM 检查 MathType OLE 数量和 `Equation.DSMT4` 识别。
-7. 对生成 DOCX 再跑 `docx2tex`，检查公式 LaTeX 覆盖率。
-8. 在 `target/reference-roundtrip` 下输出结构和版式对比报告。
-
-最近一次认可的参考文档验收指标：
-
-| 检查项 | 结果 |
-| --- | --- |
-| OLE 对象数 | 参考 `425`，生成 `425` |
-| 内联公式数 | 生成 `429` |
-| docx2tex 公式覆盖 | `403/403` 个公式匹配，无缺失风险公式 |
-| 生成文档 docx2tex token | `\times=1110`，`\cdots=164`，`\frac=1605` |
-| 成对公式显示框差异 | 校准后宽、高、基线差异为 `0` |
-| OLE 本体内显式点数字号记录 | `0` |
-
-认可输出路径：
+The script rebuilds:
 
 ```text
 target/reference-roundtrip/fraction-split-reference-regenerated.docx
 ```
 
-## xsc 全量验收
-
-xsc 测试集用于验证“完整 DOCX 重建”，不是只导出公式。默认源目录：
+It also writes comparison artifacts under:
 
 ```text
-F:\资料\xsc资料\word_files
+target/reference-roundtrip
 ```
 
-推荐流水线：
-
-```powershell
-# 1. 先用 docxtolatex 重建 LaTeX corpus
-.\scripts\run_xsc_docxtolatex.ps1 `
-  -Start 1 `
-  -End 155 `
-  -OutRoot D:\latextomathtype\analysis\xsc-latex
-
-# 2. 从 LaTeX corpus 生成完整 PaperExportRequest
-python .\scripts\make_full_batch10_requests.py `
-  --start 1 `
-  --end 155 `
-  --latex-root D:\latextomathtype\analysis\xsc-latex `
-  --out-dir D:\latextomathtype\analysis\batch10-full-requests
-
-# 3. 分批生成 DOCX 并验收。大 corpus 建议按 10 个文件一批跑。
-.\scripts\run_xsc_acceptance.ps1 `
-  -Start 141 `
-  -End 155 `
-  -LatexRoot D:\latextomathtype\analysis\xsc-latex
-
-# 4. 汇总所有批次验收报告，作为 1% 尺寸门槛
-python .\scripts\summarize_xsc_full_acceptance.py
-```
-
-`summarize_xsc_full_acceptance.py` 默认会从 `D:\latextomathtype\analysis\acceptance-summary` 自动选择每个分段的最新报告。需要固定某次验收证据时，可传入 `--manifest`，文件格式为 JSON 数组：
-
-```json
-[
-  {"stamp": "20260612-064944", "start": 141, "end": 155}
-]
-```
-
-聚合脚本会检查：
-
-- 覆盖 `1..155`，无缺段、无重复段。
-- 生成侧预览全部是 WMF。
-- 成对公式的 WMF 目标物理宽高均在测试集 `1%` 误差内。
-- MTEF 对比对象数与尺寸对比对象数一致。
-
-最近一次全量验收报告：
-
-```text
-D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
-```
-
-关键指标：
-
-| 检查项 | 结果 |
-| --- | --- |
-| 覆盖范围 | `1..155` |
-| 成对公式对象 | `39551` |
-| WMF 宽度 1% 内 | `39551/39551` |
-| WMF 高度 1% 内 | `39551/39551` |
-| 生成侧非 WMF | `0` |
-| MTEF clean pairs | `39248/39551` |
-| MTEF 允许的源头/样式前缀差异 | `176`，按公式头/样式前缀差异单独统计 |
-| MTEF 剩余 hard suspects | `75` |
-| MTEF 剩余 low-tail failures | `51` |
-| MTEF 剩余结构缺口 | `126` |
-
-增量 MTEF writer 回归：`20260612-074744` 的 doc41-doc43 验证中，平坦 `\div` 等式链、多字符单除法和一位数乘法等式改用 MathType `TM_BOX 0x1e` 片段后，WMF 目标尺寸为 `862/862` 在 `1%` 内且非 WMF 为 `0`。doc41 hard suspects 从 `6` 降到 `3`、low-tail failures 从 `12` 降到 `6`；doc43 大数乘法保持平坦写法，hard suspects 从误泛化时的 `7` 回到 `4`。
-
-符号语义回归：`20260612-081037` 的 doc41-doc43 验证中，特殊平坦 `\div`/`\times` 写入路径统一走命令映射，避免把 LaTeX 命令首字符 `\` 写成变量字符。doc41 四条 `164\div82=...` / `128\div64=...` 抽查从旧生成的 `0200835c00` 变为 MathType Symbol `÷` 记录 `020486f700b8`；doc41-doc43 的 WMF 目标尺寸仍为 `862/862` 在 `1%` 内且非 WMF 为 `0`。
-
-解析结构回归：`20260612-083107` 的 doc41-doc43 验证中，`preNormalizeLatex` 不再把 array 行分隔后的 `\\ ` 误当成 control-space，十字交叉等多行 array 会保留行结构并继续写入 MT Extra 斜箭头。相关 `LaTeXParser`/`MathIR`/`MtefWriter`/`VerticalLayoutCompiler` 测试通过；doc41-doc43 的 WMF 目标尺寸仍为 `862/862` 在 `1%` 内且非 WMF 为 `0`。
-
-下括注结构回归：`20260612-084603` 的 doc12 验证中，xsc/docxtolatex 输出的 `1515\cdots 151004个15︸`、`505050\cdots 51004个5和1003个0︸` 等视觉下括号计数串会在解析前规范化为 `\underbrace{...}_{...}`，从平铺字符恢复到 MathType `TM_HBRACE` 模板路径。doc12 的 hard suspect 从旧批次 `8` 降到 `2`；WMF 目标尺寸保持 `223/223` 在 `1%` 内且非 WMF 为 `0`。
-
-下括注补洞回归：`20260612-085409` 继续覆盖 `88\cdot \cdot \cdot 82007个8︸` 与 `999\cdots 9k个9︸` 两类剩余计数下括注，doc12 hard suspect 从 `2` 降到 `0`，clean pairs 为 `223/223`；WMF 目标尺寸仍为宽 `223/223`、高 `223/223` 在 `1%` 内且非 WMF 为 `0`。
-
-方程编号括号回归：`20260612-090833` 的 doc22 验证中，`\left ( { 1 } \right )-\left ( { 2 } \right )` 等单数字方程编号括号会保留 MathType `TM_PAREN` 模板，而不是退化为全角平铺括号。doc22 hard suspect 从旧批次 `4` 降到 `0`，clean pairs 为 `1056/1056`；WMF 目标尺寸为宽 `1056/1056`、高 `1056/1056` 在 `1%` 内且非 WMF 为 `0`。
-
-源样式前缀分类回归：`20260612-063347` 的 doc131-doc140 复核中，doc135 的 `6\times 6` 源 MTEF 只比生成侧多出颜色/字体状态前缀（如 `Black` 定义），主体公式尾部一致，因此验收脚本将短平坦算式的这类差异归入 `source_header_or_style_prefix`，不再作为 hard structure gap。该批 hard suspects 从 `1` 降到 `0`；WMF 目标尺寸为宽 `1919/1919`、高 `1919/1919` 在 `1%` 内且非 WMF 为 `0`。
-
-短乘法等式回归：`20260612-092653` 的 doc11-doc12 验证中，13pt 普通行内算式 `7\times 9=63`、`9\times 6=54` 会保持 MathType 平坦字符流，不再误套 `TM_BOX 0x1e` 操作数模板；两条记录的 MTEF `recordCosine/tailRecordCosine` 均恢复到 `1.000000`。同时 `20260612-092536` 的 doc41-doc43 复核中，18pt 候选式 `3\times 4=12`、`3\times 4+9=21` 仍保持 box 模板路径，核心样本相似度为 `0.997434`/`0.996872`；doc11-doc12 clean pairs 为 `562/562`，WMF 目标尺寸为宽 `562/562`、高 `562/562` 在 `1%` 内且非 WMF 为 `0`。
-
-乘法候选式模板回归：`20260612-093622` 的 doc41-doc50 验证中，18pt 字母/数字混合候选式会按测试集写入 `TM_BOX 0x1e` 操作数模板，覆盖 `A\times B=5D`、`5\times F+9=GH`、`E\times F+9=5H`、`E\times F+9=G5` 等模式；这些样本的 MTEF `recordCosine/tailRecordCosine` 均为 `1.000000`。同批 hard suspects 从 `14` 降到 `10`，low-tail failures 从 `11` 降到 `10`；全量剩余结构缺口降到 `75`，WMF 目标尺寸仍为宽 `39551/39551`、高 `39551/39551` 在 `1%` 内且非 WMF 为 `0`。
-
-分数字号状态回归：`20260612-093949` 与 `20260612-093951` 的 doc1-doc10、doc13-doc20 复核中，简单分数如 `\frac{5}{8}`、`\frac{1}{2}`、`\frac{17}{5}`、`\frac{3}{1}3` 的主体 `TM_FRACT` 模板和分子/分母字符一致，差异集中在 MathType 分数槽位的 `SUB/SUB2/SIZE` 状态记录，因此验收脚本归入 `fraction_size_state_gap` 而非 hard structure gap。全量剩余结构缺口降到 `70`；复杂分数表达式与小数括号除法仍保留为真实待修缺口。
-
-线性字号状态回归：`20260612-094716` 与 `20260612-094718` 的 doc81-doc90、doc101-doc110 复核中，`4\times 18=72`、`9\times 11=99`、`12+1=13` 等短平坦算式的主体字符流一致，差异集中在源 MathType 行首显式 `SIZE 65 50 01` 状态记录；验收脚本归入 `linear_size_state_gap` 并从 low-tail 结构缺口中排除。全量剩余结构缺口降到 `63`，WMF 目标尺寸仍为宽 `39551/39551`、高 `39551/39551` 在 `1%` 内且非 WMF 为 `0`。
-
-短公式颜色状态回归：`20260612-062027` 与 `20260612-064944` 的 doc121-doc130、doc141-doc155 复核中，`4\times 2`、`2\times 2`、`3\times 3` 等短平坦公式的源 MTEF 只额外写入 `COLOR_DEF Black`/`COLOR` 状态，主体字符流一致；验收脚本归入 `source_header_or_style_prefix`。doc141-doc155 hard suspects 降到 `0`，doc121-doc130 hard suspects 从 `4` 降到 `1`；全量剩余结构缺口降到 `57`。
-
-线性除法装箱回归：`20260612-101353` 的 doc21-doc30 复核中，`90\div 10=9`、`70\div 10=7`、`80\div 16=5` 等 13pt 普通线性除法不再套用高公式 box 写法，MTEF hard suspects 从 `5` 降到 `2`；全量剩余结构缺口降到 `54`，WMF 目标尺寸仍为宽 `39551/39551`、高 `39551/39551` 在 `1%` 内且非 WMF 为 `0`。
-
-## 验证命令
-
-检查生成 Word 中的 MathType/OLE 对象：
+Targeted checks:
 
 ```powershell
 .\scripts\verify-mathtype-word.ps1 `
   -DocxPath target\reference-roundtrip\fraction-split-reference-regenerated.docx `
   -MinimumOleCount 400
-```
 
-验证生成 DOCX 仍能被 `docx2tex` 切回 LaTeX：
-
-```powershell
 .\scripts\verify-docx2tex-roundtrip.ps1 `
   -DocxPath target\reference-roundtrip\fraction-split-reference-regenerated.docx `
   -RequestJsonPath target\reference-roundtrip\fraction-split-reference.request.json `
@@ -278,16 +225,7 @@ D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
   -MinimumFractionCount 1500
 ```
 
-检查请求公式和回切 LaTeX 的 fragment 覆盖：
-
-```powershell
-python rebuild\verify_docx2tex_formula_fragments.py `
-  --request-json target\reference-roundtrip\fraction-split-reference.request.json `
-  --tex target\reference-roundtrip\regenerated-docx2tex\fraction-split-reference-regenerated.tex `
-  --out-json target\reference-roundtrip\docx2tex-fragment-check.json
-```
-
-只运行参考文档生成测试：
+Run only the reference-generation Java test:
 
 ```powershell
 .\.mvn\apache-maven-3.9.12\bin\mvn.cmd `
@@ -296,51 +234,148 @@ python rebuild\verify_docx2tex_formula_fragments.py `
   test
 ```
 
-## 配置项
+## xsc Corpus Acceptance
 
-| 配置 | 默认值 | 说明 |
+The xsc pipeline validates full DOCX reconstruction, not only isolated formula export. The default source corpus is:
+
+```text
+F:\资料\xsc资料\word_files
+```
+
+Typical batch flow:
+
+```powershell
+.\scripts\run_xsc_docxtolatex.ps1 `
+  -Start 1 `
+  -End 155 `
+  -OutRoot D:\latextomathtype\analysis\xsc-latex
+
+python .\scripts\make_full_batch10_requests.py `
+  --start 1 `
+  --end 155 `
+  --latex-root D:\latextomathtype\analysis\xsc-latex `
+  --out-dir D:\latextomathtype\analysis\batch10-full-requests
+
+.\scripts\run_xsc_acceptance.ps1 `
+  -Start 141 `
+  -End 155 `
+  -LatexRoot D:\latextomathtype\analysis\xsc-latex
+
+python .\scripts\summarize_xsc_full_acceptance.py
+```
+
+Recent full-corpus acceptance summary:
+
+| Check | Result |
+| --- | --- |
+| Covered source range | `1..155` |
+| Paired formula objects | `39551` |
+| WMF width within 1% | `39551/39551` |
+| WMF height within 1% | `39551/39551` |
+| Generated non-WMF previews | `0` |
+| MTEF clean pairs | `39248/39551` |
+| Remaining hard suspects | `75` |
+| Remaining low-tail failures | `51` |
+| Remaining structural gaps | `126` |
+
+The summary report is expected at:
+
+```text
+D:\latextomathtype\analysis\acceptance-summary\xsc-full-acceptance.json
+```
+
+## Linux And Docker
+
+Package and run the executable jar:
+
+```bash
+./.mvn/apache-maven-3.9.12/bin/mvn -DskipTests package
+java \
+  -Dpaperword.render.cache.enabled=true \
+  -Dpaperword.render.cache.dir=/var/cache/latextomathtype/formula-render \
+  -jar target/paper-to-word-1.0.0.jar
+```
+
+Build and run the Docker image:
+
+```bash
+docker build -t latextomathtype:local .
+docker run --rm -p 8081:8081 \
+  -v latextomathtype-cache:/var/cache/latextomathtype/formula-render \
+  latextomathtype:local
+```
+
+Run the Linux smoke script:
+
+```bash
+sh scripts/linux-smoke.sh
+```
+
+See [docs/linux-runtime.md](docs/linux-runtime.md) for package requirements and container smoke alternatives.
+
+## Configuration
+
+Most runtime knobs are Java system properties:
+
+| Property | Default | Purpose |
 | --- | --- | --- |
-| `paperword.latex.command` | `latex` | 原生 TeX 渲染命令 |
-| `paperword.dvisvgm.command` | `dvisvgm` | DVI 转 SVG 命令 |
-| `paperword.latex.timeout.seconds` | `15` | 原生 TeX 渲染超时 |
-| `paperword.render.cache.enabled` | `true` | 是否启用持久化公式渲染缓存 |
-| `paperword.render.cache.dir` | 系统临时目录 | 持久化公式渲染缓存目录 |
+| `paperword.latex.command` | `latex` | Native LaTeX command path |
+| `paperword.xelatex.command` | `xelatex` | XeLaTeX command path for CJK formulas where used |
+| `paperword.dvisvgm.command` | `dvisvgm` | DVI/SVG conversion command path |
+| `paperword.latex.timeout.seconds` | `20` | External render command timeout |
+| `paperword.mathjax.node.command` | `node` | Node.js command used by the MathJax worker |
+| `paperword.mathjax.script` | `tools/mathjax/render_mathjax_svg.cjs` | MathJax worker script |
+| `paperword.render.cache.enabled` | `true` | Persistent formula render cache switch |
+| `paperword.render.cache.dir` | `data/cache/formula-render` | Persistent formula render cache location |
 
-## 项目结构
+The Spring Boot port is configured in [src/main/resources/application.yml](src/main/resources/application.yml) and currently defaults to `8081`.
+
+## Repository Layout
 
 ```text
 src/main/java/com/lz/paperword
-  controller/        REST 接口
-  service/           导出服务
-  core/docx/         Word 文档构建和 MathType 嵌入
-  core/latex/        LaTeX 分词、解析和内容切分
-  core/mathml/       中间数学表示和降级转换
-  core/mtef/         MTEF v5 写入器、字符映射和模板记录
-  core/ole/          OLE2 对象打包
-  core/render/       TeX/dvisvgm 和回退渲染
-  model/             请求 DTO
+  controller/        REST API
+  service/           Export orchestration
+  core/docx/         DOCX building and MathType embedding
+  core/latex/        LaTeX splitting, tokenization, and parsing
+  core/mathml/       Intermediate math representation
+  core/mtef/         MTEF v5 writer and MathType records
+  core/ole/          OLE2 packaging
+  core/render/       Preview rendering, WMF generation, and cache
+  core/layout/       Block layout export
+  model/             Request DTOs
 
-rebuild/             参考文档重建和对比脚本
-rebuild-assets/      参考 DOCX 和抽取出的视觉素材
-scripts/             验证脚本和 Linux 冒烟脚本
-docs/                技术说明和验收计划
+rebuild/             Reference reconstruction and layout comparison tools
+rebuild-assets/      Reference DOCX files and extracted visual assets
+scripts/             Validation, corpus, smoke, and inspection scripts
+tools/mathjax/       MathJax SVG worker
+docs/                Technical notes and validation plans
 ```
 
-## 文档
+## Documentation
 
-- [TECHNICAL.md](TECHNICAL.md)：架构、MTEF/OLE、渲染边界和参考重建流程。
-- [docs/linux-runtime.md](docs/linux-runtime.md)：Linux 与 Docker 运行说明。
-- [docs/MathType-validation-plan.md](docs/MathType-validation-plan.md)：解析、MTEF、预览、可编辑性和 Word 显示框的验收门槛。
-- [exam-template.json](exam-template.json)：最小请求示例。
+- [TECHNICAL.md](TECHNICAL.md): architecture, MTEF/OLE model, rendering boundary, and reference rebuild flow.
+- [docs/linux-runtime.md](docs/linux-runtime.md): Linux and Docker runtime details.
+- [docs/MathType-validation-plan.md](docs/MathType-validation-plan.md): validation layers and phase gates.
+- [docs/MathType-support-matrix.md](docs/MathType-support-matrix.md): supported formula structures and known gaps.
+- [docs/xsc-latex-assets.md](docs/xsc-latex-assets.md): xsc corpus asset pipeline notes.
 
-实现参考：
+## Related Projects And References
 
-- [WIRIS MathType SDK: How MTEF is stored in files and objects](https://docs.wiris.com/en_US/mathtype-sdk-technical-documentation/how-mtef-is-stored-in-files-and-objects)
-- [WIRIS MathType SDK: MTEF v5](https://docs.wiris.com/en_US/mathtype-sdk-technical-documentation/mathtype-mtef-v5-mathtype-40-and-later)
-- [transpect/docx2tex README](https://github.com/transpect/docx2tex)
+- [transpect/docx2tex](https://github.com/transpect/docx2tex): DOCX to LaTeX conversion used as a round-trip validation tool.
+- [plutext/docx4j](https://github.com/plutext/docx4j): a mature Java OpenXML library whose README structure is a useful contrast for quick project positioning.
+- [MathJax](https://github.com/mathjax/MathJax-src): TeX/MathML/AsciiMath rendering engine used here through a local Node worker.
+- [WIRIS MathType SDK: MTEF storage](https://docs.wiris.com/en_US/mathtype-sdk-technical-documentation/how-mtef-is-stored-in-files-and-objects): reference for MathType native stream storage.
+- [WIRIS MathType SDK: MTEF v5](https://docs.wiris.com/en_US/mathtype-sdk-technical-documentation/mathtype-mtef-v5-mathtype-40-and-later): reference for MathType record structure.
 
-## 边界
+## Boundaries
 
-生成文档追求视觉和语义等价，不追求字节级相同。参考文档与生成文档的段落数量、媒体内部结构可以不同；验收重点是 OLE 对象数、公式显示框成对尺寸、MathType 可编辑性和 `docx2tex` 语义覆盖。
+Generated documents aim for visual and semantic equivalence, not binary identity. Reference and regenerated files may differ in package internals, relationship IDs, media ordering, and paragraph internals.
 
-Linux 上没有桌面 MathType。Linux 验证依赖纯 Java OLE/MTEF 生成、POIFS 直接检查、预览渲染和 `docx2tex` 回切。Windows + Word + MathType 仍然是最终 GUI 双击编辑抽查路径。
+The acceptance target is more practical:
+
+- Formula objects remain MathType-compatible OLE objects.
+- `Equation Native` streams are structurally valid.
+- Word displays formulas at the expected width, height, and baseline.
+- `docx2tex` can recover the expected LaTeX fragments.
+- Windows + Word + MathType can open representative generated formulas for editing.
