@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="540" height="168" style="background:#fff">
+<line x1="12.0" y1="86.2" x2="134.8" y2="86.2" stroke="#000" stroke-width="2.4"/>
+<line x1="202.3" y1="86.2" x2="331.1" y2="86.2" stroke="#000" stroke-width="2.4"/>
+<line x1="363.9" y1="86.2" x2="403.1" y2="86.2" stroke="#000" stroke-width="2.4"/>
+<line x1="466.1" y1="86.2" x2="502.5" y2="86.2" stroke="#000" stroke-width="2.4"/>
+<text x="57.6" y="62.1" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="250.9" y="62.1" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="367.7" y="62.1" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="468.6" y="62.1" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="340.5" y="102.0" font-size="63.0" font-family="Times New Roman" fill="#000">(</text>
+<text x="505.5" y="102.0" font-size="63.0" font-family="Times New Roman" fill="#000">)</text>
+<text x="15.9" y="151.5" font-size="63.0" font-family="Times New Roman" fill="#000">a</text>
+<text x="100.5" y="151.5" font-size="63.0" font-family="Times New Roman" fill="#000">b</text>
+<text x="204.4" y="151.5" font-size="63.0" font-family="Times New Roman" fill="#000">b</text>
+<text x="295.9" y="151.5" font-size="63.0" font-family="Times New Roman" fill="#000">a</text>
+<text x="367.9" y="151.5" font-size="63.0" font-family="Times New Roman" fill="#000">a</text>
+<text x="468.2" y="151.5" font-size="63.0" font-family="Times New Roman" fill="#000">b</text>
+<text x="151.9" y="102.0" font-size="63.0" font-family="Times New Roman" fill="#000">=</text>
+<text x="417.9" y="102.0" font-size="63.0" font-family="Times New Roman" fill="#000">-</text>
+<text x="57.2" y="151.5" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="248.6" y="151.5" font-size="63.0" font-family="Times New Roman" fill="#000">-</text>
+</svg>

@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2454" height="366" style="background:#fff">
+<line x1="61.5" y1="89.2" x2="98.8" y2="89.2" stroke="#000" stroke-width="2.4"/>
+<line x1="186.8" y1="89.2" x2="304.7" y2="89.2" stroke="#000" stroke-width="2.4"/>
+<line x1="367.7" y1="89.2" x2="485.6" y2="89.2" stroke="#000" stroke-width="2.4"/>
+<line x1="549.6" y1="89.2" x2="667.5" y2="89.2" stroke="#000" stroke-width="2.4"/>
+<line x1="730.5" y1="89.2" x2="849.6" y2="89.2" stroke="#000" stroke-width="2.4"/>
+<line x1="1026.6" y1="89.2" x2="1192.7" y2="89.2" stroke="#000" stroke-width="2.4"/>
+<line x1="1255.7" y1="89.2" x2="1424.6" y2="89.2" stroke="#000" stroke-width="2.4"/>
+<line x1="86.6" y1="275.4" x2="361.9" y2="275.4" stroke="#000" stroke-width="2.4"/>
+<line x1="424.9" y1="275.4" x2="709.1" y2="275.4" stroke="#000" stroke-width="2.4"/>
+<line x1="773.1" y1="275.4" x2="1057.3" y2="275.4" stroke="#000" stroke-width="2.4"/>
+<line x1="1120.3" y1="275.4" x2="1403.6" y2="275.4" stroke="#000" stroke-width="2.4"/>
+<line x1="1580.6" y1="275.4" x2="1962.9" y2="275.4" stroke="#000" stroke-width="2.4"/>
+<line x1="2025.9" y1="275.4" x2="2408.2" y2="275.4" stroke="#000" stroke-width="2.4"/>
+<text x="64.3" y="65.1" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="229.9" y="65.1" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="410.8" y="65.1" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="592.7" y="65.1" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="774.2" y="65.1" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1093.9" y="65.1" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1324.3" y="65.1" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="65.4" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">2</text>
+<text x="190.7" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">2</text>
+<text x="273.4" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">3</text>
+<text x="369.8" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">3</text>
+<text x="452.2" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">4</text>
+<text x="551.6" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">3</text>
+<text x="634.1" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">4</text>
+<text x="734.4" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">4</text>
+<text x="817.1" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">5</text>
+<text x="1023.6" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1055.1" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1127.8" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1159.3" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">2</text>
+<text x="1252.7" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1284.2" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">2</text>
+<text x="1361.8" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1393.3" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">3</text>
+<text x="208.5" y="251.2" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="551.2" y="251.2" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="899.4" y="251.2" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1246.1" y="251.2" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1755.9" y="251.2" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="2201.2" y="251.2" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="83.6" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="163.3" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">2</text>
+<text x="246.0" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">3</text>
+<text x="328.5" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">4</text>
+<text x="428.8" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">2</text>
+<text x="511.5" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">3</text>
+<text x="594.0" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">4</text>
+<text x="676.7" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">5</text>
+<text x="777.0" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">2</text>
+<text x="859.7" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">3</text>
+<text x="942.2" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">4</text>
+<text x="1024.9" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">5</text>
+<text x="1122.4" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">3</text>
+<text x="1204.9" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">4</text>
+<text x="1287.6" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">5</text>
+<text x="1370.2" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">6</text>
+<text x="1577.6" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1609.1" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">0</text>
+<text x="1686.8" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1718.2" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1791.0" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1822.5" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">2</text>
+<text x="1900.1" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="1931.6" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">3</text>
+<text x="2022.9" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="2054.4" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="2127.2" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="2158.7" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">2</text>
+<text x="2236.3" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="2267.8" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">3</text>
+<text x="2343.4" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">1</text>
+<text x="2374.9" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">4</text>
+<text x="153.0" y="69.9" font-size="63.0" font-family="Times New Roman" fill="#000">⎛</text>
+<text x="1433.6" y="69.9" font-size="63.0" font-family="Times New Roman" fill="#000">⎞</text>
+<text x="11.1" y="105.0" font-size="63.0" font-family="Times New Roman" fill="#000">=</text>
+<text x="109.7" y="105.0" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="319.5" y="105.0" font-size="63.0" font-family="Times New Roman" fill="#000">-</text>
+<text x="500.4" y="105.0" font-size="63.0" font-family="Times New Roman" fill="#000">+</text>
+<text x="682.3" y="105.0" font-size="63.0" font-family="Times New Roman" fill="#000">-</text>
+<text x="864.4" y="105.0" font-size="63.0" font-family="Times New Roman" fill="#000">+</text>
+<text x="977.4" y="105.0" font-size="63.0" font-family="Times New Roman" fill="#000">+</text>
+<text x="1207.5" y="105.0" font-size="63.0" font-family="Times New Roman" fill="#000">-</text>
+<text x="153.0" y="122.1" font-size="63.0" font-family="Times New Roman" fill="#000">⎜</text>
+<text x="1433.6" y="122.1" font-size="63.0" font-family="Times New Roman" fill="#000">⎟</text>
+<text x="230.1" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="407.1" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="588.9" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="773.8" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="1089.6" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="1323.6" y="154.5" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="153.0" y="161.6" font-size="63.0" font-family="Times New Roman" fill="#000">⎝</text>
+<text x="1433.6" y="161.6" font-size="63.0" font-family="Times New Roman" fill="#000">⎠</text>
+<text x="52.9" y="256.1" font-size="63.0" font-family="Times New Roman" fill="#000">⎛</text>
+<text x="2417.2" y="256.1" font-size="63.0" font-family="Times New Roman" fill="#000">⎞</text>
+<text x="11.1" y="291.2" font-size="63.0" font-family="Times New Roman" fill="#000">+</text>
+<text x="376.7" y="291.2" font-size="63.0" font-family="Times New Roman" fill="#000">-</text>
+<text x="723.9" y="291.2" font-size="63.0" font-family="Times New Roman" fill="#000">+</text>
+<text x="1072.1" y="291.2" font-size="63.0" font-family="Times New Roman" fill="#000">-</text>
+<text x="1418.4" y="291.2" font-size="63.0" font-family="Times New Roman" fill="#000">+</text>
+<text x="1531.5" y="291.2" font-size="63.0" font-family="Times New Roman" fill="#000">+</text>
+<text x="1977.8" y="291.2" font-size="63.0" font-family="Times New Roman" fill="#000">-</text>
+<text x="52.9" y="308.2" font-size="63.0" font-family="Times New Roman" fill="#000">⎜</text>
+<text x="2417.2" y="308.2" font-size="63.0" font-family="Times New Roman" fill="#000">⎟</text>
+<text x="118.1" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="202.7" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="283.3" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="468.2" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="548.8" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="633.4" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="816.4" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="897.0" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="981.6" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="1159.7" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="1244.2" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="1326.0" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="1648.5" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="1752.8" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="1861.9" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="2088.9" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="2198.1" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="2305.1" y="340.7" font-size="63.0" font-family="Times New Roman" fill="#000">×</text>
+<text x="52.9" y="347.8" font-size="63.0" font-family="Times New Roman" fill="#000">⎝</text>
+<text x="2417.2" y="347.8" font-size="63.0" font-family="Times New Roman" fill="#000">⎠</text>
+<text x="905.6" y="105.0" font-size="63.0" font-family="Times New Roman" fill="#000">L</text>
+<text x="1459.7" y="291.2" font-size="63.0" font-family="Times New Roman" fill="#000">L</text>
+</svg>
