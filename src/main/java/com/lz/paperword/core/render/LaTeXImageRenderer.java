@@ -816,7 +816,7 @@ public class LaTeXImageRenderer {
         }
         String text = latex.replaceAll("\\\\pwmetrics\\{[^}]+}\\s*", "");
         if (hasFractionCommand(text)) {
-            return Math.max(0.0d, heightPt * 0.40d);
+            return Math.max(0.0d, heightPt * MathTypeStructureMetrics.FRACTION_DEPTH_RATIO);
         }
         if (text.contains("\\begin{array}") || text.contains("\\sqrt")) {
             return Math.max(0.0d, heightPt * 0.32d);

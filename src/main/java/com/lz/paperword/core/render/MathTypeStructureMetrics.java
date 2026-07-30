@@ -6,6 +6,22 @@ package com.lz.paperword.core.render;
  * <p>The values mirror analysis/wmf-structure-metrics/
  * combined-xsc-tex-toggle-summary-parameter-candidates.txt. They are renderer
  * starting constants, not final visual acceptance gates.</p>
+ *
+ * <p>Fraction-family heights and the fraction depth ratio were re-measured
+ * by {@code scripts/structure_measure.py} from 421 genuine MathType WMF
+ * previews (tree-level MTEF-AST-to-glyph alignment); see
+ * {@code docs/structure-params-round1.md} and
+ * {@code target/wmf-ruler/structure_params.json}:</p>
+ * <ul>
+ *   <li>single/chain fraction bbox: height 27.988pt, above 16.993pt,
+ *       below 10.995pt at 10.495pt body size (n_train=35, val residual
+ *       median 0.012pt) -> 28.0 / 17.0 / 11.0</li>
+ *   <li>nested fraction bbox median: 31.0pt, above 18.0pt, below 13.0pt
+ *       (n_train=27; deep-nesting tail p95 57.2pt is structure-dependent
+ *       and cannot be a single family constant)</li>
+ *   <li>fraction depth ratio below/height = 0.393 (single, chain, multi
+ *       buckets agree to 0.001)</li>
+ * </ul>
  */
 final class MathTypeStructureMetrics {
 
@@ -87,16 +103,18 @@ final class MathTypeStructureMetrics {
     static final double SQRT_HEIGHT_PT = 18.0d;
     static final double SQRT_NESTED_HEIGHT_PT = 64.0d;
     static final double SQRT_FRACTION_HEIGHT_PT = 35.25d;
-    static final double ORDINARY_FRACTION_ABOVE_PT = 16.0d;
+    static final double ORDINARY_FRACTION_ABOVE_PT = 17.0d;
     static final double ORDINARY_FRACTION_BELOW_PT = ORDINARY_FRACTION_HEIGHT_PT - ORDINARY_FRACTION_ABOVE_PT;
     static final double SQRT_FRACTION_ABOVE_PT = 20.0d;
     static final double SQRT_FRACTION_BELOW_PT = SQRT_FRACTION_HEIGHT_PT - SQRT_FRACTION_ABOVE_PT;
     static final double COMPACT_INLINE_FRACTION_ABOVE_PT = 13.0d;
     static final double COMPACT_INLINE_FRACTION_BELOW_PT =
         COMPACT_INLINE_FRACTION_HEIGHT_PT - COMPACT_INLINE_FRACTION_ABOVE_PT;
-    static final double NESTED_FRACTION_HEIGHT_PT = 53.25d;
-    static final double NESTED_FRACTION_ABOVE_PT = 30.0d;
+    static final double NESTED_FRACTION_HEIGHT_PT = 31.0d;
+    static final double NESTED_FRACTION_ABOVE_PT = 18.0d;
     static final double NESTED_FRACTION_BELOW_PT = NESTED_FRACTION_HEIGHT_PT - NESTED_FRACTION_ABOVE_PT;
+    /** Measured below-main-baseline fraction of the fraction preview box. */
+    static final double FRACTION_DEPTH_RATIO = 0.393d;
     static final double TEXT_FRACTION_HEIGHT_PT = 33.0d;
     static final double SQRT_BODY_LEFT_PAD_PT = 6.0d;
     static final double SQRT_BODY_FRACTION_LEFT_PAD_PT = 5.4d;

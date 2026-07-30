@@ -570,9 +570,20 @@ def main() -> int:
                 m["bucket"] = bucket
                 m["split"] = split
         all_meas.extend(m for m in meas if "params" in m)
-        per_formula.append({"image": image, "bucket": bucket,
-                            "n_fract": n_fract, "n_rules": n_rules,
-                            "line_match": f"{n_matched}/{n_lines}"})
+        pf = {"image": image, "bucket": bucket,
+              "n_fract": n_fract, "n_rules": n_rules,
+              "line_match": f"{n_matched}/{n_lines}", "split": split}
+        # preview-box truth: placeable bbox vs main baseline (five-box
+        # semantics: WMF placeable bbox + main baseline, no cross-box claims)
+        mb = next((m["boxes"]["main_baseline"] for m in meas
+                   if "boxes" in m
+                   and m["boxes"].get("main_baseline") is not None), None)
+        bbox = f.get("placeable_bbox_pt")
+        if bbox and mb is not None:
+            pf["box_height_pt"] = round(bbox[3] - bbox[1], 3)
+            pf["above_pt"] = round(mb - bbox[1], 3)
+            pf["below_pt"] = round(bbox[3] - mb, 3)
+        per_formula.append(pf)
 
     OUT_JSONL.parent.mkdir(parents=True, exist_ok=True)
     with OUT_JSONL.open("w", encoding="utf-8") as fh:
@@ -606,6 +617,21 @@ def main() -> int:
             if size:
                 entry[p + "_per_size"] = quantiles([v / size for v in vals])
         params["buckets"][bucket] = entry
+
+    # preview-box truth per bucket (train only): placeable bbox height and
+    # its split into above/below the main baseline -- these feed the
+    # renderer's FamilyMetrics heights.
+    preview_boxes = {}
+    for bucket in ("single", "nested", "chain", "multi"):
+        rows = [p for p in per_formula if p["bucket"] == bucket
+                and p["split"] == "train" and "box_height_pt" in p]
+        if not rows:
+            continue
+        entry = {"n_train": len(rows)}
+        for k in ("box_height_pt", "above_pt", "below_pt"):
+            entry[k] = quantiles([p[k] for p in rows])
+        preview_boxes[bucket] = entry
+    params["preview_boxes"] = preview_boxes
     OUT_PARAMS.write_text(json.dumps(params, ensure_ascii=False, indent=1),
                           encoding="utf-8")
 
@@ -625,6 +651,15 @@ def main() -> int:
                    if r["params"].get(p) is not None]
             if res:
                 entry[p + "_absres"] = quantiles(res)
+        # validation residual for preview box height
+        pb = preview_boxes.get(bucket)
+        if pb:
+            vrows = [p for p in per_formula if p["bucket"] == bucket
+                     and p["split"] == "val" and "box_height_pt" in p]
+            res = [abs(p["box_height_pt"] - pb["box_height_pt"]["median"])
+                   for p in vrows]
+            if res:
+                entry["box_height_absres"] = quantiles(res)
         val_report[bucket] = entry
 
     # ---- report ----------------------------------------------------------
@@ -663,6 +698,23 @@ def main() -> int:
     lines_out.append("axis_offset 仅对根级分式定义（裸分式或堆叠行内分式为 null/不做结论）。")
     lines_out.append("五框语义分开记录：ink bbox（像素层，TODO）、renderer viewport（不适用）、"
                      "WMF placeable bbox、分子/分母字形盒、基线/数学轴。本报告不做跨框结论。")
+    lines_out.append("")
+    lines_out.append("## 预览框真值（WMF placeable bbox，train）")
+    lines_out.append("")
+    lines_out.append("above = 主基线 → bbox 顶；below = 主基线 → bbox 底。供渲染器 FamilyMetrics 高度使用。")
+    for bucket, e in preview_boxes.items():
+        lines_out.append("")
+        lines_out.append(f"### {bucket}（n_train={e['n_train']}）")
+        lines_out.append("")
+        lines_out.append("| 参数 | p25 | 中位 | p75 | p95 |")
+        lines_out.append("|---|---|---|---|---|")
+        for k in ("box_height_pt", "above_pt", "below_pt"):
+            q = e[k]
+            lines_out.append(f"| {k} | {q['p25']} | {q['median']} | {q['p75']} | {q['p95']} |")
+        vb = val_report.get(bucket, {}).get("box_height_absres")
+        if vb:
+            lines_out.append(f"| 验证集高度残差 | 中位 {vb['median']} | p75 {vb['p75']} "
+                             f"| p95 {vb['p95']} | max {vb['max']} |")
     lines_out.append("")
     lines_out.append("## 训练集参数（pt，另附 per-size 归一）")
     for bucket, e in params["buckets"].items():
