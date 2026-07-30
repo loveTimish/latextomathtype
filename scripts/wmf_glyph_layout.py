@@ -338,6 +338,10 @@ def parse_wmf(data: bytes) -> dict:
                 }
                 if dx_array and gi < len(dx_array):
                     entry["dx"] = dx_array[gi]
+                # MathType TA_UPDATECP runs: the final glyph's dx is the
+                # advance to the NEXT run's anchor, not the glyph width.
+                # Downstream must not use it as a width/overhang source.
+                entry["last_in_run"] = (gi == len(glyphs) - 1)
                 result["glyphs"].append(entry)
                 if dx_array and gi < len(dx_array):
                     cursor += dx_array[gi]
