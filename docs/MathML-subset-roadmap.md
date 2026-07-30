@@ -49,7 +49,10 @@ Acceptance:
 - no unconditional Windows-path failure remains
 
 Status:
-- complete (`93` tests executed; `0` failures/errors; `3` skips)
+- complete (`310` tests executed; `0` failures/errors; `6` skips as of 2026-07-30:
+  5 pre-existing environment skips + 1 documented known-gap skip in
+  `FractionReferenceComparisonTest` for preview-box height parity, see
+  `docs/wmf-ruler-diff-round1.md`; count updated from the earlier `93`-test baseline)
 
 ### Phase 3 — Introduce MathML-aligned IR
 Goal:

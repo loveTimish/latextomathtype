@@ -113,7 +113,7 @@ public class LaTeXImageRenderer {
     private static final double MATHJAX_DEFAULT_MAX_WIDTH_PT = 400.0d;
     private static final int MATHJAX_DEFAULT_DPI = 900;
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v248-mathjax-dib-wmf-fraction-depth";
+    private static final String CACHE_VERSION = "v249-mathjax-high-dpi-dib-wmf";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(
@@ -209,18 +209,20 @@ public class LaTeXImageRenderer {
     public PreviewImage renderForOlePreview(String latex) {
         String cacheKey = cacheKey("ole", latex, OLE_PREVIEW_SIZE);
         PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
-        if (cached != null) {
+        if (cached != null && isRequestedPreviewFormat(cached)) {
             return cached;
         }
         cached = readPreviewFromDisk(cacheKey);
-        if (cached != null) {
+        if (cached != null && isRequestedPreviewFormat(cached)) {
             PREVIEW_CACHE.put(cacheKey, cached);
             return cached;
         }
         PreviewImage preview = renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE);
         if (preview != null) {
-            PREVIEW_CACHE.put(cacheKey, preview);
-            writePreviewToDisk(cacheKey, preview);
+            if (isRequestedPreviewFormat(preview)) {
+                PREVIEW_CACHE.put(cacheKey, preview);
+                writePreviewToDisk(cacheKey, preview);
+            }
             return preview;
         }
         throw new IllegalStateException("Native TeX/WMF OLE preview rendering failed: " + latex);
@@ -233,21 +235,34 @@ public class LaTeXImageRenderer {
         String cacheKey = cacheKey("ole-target-" + String.format(Locale.ROOT, "%.2fx%.2f", targetWidthPt, targetHeightPt),
             latex, OLE_PREVIEW_SIZE);
         PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
-        if (cached != null) {
+        if (cached != null && isRequestedPreviewFormat(cached)) {
             return cached;
         }
         cached = readPreviewFromDisk(cacheKey);
-        if (cached != null) {
+        if (cached != null && isRequestedPreviewFormat(cached)) {
             PREVIEW_CACHE.put(cacheKey, cached);
             return cached;
         }
         PreviewImage preview = renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE, targetWidthPt, targetHeightPt);
         if (preview != null) {
-            PREVIEW_CACHE.put(cacheKey, preview);
-            writePreviewToDisk(cacheKey, preview);
+            if (isRequestedPreviewFormat(preview)) {
+                PREVIEW_CACHE.put(cacheKey, preview);
+                writePreviewToDisk(cacheKey, preview);
+            }
             return preview;
         }
         throw new IllegalStateException("Native TeX/WMF target preview rendering failed: " + latex);
+    }
+
+    /**
+     * 校验预览产物是否满足当前请求的格式。
+     *
+     * <p>请求 EMF 而产物是回退的 WMF 时（EMF 后端一次性失败所致），
+     * 缓存会把临时故障固化为永久行为：历史污染条目按未命中处理，
+     * 新的回退产物也不再写入缓存。</p>
+     */
+    private boolean isRequestedPreviewFormat(PreviewImage preview) {
+        return preview != null && (!useEmfOlePreview() || "emf".equals(preview.extension()));
     }
 
     /**
@@ -2046,17 +2061,15 @@ public class LaTeXImageRenderer {
         int srcHeight = Math.max(image.getHeight(), 1);
         int destWidth = Math.max((int) Math.round(logicalWidthPt * PX_PER_PT), 1);
         int destHeight = Math.max((int) Math.round(logicalHeightPt * PX_PER_PT), 1);
-        double dibScale = Math.min(1.0d, (double) MAX_WMF_DIB_SIDE / Math.max(destWidth, destHeight));
-        int dibWidth = destWidth;
-        int dibHeight = destHeight;
+        double dibScale = Math.min(1.0d, (double) MAX_WMF_DIB_SIDE / Math.max(srcWidth, srcHeight));
+        int dibWidth = srcWidth;
+        int dibHeight = srcHeight;
         if (dibScale < 1.0d) {
-            dibWidth = Math.max((int) Math.round(destWidth * dibScale), 1);
-            dibHeight = Math.max((int) Math.round(destHeight * dibScale), 1);
+            dibWidth = Math.max((int) Math.round(srcWidth * dibScale), 1);
+            dibHeight = Math.max((int) Math.round(srcHeight * dibScale), 1);
         }
         if (image.getWidth() != dibWidth || image.getHeight() != dibHeight) {
-            destWidth = dibWidth;
-            destHeight = dibHeight;
-            image = scaleImage(image, destWidth, destHeight);
+            image = scaleImage(image, dibWidth, dibHeight);
             srcWidth = Math.max(image.getWidth(), 1);
             srcHeight = Math.max(image.getHeight(), 1);
         }
