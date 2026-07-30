@@ -105,8 +105,38 @@ FN_POLYGON = 0x0324
 FN_POLYLINE = 0x0325
 FN_MOVETO = 0x0214
 FN_LINETO = 0x0213
+FN_ESCAPE = 0x0626
 
 TA_UPDATECP = 0x0001
+
+
+def extract_mtef_from_comment(payload: bytes) -> bytes | None:
+    """Extract MTEF bytes from a MathType MFCOMMENT escape payload.
+
+    Two known layouts:
+    - "AppsMFCC"(8) flag(2) size1(4) size2(4) vendor\0 MTEF[size1]
+    - "MathTypeUU"(10) unk(2) MTEF[remainder]   (Unicode-era MathType)
+    """
+    if payload.startswith(b"AppsMFCC") and len(payload) >= 18:
+        p = 8
+        p += 2  # flag
+        size1 = struct.unpack_from("<I", payload, p)[0]
+        p += 4
+        p += 4  # size2 (duplicate of size1)
+        # vendor zero-terminated string, e.g. "Design Science, Inc."
+        end = payload.find(b"\x00", p)
+        if end < 0:
+            return None
+        p = end + 1
+        n = size1
+        if p + n > len(payload):
+            n = len(payload) - p
+        mtef = payload[p: p + n]
+        return mtef if mtef and mtef[0] == 0x05 else None
+    if payload.startswith(b"MathTypeUU") and len(payload) > 12:
+        mtef = payload[12:]
+        return mtef if mtef and mtef[0] == 0x05 else None
+    return None
 
 PLACEABLE_KEY = 0x9AC6CDD7
 
@@ -332,6 +362,15 @@ def parse_wmf(data: bytes) -> dict:
                         "size_units": current_font["height_units"] if current_font else None,
                         "x": x, "y": y, "text_align": text_align,
                     })
+        elif func == FN_ESCAPE and len(params) >= 4:
+            esc_id = _u16(params, 0)
+            dlen = _u16(params, 2)
+            payload = params[4: 4 + dlen]
+            if esc_id == 15:  # MFCOMMENT
+                mtef = extract_mtef_from_comment(payload)
+                if mtef:
+                    result["mtef_hex"] = mtef.hex()
+                    result["mtef_size"] = len(mtef)
         elif func == FN_RECTANGLE and len(params) >= 8:
             bottom, right, top, left = (_i16(params, 2 * i) for i in range(4))
             result["rules"].append({"kind": "rect", "left": left, "top": top,
