@@ -69,6 +69,22 @@ CHARSET_NAMES = {
     0x81: "HANGUL", 0x86: "GB2312", 0x88: "CHINESEBIG5", 0xFF: "OEM",
 }
 
+# MT Extra private encoding (reverse-engineered from corpus context)
+MT_EXTRA_MAP: dict[int, str] = {
+    0x4C: "⋯",  # midline horizontal ellipsis (confirmed vs MathJax \cdots)
+}
+
+# Symbol extensible-delimiter pieces -> logical delimiter
+EXT_PIECE_TO_CHAR = {
+    "⎛": "(", "⎜": "(", "⎝": "(",
+    "⎞": ")", "⎟": ")", "⎠": ")",
+    "⎡": "[", "⎢": "[", "⎣": "[",
+    "⎤": "]", "⎥": "]", "⎦": "]",
+    "⎧": "{", "⎨": "{", "⎩": "{", "⎪": "{",
+    "⎫": "}", "⎬": "}", "⎭": "}",
+    "⌠": "∫", "⎮": "∫", "⌡": "∫",
+}
+
 # WMF record function codes
 FN_SETWINDOWEXT = 0x020C
 FN_SETWINDOWORG = 0x020B
@@ -135,7 +151,11 @@ def decode_text(raw: bytes, charset: int, face: str = "") -> list[dict]:
                 i += 2
         return out
     for b in raw:
-        if use_symbol:
+        if "mt extra" in face_l:
+            mapped = MT_EXTRA_MAP.get(b)
+            out.append({"ch": mapped if mapped is not None else f"<MT{b:02X}>",
+                        "hex": f"{b:02X}"})
+        elif use_symbol:
             mapped = SYMBOL_MAP.get(b)
             if mapped is None and 0x20 <= b <= 0x7E:
                 # Symbol keeps ASCII positions for digits and basic punctuation
@@ -233,6 +253,7 @@ def parse_wmf(data: bytes) -> dict:
                 "width_units": lf_width,
                 "escapement": lf_escapement,
                 "weight": lf_weight,
+                "italic": bool(params[10]),
                 "charset": charset,
                 "charset_name": CHARSET_NAMES.get(charset, hex(charset)),
                 "face": face,
@@ -278,6 +299,7 @@ def parse_wmf(data: bytes) -> dict:
                     "ch": g["ch"],
                     "hex": g["hex"],
                     "font": current_font["face"] if current_font else None,
+                    "italic": current_font.get("italic") if current_font else None,
                     "charset": current_font["charset_name"] if current_font else None,
                     "size_units": current_font["height_units"] if current_font else None,
                     "x": cursor if dx_array else x,
@@ -327,6 +349,45 @@ def parse_wmf(data: bytes) -> dict:
 
     result["window_org"] = window_org
     result["window_ext"] = window_ext
+
+    # ---- merge extensible delimiter assemblies ------------------------------
+    # MathType draws tall delimiters as stacked Symbol pieces (⎛⎜⎝ / ⎞⎟⎠ / ...)
+    # sharing one x.  Collapse each stack into one logical delimiter glyph so
+    # identity/geometry diffs compare delimiters, not pieces.
+    pieces = [g for g in result["glyphs"] if g["ch"] in EXT_PIECE_TO_CHAR]
+    if pieces:
+        solid = [g for g in result["glyphs"] if g["ch"] not in EXT_PIECE_TO_CHAR]
+        pieces.sort(key=lambda g: (g["x"], g["y"]))
+        stacks: list[list[dict]] = []
+        for g in pieces:
+            tol_x = max(3, abs(g.get("size_units") or 300) * 0.02)
+            if stacks and abs(stacks[-1][-1]["x"] - g["x"]) <= tol_x:
+                stacks[-1].append(g)
+            else:
+                stacks.append([g])
+        merged = []
+        for stack in stacks:
+            stack.sort(key=lambda g: g["y"])
+            runs: list[list[dict]] = [[stack[0]]]
+            for g in stack[1:]:
+                gap = g["y"] - runs[-1][-1]["y"]
+                max_gap = abs(g.get("size_units") or 300) * 1.5
+                if gap <= max_gap and EXT_PIECE_TO_CHAR[g["ch"]] == EXT_PIECE_TO_CHAR[runs[-1][-1]["ch"]]:
+                    runs[-1].append(g)
+                else:
+                    runs.append([g])
+            for run in runs:
+                top, bottom = run[0]["y"], run[-1]["y"]
+                merged.append({
+                    **run[0],
+                    "ch": EXT_PIECE_TO_CHAR[run[0]["ch"]],
+                    "x": sum(g["x"] for g in run) // len(run),
+                    "y": (top + bottom) // 2,
+                    "assembly": True,
+                    "assembly_pieces": len(run),
+                    "assembly_span": [top, bottom],
+                })
+        result["glyphs"] = solid + merged
 
     # ---- convert to points -------------------------------------------------
     scale = None
