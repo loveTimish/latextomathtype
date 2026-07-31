@@ -120,7 +120,7 @@ public class LaTeXImageRenderer {
     private static final double MATHJAX_DEFAULT_MAX_WIDTH_PT = 400.0d;
     private static final int MATHJAX_DEFAULT_DPI = 900;
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v254-mathtype-fit-spacing";
+    private static final String CACHE_VERSION = "v255-mathtype-fit-spacing";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(
@@ -1778,7 +1778,8 @@ public class LaTeXImageRenderer {
             return latex;
         }
         String normalized = com.lz.paperword.core.latex.LaTeXParser.preNormalizeLatex(
-            latex.replaceAll("\\\\kern\\s*[-+]?\\d*\\.?\\d+[a-zA-Z]+", ""));
+            latex.replaceAll("\\\\kern\\s*[-+]?\\d*\\.?\\d+[a-zA-Z]+", ""),
+            !mathJaxMathTypeFit());
         normalized = simplifyFlatDelimiters(normalized);
         String compositeLongDivision = replaceEmbeddedLongDivisionHeader(normalized);
         if (compositeLongDivision != null) {

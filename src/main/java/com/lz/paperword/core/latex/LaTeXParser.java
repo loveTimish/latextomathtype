@@ -362,6 +362,16 @@ public class LaTeXParser {
      * </ul>
      */
     public static String preNormalizeLatex(String latex) {
+        return preNormalizeLatex(latex, true);
+    }
+
+    /**
+     * @param wrapTopLevelBreaks whether to wrap top-level {@code \\} breaks in
+     *                           an array environment. The MathType-fit worker
+     *                           splits pile lines itself, so it must pass false
+     *                           to avoid MathJax mtable row-spacing collisions.
+     */
+    public static String preNormalizeLatex(String latex, boolean wrapTopLevelBreaks) {
         if (latex == null || latex.isBlank()) {
             return latex;
         }
@@ -378,7 +388,7 @@ public class LaTeXParser {
         normalized = normalizeControlSpaces(normalized);
         normalized = normalizeVisualUnderbraceCounters(normalized);
         normalized = normalizeArrayLineBreakSpacing(normalized);
-        if (hasTopLevelLineBreak(normalized)) {
+        if (wrapTopLevelBreaks && hasTopLevelLineBreak(normalized)) {
             normalized = "\\begin{array}{l} " + normalized + " \\end{array}";
         }
         return normalized;
