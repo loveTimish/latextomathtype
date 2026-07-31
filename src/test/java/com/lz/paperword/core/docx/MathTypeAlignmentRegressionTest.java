@@ -28,6 +28,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class MathTypeAlignmentRegressionTest {
@@ -114,6 +115,11 @@ class MathTypeAlignmentRegressionTest {
 
     @Test
     void shouldUseEmfPreviewWhenMatureBackendIsEnabled() throws IOException {
+        // FreeHEP writes the EMF header via Toolkit.getScreenSize(); once a
+        // headless toolkit is cached (e.g. a Spring test context forced
+        // java.awt.headless), EMF export cannot work and the renderer falls
+        // back to WMF by design. Skip the strict EMF assertion in that case.
+        assumeFalse(isHeadlessToolkit(), "EMF export requires a display-capable AWT toolkit");
         byte[] docx = withEmfPreviewEnabled(() -> buildDocxWithFormula("\\sqrt{a^{2}+b^{2}}"));
         Map<String, String> entries = unzipTextEntries(docx);
         String documentXml = entries.get("word/document.xml");
@@ -320,6 +326,10 @@ class MathTypeAlignmentRegressionTest {
     @FunctionalInterface
     private interface ThrowingDocxSupplier {
         byte[] get() throws IOException;
+    }
+
+    private static boolean isHeadlessToolkit() {
+        return java.awt.Toolkit.getDefaultToolkit().getClass().getSimpleName().equals("HeadlessToolkit");
     }
 
     private ObjectMetrics extractFirstObjectMetrics(byte[] docxBytes) throws IOException {

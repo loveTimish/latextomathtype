@@ -78,6 +78,13 @@ public class LaTeXImageRenderer {
     /** MathJax 生成 OLE 预览图时的字号，来自 xsc/MathType 尺寸拟合。 */
     private static final float OLE_PREVIEW_SIZE = 9.02f;
 
+    /** 系统属性：MathType 几何重排开关（分式全尺寸槽 + 实测垂直间距），默认开启。 */
+    private static final String MATHJAX_MATHTYPE_FIT_PROP = "paperword.mathjax.mathtypefit";
+    /** 系统属性：MathType 几何重排使用的字号（MathType 全尺寸槽的实测目标字号）。 */
+    private static final String MATHJAX_MATHTYPE_FIT_FONT_PT_PROP = "paperword.mathjax.mathtypefit.fontpt";
+    /** MathType 全尺寸槽的实测目标字号（display-scales 拟合：9.02 × 1.163）。 */
+    private static final double MATHJAX_MATHTYPE_FIT_DEFAULT_FONT_PT = 12.0d;
+
     /** 系统属性：latex 命令路径。 */
     private static final String LATEX_CMD_PROP = "paperword.latex.command";
     /** 系统属性：xelatex 命令路径（中文公式渲染）。 */
@@ -113,7 +120,7 @@ public class LaTeXImageRenderer {
     private static final double MATHJAX_DEFAULT_MAX_WIDTH_PT = 400.0d;
     private static final int MATHJAX_DEFAULT_DPI = 900;
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v248-mathjax-dib-wmf-fraction-depth";
+    private static final String CACHE_VERSION = "v258-mathtype-fit-spacing";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(
@@ -209,18 +216,20 @@ public class LaTeXImageRenderer {
     public PreviewImage renderForOlePreview(String latex) {
         String cacheKey = cacheKey("ole", latex, OLE_PREVIEW_SIZE);
         PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
-        if (cached != null) {
+        if (cached != null && isRequestedPreviewFormat(cached)) {
             return cached;
         }
         cached = readPreviewFromDisk(cacheKey);
-        if (cached != null) {
+        if (cached != null && isRequestedPreviewFormat(cached)) {
             PREVIEW_CACHE.put(cacheKey, cached);
             return cached;
         }
         PreviewImage preview = renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE);
         if (preview != null) {
-            PREVIEW_CACHE.put(cacheKey, preview);
-            writePreviewToDisk(cacheKey, preview);
+            if (isRequestedPreviewFormat(preview)) {
+                PREVIEW_CACHE.put(cacheKey, preview);
+                writePreviewToDisk(cacheKey, preview);
+            }
             return preview;
         }
         throw new IllegalStateException("Native TeX/WMF OLE preview rendering failed: " + latex);
@@ -233,21 +242,34 @@ public class LaTeXImageRenderer {
         String cacheKey = cacheKey("ole-target-" + String.format(Locale.ROOT, "%.2fx%.2f", targetWidthPt, targetHeightPt),
             latex, OLE_PREVIEW_SIZE);
         PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
-        if (cached != null) {
+        if (cached != null && isRequestedPreviewFormat(cached)) {
             return cached;
         }
         cached = readPreviewFromDisk(cacheKey);
-        if (cached != null) {
+        if (cached != null && isRequestedPreviewFormat(cached)) {
             PREVIEW_CACHE.put(cacheKey, cached);
             return cached;
         }
         PreviewImage preview = renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE, targetWidthPt, targetHeightPt);
         if (preview != null) {
-            PREVIEW_CACHE.put(cacheKey, preview);
-            writePreviewToDisk(cacheKey, preview);
+            if (isRequestedPreviewFormat(preview)) {
+                PREVIEW_CACHE.put(cacheKey, preview);
+                writePreviewToDisk(cacheKey, preview);
+            }
             return preview;
         }
         throw new IllegalStateException("Native TeX/WMF target preview rendering failed: " + latex);
+    }
+
+    /**
+     * 校验预览产物是否满足当前请求的格式。
+     *
+     * <p>请求 EMF 而产物是回退的 WMF 时（EMF 后端一次性失败所致），
+     * 缓存会把临时故障固化为永久行为：历史污染条目按未命中处理，
+     * 新的回退产物也不再写入缓存。</p>
+     */
+    private boolean isRequestedPreviewFormat(PreviewImage preview) {
+        return preview != null && (!useEmfOlePreview() || "emf".equals(preview.extension()));
     }
 
     /**
@@ -332,6 +354,8 @@ public class LaTeXImageRenderer {
             + "|mathjaxNode=" + System.getProperty(MATHJAX_NODE_CMD_PROP, "node")
             + "|mathjaxScript=" + System.getProperty(MATHJAX_SCRIPT_PROP, "tools/mathjax/render_mathjax_svg.cjs")
             + "|mathjaxFontPt=" + OLE_PREVIEW_SIZE
+            + "|mathjaxMathTypeFit=" + mathJaxMathTypeFit()
+            + "|mathjaxMathTypeFitFontPt=" + mathJaxMathTypeFitFontPt()
             + "|mathjaxExRatio=" + mathJaxExRatio()
             + "|mathjaxPaddingPt=" + mathJaxPaddingPt()
             + "|mathjaxMaxWidthPt=" + mathJaxMaxWidthPt()
@@ -545,7 +569,9 @@ public class LaTeXImageRenderer {
         MathJaxSvgResult svg = renderSvgViaMathJax(localRenderLatex);
         double widthPt = svg.widthPt();
         double heightPt = svg.heightPt();
-        double depthPt = calibrateMathJaxDepthPt(latex, heightPt, svg.depthPt());
+        double depthPt = mathJaxMathTypeFit()
+            ? svg.depthPt()
+            : calibrateMathJaxDepthPt(latex, heightPt, svg.depthPt());
         if (targetWidthPt != null && targetHeightPt != null && targetWidthPt > 0d && targetHeightPt > 0d) {
             widthPt = targetWidthPt;
             heightPt = targetHeightPt;
@@ -801,7 +827,7 @@ public class LaTeXImageRenderer {
         }
         String text = latex.replaceAll("\\\\pwmetrics\\{[^}]+}\\s*", "");
         if (hasFractionCommand(text)) {
-            return Math.max(0.0d, heightPt * 0.40d);
+            return Math.max(0.0d, heightPt * MathTypeStructureMetrics.FRACTION_DEPTH_RATIO);
         }
         if (text.contains("\\begin{array}") || text.contains("\\sqrt")) {
             return Math.max(0.0d, heightPt * 0.32d);
@@ -1043,9 +1069,11 @@ public class LaTeXImageRenderer {
             long id = ++mathJaxRequestId;
             String latexBase64 = Base64.getEncoder().encodeToString((latex == null ? "" : latex)
                 .getBytes(StandardCharsets.UTF_8));
+            boolean mathTypeFit = mathJaxMathTypeFit();
+            double fontPt = mathTypeFit ? mathJaxMathTypeFitFontPt() : (double) OLE_PREVIEW_SIZE;
             String request = String.format(Locale.ROOT,
-                "{\"id\":%d,\"latexBase64\":\"%s\",\"fontPt\":%.6f,\"exRatio\":%.6f,\"paddingPt\":%.6f,\"maxWidthPt\":%.6f}",
-                id, latexBase64, (double) OLE_PREVIEW_SIZE, mathJaxExRatio(), mathJaxPaddingPt(), mathJaxMaxWidthPt());
+                "{\"id\":%d,\"latexBase64\":\"%s\",\"fontPt\":%.6f,\"exRatio\":%.6f,\"paddingPt\":%.6f,\"maxWidthPt\":%.6f,\"mathTypeFit\":%s}",
+                id, latexBase64, fontPt, mathJaxExRatio(), mathJaxPaddingPt(), mathJaxMaxWidthPt(), mathTypeFit);
             mathJaxWorkerInput.write(request);
             mathJaxWorkerInput.newLine();
             mathJaxWorkerInput.flush();
@@ -1111,7 +1139,18 @@ public class LaTeXImageRenderer {
                 throw new IllegalStateException(e);
             }
         });
-        String line = responseFuture.get(timeoutSeconds, TimeUnit.SECONDS);
+        String line;
+        try {
+            line = responseFuture.get(timeoutSeconds, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            // The readLine task stays blocked and the worker may still write the
+            // late response later: the stale task would then consume the NEXT
+            // request's reply and desync the id pairing. Cancel the task and
+            // destroy the worker so the next request starts a fresh process.
+            responseFuture.cancel(true);
+            stopMathJaxWorker();
+            throw e;
+        }
         if (line == null) {
             stopMathJaxWorker();
             throw new IOException("MathJax worker exited without response");
@@ -1154,6 +1193,14 @@ public class LaTeXImageRenderer {
 
     private static double mathJaxExRatio() {
         return readDoubleSystemProperty(MATHJAX_EX_RATIO_PROP, MATHJAX_DEFAULT_EX_RATIO);
+    }
+
+    private static boolean mathJaxMathTypeFit() {
+        return Boolean.parseBoolean(System.getProperty(MATHJAX_MATHTYPE_FIT_PROP, "true"));
+    }
+
+    private static double mathJaxMathTypeFitFontPt() {
+        return readDoubleSystemProperty(MATHJAX_MATHTYPE_FIT_FONT_PT_PROP, MATHJAX_MATHTYPE_FIT_DEFAULT_FONT_PT);
     }
 
     private static double mathJaxPaddingPt() {
@@ -1742,7 +1789,8 @@ public class LaTeXImageRenderer {
             return latex;
         }
         String normalized = com.lz.paperword.core.latex.LaTeXParser.preNormalizeLatex(
-            latex.replaceAll("\\\\kern\\s*[-+]?\\d*\\.?\\d+[a-zA-Z]+", ""));
+            latex.replaceAll("\\\\kern\\s*[-+]?\\d*\\.?\\d+[a-zA-Z]+", ""),
+            !mathJaxMathTypeFit());
         normalized = simplifyFlatDelimiters(normalized);
         String compositeLongDivision = replaceEmbeddedLongDivisionHeader(normalized);
         if (compositeLongDivision != null) {
@@ -2046,17 +2094,15 @@ public class LaTeXImageRenderer {
         int srcHeight = Math.max(image.getHeight(), 1);
         int destWidth = Math.max((int) Math.round(logicalWidthPt * PX_PER_PT), 1);
         int destHeight = Math.max((int) Math.round(logicalHeightPt * PX_PER_PT), 1);
-        double dibScale = Math.min(1.0d, (double) MAX_WMF_DIB_SIDE / Math.max(destWidth, destHeight));
-        int dibWidth = destWidth;
-        int dibHeight = destHeight;
+        double dibScale = Math.min(1.0d, (double) MAX_WMF_DIB_SIDE / Math.max(srcWidth, srcHeight));
+        int dibWidth = srcWidth;
+        int dibHeight = srcHeight;
         if (dibScale < 1.0d) {
-            dibWidth = Math.max((int) Math.round(destWidth * dibScale), 1);
-            dibHeight = Math.max((int) Math.round(destHeight * dibScale), 1);
+            dibWidth = Math.max((int) Math.round(srcWidth * dibScale), 1);
+            dibHeight = Math.max((int) Math.round(srcHeight * dibScale), 1);
         }
         if (image.getWidth() != dibWidth || image.getHeight() != dibHeight) {
-            destWidth = dibWidth;
-            destHeight = dibHeight;
-            image = scaleImage(image, destWidth, destHeight);
+            image = scaleImage(image, dibWidth, dibHeight);
             srcWidth = Math.max(image.getWidth(), 1);
             srcHeight = Math.max(image.getHeight(), 1);
         }
