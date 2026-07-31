@@ -50,7 +50,12 @@ public class CorpusLatexToDocx {
                 }
                 String name = Path.of(parts[0]).getFileName().toString()
                     .replaceFirst("\\.bin$", "");
-                String latex = parts[1].trim();
+                // corpus TSV keeps the original $$ ... $$ display wrappers and
+                // inter-token spaces; parseLaTeX expects bare math
+                String latex = parts[1].trim()
+                    .replaceFirst("^\\$\\$", "")
+                    .replaceFirst("\\$\\$$", "")
+                    .trim();
                 XWPFParagraph p = doc.createParagraph();
                 XWPFRun label = p.createRun();
                 label.setText(name + ": ");

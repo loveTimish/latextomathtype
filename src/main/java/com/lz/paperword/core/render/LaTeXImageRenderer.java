@@ -78,6 +78,13 @@ public class LaTeXImageRenderer {
     /** MathJax 生成 OLE 预览图时的字号，来自 xsc/MathType 尺寸拟合。 */
     private static final float OLE_PREVIEW_SIZE = 9.02f;
 
+    /** 系统属性：MathType 几何重排开关（分式全尺寸槽 + 实测垂直间距），默认开启。 */
+    private static final String MATHJAX_MATHTYPE_FIT_PROP = "paperword.mathjax.mathtypefit";
+    /** 系统属性：MathType 几何重排使用的字号（MathType 全尺寸槽的实测目标字号）。 */
+    private static final String MATHJAX_MATHTYPE_FIT_FONT_PT_PROP = "paperword.mathjax.mathtypefit.fontpt";
+    /** MathType 全尺寸槽的实测目标字号（display-scales 拟合：9.02 × 1.163）。 */
+    private static final double MATHJAX_MATHTYPE_FIT_DEFAULT_FONT_PT = 10.495d;
+
     /** 系统属性：latex 命令路径。 */
     private static final String LATEX_CMD_PROP = "paperword.latex.command";
     /** 系统属性：xelatex 命令路径（中文公式渲染）。 */
@@ -113,7 +120,7 @@ public class LaTeXImageRenderer {
     private static final double MATHJAX_DEFAULT_MAX_WIDTH_PT = 400.0d;
     private static final int MATHJAX_DEFAULT_DPI = 900;
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v249-mathjax-high-dpi-dib-wmf";
+    private static final String CACHE_VERSION = "v252-mathtype-fit-spacing";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(
@@ -347,6 +354,8 @@ public class LaTeXImageRenderer {
             + "|mathjaxNode=" + System.getProperty(MATHJAX_NODE_CMD_PROP, "node")
             + "|mathjaxScript=" + System.getProperty(MATHJAX_SCRIPT_PROP, "tools/mathjax/render_mathjax_svg.cjs")
             + "|mathjaxFontPt=" + OLE_PREVIEW_SIZE
+            + "|mathjaxMathTypeFit=" + mathJaxMathTypeFit()
+            + "|mathjaxMathTypeFitFontPt=" + mathJaxMathTypeFitFontPt()
             + "|mathjaxExRatio=" + mathJaxExRatio()
             + "|mathjaxPaddingPt=" + mathJaxPaddingPt()
             + "|mathjaxMaxWidthPt=" + mathJaxMaxWidthPt()
@@ -560,7 +569,9 @@ public class LaTeXImageRenderer {
         MathJaxSvgResult svg = renderSvgViaMathJax(localRenderLatex);
         double widthPt = svg.widthPt();
         double heightPt = svg.heightPt();
-        double depthPt = calibrateMathJaxDepthPt(latex, heightPt, svg.depthPt());
+        double depthPt = mathJaxMathTypeFit()
+            ? svg.depthPt()
+            : calibrateMathJaxDepthPt(latex, heightPt, svg.depthPt());
         if (targetWidthPt != null && targetHeightPt != null && targetWidthPt > 0d && targetHeightPt > 0d) {
             widthPt = targetWidthPt;
             heightPt = targetHeightPt;
@@ -1058,9 +1069,11 @@ public class LaTeXImageRenderer {
             long id = ++mathJaxRequestId;
             String latexBase64 = Base64.getEncoder().encodeToString((latex == null ? "" : latex)
                 .getBytes(StandardCharsets.UTF_8));
+            boolean mathTypeFit = mathJaxMathTypeFit();
+            double fontPt = mathTypeFit ? mathJaxMathTypeFitFontPt() : (double) OLE_PREVIEW_SIZE;
             String request = String.format(Locale.ROOT,
-                "{\"id\":%d,\"latexBase64\":\"%s\",\"fontPt\":%.6f,\"exRatio\":%.6f,\"paddingPt\":%.6f,\"maxWidthPt\":%.6f}",
-                id, latexBase64, (double) OLE_PREVIEW_SIZE, mathJaxExRatio(), mathJaxPaddingPt(), mathJaxMaxWidthPt());
+                "{\"id\":%d,\"latexBase64\":\"%s\",\"fontPt\":%.6f,\"exRatio\":%.6f,\"paddingPt\":%.6f,\"maxWidthPt\":%.6f,\"mathTypeFit\":%s}",
+                id, latexBase64, fontPt, mathJaxExRatio(), mathJaxPaddingPt(), mathJaxMaxWidthPt(), mathTypeFit);
             mathJaxWorkerInput.write(request);
             mathJaxWorkerInput.newLine();
             mathJaxWorkerInput.flush();
@@ -1169,6 +1182,14 @@ public class LaTeXImageRenderer {
 
     private static double mathJaxExRatio() {
         return readDoubleSystemProperty(MATHJAX_EX_RATIO_PROP, MATHJAX_DEFAULT_EX_RATIO);
+    }
+
+    private static boolean mathJaxMathTypeFit() {
+        return Boolean.parseBoolean(System.getProperty(MATHJAX_MATHTYPE_FIT_PROP, "true"));
+    }
+
+    private static double mathJaxMathTypeFitFontPt() {
+        return readDoubleSystemProperty(MATHJAX_MATHTYPE_FIT_FONT_PT_PROP, MATHJAX_MATHTYPE_FIT_DEFAULT_FONT_PT);
     }
 
     private static double mathJaxPaddingPt() {

@@ -12,6 +12,54 @@ const { AllPackages } = require("mathjax-full/js/input/tex/AllPackages.js");
 const adaptor = liteAdaptor();
 RegisterHTMLHandler(adaptor);
 
+const { fitMathType, stackFittedLines } = require("./mathtype_fit.cjs");
+
+/** Fit-mode padding (pt), tuned against GT MathType v:shape boxes. */
+const FIT_PAD_TOP_PT = 3.23;
+const FIT_PAD_BOTTOM_PT = 2.64;
+
+function convertToSvg(latex) {
+  const node = html.convert(latex, { display: false, em: 16, ex: 8, containerWidth: 100000 });
+  let svg = adaptor.outerHTML(node);
+  const start = svg.indexOf("<svg");
+  const end = svg.lastIndexOf("</svg>");
+  if (start < 0 || end < 0) {
+    throw new Error("MathJax did not produce SVG");
+  }
+  return svg.slice(start, end + 6)
+    .replace(/currentColor/g, "#000000")
+    .replace(/\s+focusable="false"/g, "")
+    .replace(/\s+role="img"/g, "");
+}
+
+/** Split on top-level \\ line breaks (MathType piles); respects brace depth
+ * and \\begin/\\end environments (array rows are NOT pile lines). */
+function splitTopLevelLines(latex) {
+  const lines = [];
+  let depth = 0;
+  let envDepth = 0;
+  let current = "";
+  for (let i = 0; i < latex.length; i++) {
+    const ch = latex[i];
+    if (ch === "\\" && latex[i + 1] === "\\" && depth === 0 && envDepth === 0) {
+      lines.push(current);
+      current = "";
+      i += 1;
+      continue;
+    }
+    if (ch === "\\") {
+      if (latex.startsWith("begin", i + 1)) envDepth += 1;
+      else if (latex.startsWith("end", i + 1)) envDepth = Math.max(0, envDepth - 1);
+    }
+    if (ch === "{") depth += 1;
+    if (ch === "}") depth = Math.max(0, depth - 1);
+    current += ch;
+  }
+  lines.push(current);
+  const trimmed = lines.map(l => l.trim()).filter(l => l.length > 0);
+  return trimmed.length > 0 ? trimmed : [latex];
+}
+
 const tex = new TeX({
   packages: AllPackages,
   macros: {
@@ -61,39 +109,62 @@ function renderLatex(request) {
   const exRatio = finiteOr(request.exRatio, 0.431);
   const paddingPt = finiteOr(request.paddingPt, 2.3);
   const maxWidthPt = finiteOr(request.maxWidthPt, 400);
-  const node = html.convert(latex, { display: false, em: 16, ex: 8, containerWidth: 100000 });
-  let svg = adaptor.outerHTML(node);
-  const start = svg.indexOf("<svg");
-  const end = svg.lastIndexOf("</svg>");
-  if (start < 0 || end < 0) {
-    throw new Error("MathJax did not produce SVG");
-  }
-  svg = svg.slice(start, end + 6)
-    .replace(/currentColor/g, "#000000")
-    .replace(/\s+focusable="false"/g, "")
-    .replace(/\s+role="img"/g, "");
+  const lines = request.mathTypeFit ? splitTopLevelLines(latex) : [latex];
+  let svg = convertToSvg(lines[0]);
 
   const widthEx = Math.max(numberAttr(svg, "width"), 0.1);
   const heightEx = Math.max(numberAttr(svg, "height"), 0.1);
   const valignEx = verticalAlignEx(svg);
   const exPt = fontPt * exRatio;
-  const contentWidthPt = widthEx * exPt;
-  const contentHeightPt = heightEx * exPt;
-  const unscaledWidthPt = contentWidthPt + paddingPt * 2;
-  const unscaledHeightPt = contentHeightPt + paddingPt * 2;
-  const scale = maxWidthPt > 0 ? Math.min(1, maxWidthPt / unscaledWidthPt) : 1;
-  const widthPt = Math.max(unscaledWidthPt * scale, 1);
-  const heightPt = Math.max(unscaledHeightPt * scale, 1);
-  const depthPt = Math.max(Math.abs(valignEx) * exPt * scale + paddingPt * scale, 0);
+  let contentWidthPt = widthEx * exPt;
+  let contentHeightPt = heightEx * exPt;
 
   const vb = viewBox(svg);
   const unitsPerPt = contentWidthPt > 0 ? vb[2] / contentWidthPt : 1000 / fontPt;
+
+  let contentViewBox = vb;
+  let fitDepthPt = null;
+  let padTopPt = paddingPt;
+  let padBottomPt = paddingPt;
+  if (request.mathTypeFit) {
+    // Re-layout fractions/delimiters with measured MathType geometry.
+    // emUnits is intrinsic to the SVG (independent of the requested fontPt).
+    const emUnits = exRatio > 0 ? vb[2] / (widthEx * exRatio) : 1000;
+    const parts = lines.map((line, idx) => {
+      const lineSvg = idx === 0 ? svg : convertToSvg(line);
+      return fitMathType(lineSvg, emUnits, request.fitParams);
+    });
+    const fit = parts.length > 1
+      ? stackFittedLines(parts, emUnits, request.fitParams)
+      : parts[0];
+    svg = fit.svg;
+    const [fx0, fy0, fx1, fy1] = fit.bbox;
+    contentWidthPt = (fx1 - fx0) / unitsPerPt;
+    contentHeightPt = (fy1 - fy0) / unitsPerPt;
+    contentViewBox = [fx0, -fy1, fx1 - fx0, fy1 - fy0];
+    fitDepthPt = Math.max(0, -fy0) / unitsPerPt;
+    // GT v:shape boxes carry a slightly larger top margin than bottom.
+    padTopPt = finiteOr(request.fitPadTopPt, FIT_PAD_TOP_PT);
+    padBottomPt = finiteOr(request.fitPadBottomPt, FIT_PAD_BOTTOM_PT);
+  }
+
+  const unscaledWidthPt = contentWidthPt + paddingPt * 2;
+  const unscaledHeightPt = contentHeightPt + padTopPt + padBottomPt;
+  const scale = maxWidthPt > 0 ? Math.min(1, maxWidthPt / unscaledWidthPt) : 1;
+  const widthPt = Math.max(unscaledWidthPt * scale, 1);
+  const heightPt = Math.max(unscaledHeightPt * scale, 1);
+  const depthPt = fitDepthPt !== null
+    ? Math.max(fitDepthPt * scale + padBottomPt * scale, 0)
+    : Math.max(Math.abs(valignEx) * exPt * scale + paddingPt * scale, 0);
+
   const padUnits = paddingPt * unitsPerPt;
+  const padTopUnits = padTopPt * unitsPerPt;
+  const padBottomUnits = padBottomPt * unitsPerPt;
   const paddedViewBox = [
-    vb[0] - padUnits,
-    vb[1] - padUnits,
-    vb[2] + padUnits * 2,
-    vb[3] + padUnits * 2
+    contentViewBox[0] - padUnits,
+    contentViewBox[1] - padTopUnits,
+    contentViewBox[2] + padUnits * 2,
+    contentViewBox[3] + padTopUnits + padBottomUnits
   ];
 
   svg = svg

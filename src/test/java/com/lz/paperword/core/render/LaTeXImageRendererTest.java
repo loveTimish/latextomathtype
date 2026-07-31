@@ -13,8 +13,13 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 class LaTeXImageRendererTest {
+
+    private static boolean isHeadlessToolkit() {
+        return java.awt.Toolkit.getDefaultToolkit().getClass().getSimpleName().equals("HeadlessToolkit");
+    }
 
     @Test
     void shouldParseSvgPtDimensions() {
@@ -109,6 +114,10 @@ class LaTeXImageRendererTest {
 
     @Test
     void shouldRenderOlePreviewAsEmfWhenMatureBackendIsEnabled() {
+        // FreeHEP writes the EMF header via Toolkit.getScreenSize(); a cached
+        // headless toolkit (e.g. forced by a Spring test context) makes EMF
+        // export impossible and the renderer falls back to WMF by design.
+        assumeFalse(isHeadlessToolkit(), "EMF export requires a display-capable AWT toolkit");
         String oldEmf = System.getProperty("paperword.ole.preview.emf");
         try {
             System.setProperty("paperword.ole.preview.emf", "true");
