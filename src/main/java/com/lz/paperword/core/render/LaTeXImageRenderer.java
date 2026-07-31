@@ -83,7 +83,7 @@ public class LaTeXImageRenderer {
     /** 系统属性：MathType 几何重排使用的字号（MathType 全尺寸槽的实测目标字号）。 */
     private static final String MATHJAX_MATHTYPE_FIT_FONT_PT_PROP = "paperword.mathjax.mathtypefit.fontpt";
     /** MathType 全尺寸槽的实测目标字号（display-scales 拟合：9.02 × 1.163）。 */
-    private static final double MATHJAX_MATHTYPE_FIT_DEFAULT_FONT_PT = 10.495d;
+    private static final double MATHJAX_MATHTYPE_FIT_DEFAULT_FONT_PT = 12.0d;
 
     /** 系统属性：latex 命令路径。 */
     private static final String LATEX_CMD_PROP = "paperword.latex.command";
@@ -120,7 +120,7 @@ public class LaTeXImageRenderer {
     private static final double MATHJAX_DEFAULT_MAX_WIDTH_PT = 400.0d;
     private static final int MATHJAX_DEFAULT_DPI = 900;
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v255-mathtype-fit-spacing";
+    private static final String CACHE_VERSION = "v257-mathtype-fit-spacing";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(

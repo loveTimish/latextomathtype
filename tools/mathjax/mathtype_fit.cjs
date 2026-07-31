@@ -27,7 +27,8 @@ const DEFAULT_PARAMS = {
                         // (GT varies 0.05-0.13em by equation; 0.10 minimizes
                         // worst-case error across the corpus)
   delimSpaceScale: 0.3, // gap scale adjacent to tall delimiters
-  lineGapEm: 0.3,     // vertical clearance between stacked \\ lines
+  lineGapEm: 0.5,     // vertical clearance between stacked \\ lines (fresh
+                        // MathType piles space lines generously)
   numDipAllowEm: 0.35,  // numerator content may dip this far below its baseline
                         // (descenders 0.21, text parens 0.25) before the slot is
                         // pushed up to clear the bar (nested fracs dip ~0.9)
@@ -37,11 +38,14 @@ const DEFAULT_PARAMS = {
   slotScale: 1.0,     // MathType uses full-size numerator/denominator
   moScaleX: 1.0,      // horizontal compression for operators (disabled: with
   miScaleX: 1.0,      // spacing fixed, MJ glyph widths already match GT)
-  spaceScale: 0.575   // inter-atom gap scale around operators (GT ~0.6x TeX)
+  spaceScale: 0.85    // inter-atom gap scale around operators; the 12pt target
+                      // (fresh MathType factory settings) spaces nearly full-TeX
 };
 
-// Per-operator spacing overrides (GT minus gaps are tighter than the rest).
-const DEFAULT_SPACE_BY_C = { D7: 0.575, "22C5": 0.575, "2212": 0.3, "2B": 0.7, "3D": 0.575 };
+// Per-operator spacing overrides, calibrated against fresh MathType 12pt
+// equations (factory defaults). The old 10.5pt reference document used
+// tighter custom spacing (0.575 / 0.3); see git history for those values.
+const DEFAULT_SPACE_BY_C = { D7: 0.85, "22C5": 0.85, "2212": 0.55, "2B": 0.9, "3D": 0.85 };
 
 // Per-operator glyph x-compression (GT minus is a short text-style dash).
 const DEFAULT_GLYPH_SCALE_BY_C = { "2212": 0.6 };

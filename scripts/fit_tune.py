@@ -19,7 +19,7 @@ MEAS = ROOT / "target/wmf-ruler/structure-measure.jsonl"
 WORKER = ROOT / "tools/mathjax/render_mathjax_svg.cjs"
 
 BASE = {
-    "fontPt": 10.495, "exRatio": 0.431, "paddingPt": 2.3, "maxWidthPt": 400.0,
+    "fontPt": 12.0, "exRatio": 0.431, "paddingPt": 2.3, "maxWidthPt": 400.0,
     "mathTypeFit": True,
 }
 
