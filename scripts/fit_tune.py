@@ -94,8 +94,14 @@ def main():
         print(f"  {b:7} n={len(rs):3}  our/GT w med={med(wr)}  h med={med(hr)}  "
               f"|depthRatio diff| med={med(dr)}  mean|w,h err|={round(statistics.mean(abs_wh),4)}")
     if total_abs:
+        s = sorted(total_abs)
         print(f"  ALL mean(|w-1|+|h-1|)={round(statistics.mean(total_abs),4)} "
-              f"p90={round(sorted(total_abs)[int(len(total_abs)*0.9)],4)}")
+              f"p90={round(s[int(len(s)*0.9)],4)} "
+              f"p95={round(s[int(len(s)*0.95)],4)} "
+              f"max={round(s[-1],4)}")
+        worst = sorted(rows, key=lambda r: abs(r[2]-1)+abs(r[3]-1), reverse=True)[:15]
+        for r in worst:
+            print(f"    worst {r[0]:9} [{r[1]:6}] w={round(r[2],3)} h={round(r[3],3)}")
 
 if __name__ == "__main__":
     main()

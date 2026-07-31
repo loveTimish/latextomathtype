@@ -23,9 +23,17 @@ const DEFAULT_PARAMS = {
   numGapEm: 0.384,    // numerator baseline -> fraction bar center
   denGapEm: 1.036,    // fraction bar center -> denominator baseline
   overhangEm: 0.09,   // bar overhang beyond the wider slot, per side
-  delimMarginEm: 0.133, // delimiter extension beyond content, per side
+  delimMarginEm: 0.10, // delimiter extension beyond content, per side
+                        // (GT varies 0.05-0.13em by equation; 0.10 minimizes
+                        // worst-case error across the corpus)
   delimSpaceScale: 0.3, // gap scale adjacent to tall delimiters
   lineGapEm: 0.3,     // vertical clearance between stacked \\ lines
+  numDipAllowEm: 0.35,  // numerator content may dip this far below its baseline
+                        // (descenders 0.21, text parens 0.25) before the slot is
+                        // pushed up to clear the bar (nested fracs dip ~0.9)
+  denRiseAllowEm: 0.85, // denominator content may rise this far above its
+                        // baseline (cap 0.64, text parens 0.75) before the slot
+                        // is pushed down to clear the bar (nested fracs ~1.1)
   slotScale: 1.0,     // MathType uses full-size numerator/denominator
   moScaleX: 1.0,      // horizontal compression for operators (disabled: with
   miScaleX: 1.0,      // spacing fixed, MJ glyph widths already match GT)
@@ -328,12 +336,17 @@ function relayoutMfrac(mfrac, emUnits, params) {
   rule.attrs.y = formatNumber(axis - thickness / 2);
   rule.attrs.width = formatNumber(barW);
 
-  // slots at full size, re-centered, MathType gaps
+  // slots at full size, re-centered, MathType gaps. Slots whose content
+  // extends far beyond its own baseline (nested fractions) are pushed away
+  // from the bar so the content bounding box never collides with it, while
+  // ordinary descenders / cap-height content keeps the measured baseline gap.
   const numTx = barX0 + ovh + (slotArea - numW) / 2 - numBB[0];
-  const numTy = axis + params.numGapEm * em;
+  const numDip = Math.max(0, -numBB[1] - params.numDipAllowEm * em);
+  const numTy = axis + params.numGapEm * em + numDip;
   num.attrs.transform = translateTransform(numTx, numTy);
   const denTx = barX0 + ovh + (slotArea - denW) / 2 - denBB[0];
-  const denTy = axis - params.denGapEm * em;
+  const denRise = Math.max(0, denBB[3] - params.denRiseAllowEm * em);
+  const denTy = axis - params.denGapEm * em - denRise;
   den.attrs.transform = translateTransform(denTx, denTy);
 
   // shift following siblings by the width change (in parent coordinates)
