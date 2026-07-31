@@ -23,13 +23,20 @@ const DEFAULT_PARAMS = {
   numGapEm: 0.384,    // numerator baseline -> fraction bar center
   denGapEm: 1.036,    // fraction bar center -> denominator baseline
   overhangEm: 0.09,   // bar overhang beyond the wider slot, per side
-  delimMargin: 0.12,  // delimiter half-span margin beyond content (GT: ~1.3pt/side)
+  delimMarginEm: 0.133, // delimiter extension beyond content, per side
+  delimSpaceScale: 0.3, // gap scale adjacent to tall delimiters
   lineGapEm: 0.3,     // vertical clearance between stacked \\ lines
   slotScale: 1.0,     // MathType uses full-size numerator/denominator
   moScaleX: 1.0,      // horizontal compression for operators (disabled: with
   miScaleX: 1.0,      // spacing fixed, MJ glyph widths already match GT)
   spaceScale: 0.575   // inter-atom gap scale around operators (GT ~0.6x TeX)
 };
+
+// Per-operator spacing overrides (GT minus gaps are tighter than the rest).
+const DEFAULT_SPACE_BY_C = { D7: 0.575, "22C5": 0.575, "2212": 0.3, "2B": 0.7, "3D": 0.575 };
+
+// Per-operator glyph x-compression (GT minus is a short text-style dash).
+const DEFAULT_GLYPH_SCALE_BY_C = { "2212": 0.6 };
 
 // ---------------------------------------------------------------------------
 // Minimal XML parse/serialize for MathJax SVG (well-formed, no mixed text).
@@ -351,8 +358,9 @@ function relayoutMfrac(mfrac, emUnits, params) {
   }
 }
 
-// Stretch tall delimiters (parens/brackets/braces) to cover row content,
-// centered on the math axis, MathType style.
+// Stretch tall delimiters (parens/brackets/braces) to cover the row content,
+// aligned to the CONTENT extremes (not the math axis) with a small measured
+// per-side margin, MathType style.
 function stretchDelimiters(container, emUnits, params) {
   const delims = [];
   let contentBB = null;
@@ -366,12 +374,14 @@ function stretchDelimiters(container, emUnits, params) {
   if (delims.length === 0 || !contentBB) {
     return;
   }
-  const axis = params.axisEm * emUnits;
-  const half = Math.max(contentBB[3] - axis, axis - contentBB[1]);
-  if (half <= 0) {
+  const margin = params.delimMarginEm * emUnits;
+  const reqTop = contentBB[3] + margin;
+  const reqBottom = contentBB[1] - margin;
+  const reqSpan = reqTop - reqBottom;
+  const reqCenter = (reqTop + reqBottom) / 2;
+  if (reqSpan <= 0) {
     return;
   }
-  const reqSpan = 2 * half * (1 + params.delimMargin);
   for (const mo of delims) {
     const bb = contentBBox(mo);
     const span = bb[3] - bb[1];
@@ -384,11 +394,11 @@ function stretchDelimiters(container, emUnits, params) {
     }
     // mo transform is effectively a translation; work in mo-local coordinates
     const m = parseTransform(mo.attrs.transform);
-    const axisLocal = (axis - m[5]) / (m[3] || 1);
+    const centerLocal = (reqCenter - m[5]) / (m[3] || 1);
     const wrapper = {
       tag: "g",
       attrs: {
-        transform: `translate(0,${formatNumber(axisLocal)}) scale(1,${formatNumber(k)}) translate(0,${formatNumber(-axisLocal)})`
+        transform: `translate(0,${formatNumber(centerLocal)}) scale(1,${formatNumber(k)}) translate(0,${formatNumber(-centerLocal)})`
       },
       children: mo.children,
       parent: mo
@@ -399,10 +409,6 @@ function stretchDelimiters(container, emUnits, params) {
     mo.children = [wrapper];
   }
 }
-
-// Per-operator spacing overrides (MathType is tighter than TeX around
-// times/minus, but keeps TeX-like med space around plus/relations).
-const DEFAULT_SPACE_BY_C = { D7: 0.575, "22C5": 0.575, "2212": 0.575, "3D": 0.575 };
 
 function firstPathDataC(el) {
   if (el.tag === "path") {
@@ -423,18 +429,23 @@ function firstPathDataC(el) {
 function compressGlyphs(container, emUnits, params) {
   const moK = params.moScaleX;
   const miK = params.miScaleX;
+  const delimSp = params.delimSpaceScale;
   const gapThr = 0.12 * emUnits;
-  if (moK >= 0.999 && miK >= 0.999 && params.spaceScale >= 0.999
-      && !params.spaceScaleByC) {
-    return;
-  }
   const spaceByC = Object.assign({}, DEFAULT_SPACE_BY_C, params.spaceScaleByC || {});
+  const glyphByC = Object.assign({}, DEFAULT_GLYPH_SCALE_BY_C, params.glyphScaleByC || {});
   const spaceScaleFor = (el) => {
     const c = firstPathDataC(el);
     if (c && c.toUpperCase() in spaceByC) {
       return spaceByC[c.toUpperCase()];
     }
     return params.spaceScale;
+  };
+  const glyphScaleFor = (el) => {
+    const c = firstPathDataC(el);
+    if (c && c.toUpperCase() in glyphByC) {
+      return glyphByC[c.toUpperCase()];
+    }
+    return moK;
   };
   const children = container.children;
   let acc = 0;
@@ -462,16 +473,17 @@ function compressGlyphs(container, emUnits, params) {
     const curLeft = bb[0] + acc;
     const curRight = bb[2] + acc;
     const kind = child.tag === "g" ? child.attrs["data-mml-node"] : null;
-    const isMo = kind === "mo" && !isTallDelimiter(child, emUnits);
-    const k = isMo ? moK : kind === "mi" ? miK : 1;
-    if (!isMo && k >= 0.999) {
+    const isDelim = kind === "mo" && isTallDelimiter(child, emUnits);
+    const isMo = kind === "mo" && !isDelim;
+    const k = isMo ? glyphScaleFor(child) : kind === "mi" ? miK : 1;
+    const sp = isMo ? spaceScaleFor(child) : isDelim ? delimSp : 1;
+    if (k >= 0.999 && sp >= 0.999) {
       prevRight = curRight;
       continue;
     }
     let selfShift = 0;
     let extra = 0;
-    const sp = isMo ? spaceScaleFor(child) : 1;
-    if (isMo && sp < 0.999 && prevRight !== null) {
+    if (sp < 0.999 && prevRight !== null) {
       const gapL = curLeft - prevRight;
       if (gapL > gapThr) {
         selfShift += gapL * (sp - 1);
@@ -499,7 +511,7 @@ function compressGlyphs(container, emUnits, params) {
       extra += w * (k - 1);
     }
     const newRight = curRight + selfShift + extra;
-    if (isMo && sp < 0.999 && i + 1 < children.length) {
+    if (sp < 0.999 && i + 1 < children.length) {
       const nextBB = elementBBox(children[i + 1], IDENT);
       if (nextBB) {
         // shift-invariant original gap; dR moves following siblings only
