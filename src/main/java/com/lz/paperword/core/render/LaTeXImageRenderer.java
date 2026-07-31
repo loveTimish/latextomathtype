@@ -120,7 +120,7 @@ public class LaTeXImageRenderer {
     private static final double MATHJAX_DEFAULT_MAX_WIDTH_PT = 400.0d;
     private static final int MATHJAX_DEFAULT_DPI = 900;
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v257-mathtype-fit-spacing";
+    private static final String CACHE_VERSION = "v258-mathtype-fit-spacing";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(
@@ -1139,7 +1139,18 @@ public class LaTeXImageRenderer {
                 throw new IllegalStateException(e);
             }
         });
-        String line = responseFuture.get(timeoutSeconds, TimeUnit.SECONDS);
+        String line;
+        try {
+            line = responseFuture.get(timeoutSeconds, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            // The readLine task stays blocked and the worker may still write the
+            // late response later: the stale task would then consume the NEXT
+            // request's reply and desync the id pairing. Cancel the task and
+            // destroy the worker so the next request starts a fresh process.
+            responseFuture.cancel(true);
+            stopMathJaxWorker();
+            throw e;
+        }
         if (line == null) {
             stopMathJaxWorker();
             throw new IOException("MathJax worker exited without response");

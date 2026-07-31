@@ -543,6 +543,57 @@ function compressGlyphs(container, emUnits, params) {
   }
 }
 
+function isMtable(el) {
+  return el.tag === "g" && el.attrs["data-mml-node"] === "mtable";
+}
+
+// Re-stack mtable rows (cases/matrix/aligned) after fraction re-layout.
+// MathJax computed row positions for script-size fractions; once slots are
+// full size the stale row baselines collide. Rows are re-placed bottom-to-
+// top from their post-layout ink boxes with lineGapEm clearance, keeping
+// the table's vertical center fixed so it stays aligned to the math axis.
+function relayoutMtable(mtable, emUnits, params) {
+  const rows = mtable.children.filter(
+    c => c.tag === "g" && (c.attrs["data-mml-node"] === "mtr"
+      || c.attrs["data-mml-node"] === "mlabeledtr"));
+  if (rows.length < 2) {
+    return;
+  }
+  const bbs = rows.map(r => contentBBox(r));
+  if (bbs.some(b => !b)) {
+    return;
+  }
+  const tys = rows.map(r => parseTransform(r.attrs.transform)[5]);
+  const gap = params.lineGapEm * emUnits;
+
+  const oldTop = Math.max(...rows.map((r, i) => tys[i] + bbs[i][3]));
+  const oldBot = Math.min(...rows.map((r, i) => tys[i] + bbs[i][1]));
+
+  // anchor on the first row, stack downward (y-up: below = smaller y)
+  const newTys = [tys[0]];
+  let cursor = tys[0] + bbs[0][1];
+  for (let i = 1; i < rows.length; i++) {
+    const ty = (cursor - gap) - bbs[i][3];
+    newTys.push(ty);
+    cursor = ty + bbs[i][1];
+  }
+  const newTop = newTys[0] + bbs[0][3];
+  const newBot = cursor;
+  const shift = ((oldTop + oldBot) - (newTop + newBot)) / 2;
+
+  for (let i = 0; i < rows.length; i++) {
+    const ty = newTys[i] + shift;
+    if (Math.abs(ty - tys[i]) <= 0.001) {
+      continue;
+    }
+    const m = parseTransform(rows[i].attrs.transform);
+    m[5] = ty;
+    rows[i].attrs.transform = m[0] === 1 && m[3] === 1 && m[1] === 0 && m[2] === 0
+      ? translateTransform(m[4], m[5])
+      : `matrix(${m.map(formatNumber).join(",")})`;
+  }
+}
+
 function walk(el, emUnits, params) {
   for (const child of el.children) {
     walk(child, emUnits, params);
@@ -550,6 +601,9 @@ function walk(el, emUnits, params) {
   if (isMfrac(el)) {
     relayoutMfrac(el, emUnits, params);
   } else if (el.tag === "g") {
+    if (isMtable(el)) {
+      relayoutMtable(el, emUnits, params);
+    }
     compressGlyphs(el, emUnits, params);
     stretchDelimiters(el, emUnits, params);
   }
@@ -594,14 +648,16 @@ function fitMathType(svg, emUnits, params) {
  * @param {Array<{svg: string, bbox: number[]}>} parts fitted line results
  * @param {number} emUnits viewBox units per em
  * @param {object} params optional overrides of DEFAULT_PARAMS
+ * @param {number[]} extraGapsEm optional per-line extra gap (em) from \\[len]
  * @returns {{svg: string, bbox: number[]}}
  */
-function stackFittedLines(parts, emUnits, params) {
+function stackFittedLines(parts, emUnits, params, extraGapsEm) {
   const p = Object.assign({}, DEFAULT_PARAMS, params || {});
   if (parts.length === 1) {
     return parts[0];
   }
-  const gap = p.lineGapEm * emUnits;
+  const gapEmOf = (idx) => p.lineGapEm
+    + (extraGapsEm && extraGapsEm[idx] ? extraGapsEm[idx] : 0);
   const roots = parts.map(part => {
     const root = parseXml(part.svg);
     if (!root || root.tag !== "svg") {
@@ -627,7 +683,7 @@ function stackFittedLines(parts, emUnits, params) {
   for (let i = 0; i < parts.length; i++) {
     const [x0, y0, x1, y1] = parts[i].bbox;
     const dx = minX0 - x0;
-    const dy = cursor === null ? 0 : (cursor - gap) - y1;
+    const dy = cursor === null ? 0 : (cursor - gapEmOf(i) * emUnits) - y1;
     const wrapper = {
       tag: "g",
       attrs: { transform: translateTransform(dx, dy) },
