@@ -2,7 +2,8 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "mathjax:smoke": "node tools/mathjax/render_mathjax_svg.cjs --smoke"
+    "mathjax:smoke": "node tools/mathjax/render_mathjax_svg.cjs --smoke",
+    "test": "node tools/mathjax/test_mathtype_fit.cjs"
   },
   "dependencies": {
     "mathjax-full": "3.2.2"

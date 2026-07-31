@@ -99,6 +99,8 @@ public class LaTeXImageRenderer {
     private static final String CACHE_DIR_PROP = "paperword.render.cache.dir";
     /** 系统属性：是否使用成熟排版库生成 EMF OLE 预览。 */
     private static final String OLE_EMF_PREVIEW_PROP = "paperword.ole.preview.emf";
+    /** 系统属性：是否用真矢量 WMF（SVG 直转 POLYPOLYGON）替代位图 WMF OLE 预览。 */
+    private static final String OLE_VECTOR_WMF_PREVIEW_PROP = "paperword.ole.preview.vectorWmf";
     /** 系统属性：EMF 预览是否把文本转为路径，避免目标机器缺字体导致变形。 */
     private static final String OLE_EMF_TEXT_AS_SHAPES_PROP = "paperword.ole.preview.emf.textAsShapes";
     /** 系统属性：WMF 文本宽度校准。 */
@@ -579,6 +581,19 @@ public class LaTeXImageRenderer {
         }
         int renderWidthPx = Math.max((int) Math.ceil(widthPt / 72.0d * mathJaxDpi()), 4);
         int renderHeightPx = Math.max((int) Math.ceil(heightPt / 72.0d * mathJaxDpi()), 4);
+        if (useVectorWmfOlePreview()) {
+            try {
+                byte[] vectorWmf = SvgVectorWmfRenderer.render(svg.svgBytes(), widthPt, heightPt);
+                int vectorWidthPx = Math.max((int) Math.round(widthPt * PX_PER_PT), 4);
+                int vectorHeightPx = Math.max((int) Math.round(heightPt * PX_PER_PT), 4);
+                return new PreviewImage(vectorWmf, vectorWidthPx, vectorHeightPx, "wmf", "image/x-wmf", false,
+                    depthPt, widthPt, heightPt);
+            } catch (SvgVectorWmfRenderer.SvgVectorWmfException e) {
+                log.warn("Vector WMF preview rejected SVG (fallback to bitmap): {} — {}", e.getMessage(), latex);
+            } catch (Exception e) {
+                log.warn("Vector WMF preview failed (fallback to bitmap): {}", latex, e);
+            }
+        }
         byte[] pngData = svgToPng(svg.svgBytes(), renderWidthPx, renderHeightPx);
         BufferedImage image = ImageIO.read(new ByteArrayInputStream(pngData));
         if (image == null) {
@@ -609,6 +624,10 @@ public class LaTeXImageRenderer {
 
     private boolean useEmfOlePreview() {
         return Boolean.parseBoolean(System.getProperty(OLE_EMF_PREVIEW_PROP, "false"));
+    }
+
+    private boolean useVectorWmfOlePreview() {
+        return Boolean.parseBoolean(System.getProperty(OLE_VECTOR_WMF_PREVIEW_PROP, "false"));
     }
 
     private PreviewImage renderEmfPreviewViaJLatexMath(String latex, float size, double targetWidthPt,
