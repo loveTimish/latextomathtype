@@ -1637,24 +1637,42 @@ public class MtefWriter {
 
     private void writeLimitComplete(ByteArrayOutputStream out, BigOpInfo bigOp,
                                     java.util.List<LaTeXNode> contentNodes) throws IOException {
-        MtefTemplateBuilder.writeLimitHeader(out, bigOp.lower() != null, bigOp.upper() != null);
+        // 与 MathType 7 实测输出逐字节对齐：\lim 用 tmSUMOP(0x16) 而非 tmLIM。
+        // BigOpBoxClass 槽位顺序 = [main][lower][upper][operator]：
+        //   main     → NULL LINE（\lim 无主体内容）
+        //   lower    → SUB 字号记录包裹的 LINE（下极限 x→0，下标字号）
+        //   upper    → NULL LINE（空占位）
+        //   operator → SYM 字号记录包裹的 LINE（算子名 "lim"，符号字号）
+        // 此前用 tmLIM 且算子名/内容槽位错误，MathType 无法解析激活。
+        MtefTemplateBuilder.writeSumOpLimitHeader(out, bigOp.lower() != null, bigOp.upper() != null);
 
-        // main slot（LimBoxClass 第一个子对象）：算子名本身，如 lim —— FN_FUNCTION 直立体字符。
-        // 此前这里错写成内容 slot，导致 "lim" 完全丢失、分式挤占算子位，MathType 无法解析。
+        // main slot：空（NULL LINE，无 END）
+        writeNullLine(out);
+
+        // lower slot：SUB 字号 + LINE
+        if (bigOp.lower() != null) {
+            out.write(MtefRecord.SUB);
+            writeSlot(out, bigOp.lower());
+        }
+
+        // upper slot：\lim 实践中无上限，统一写 NULL LINE 占位
+        if (bigOp.upper() != null) {
+            out.write(MtefRecord.SUB);
+            writeSlot(out, bigOp.upper());
+        } else {
+            writeNullLine(out);
+        }
+
+        // operator slot：SYM 字号 + LINE + 算子名字符（FN_FUNCTION 直立体）
+        out.write(MtefRecord.SYM);
         out.write(MtefRecord.LINE);
         out.write(0x00);
         writeFunctionName(out, bigOp.cmd().substring(1));
         out.write(MtefRecord.END);
 
-        if (bigOp.lower() != null) {
-            writeSlot(out, bigOp.lower());
-        }
-        if (bigOp.upper() != null) {
-            writeSlot(out, bigOp.upper());
-        }
-        out.write(MtefRecord.END);
+        out.write(MtefRecord.END); // 关闭模板
 
-        // 算子之后的内容（如 \frac{\sin x}{x}=1）不属于 LIM 模板槽位，
+        // 算子之后的内容（如 \frac{\sin x}{x}=1）不属于模板槽位，
         // 作为模板之后的兄弟节点写回父级对象列表
         writeContentNodes(out, contentNodes);
     }

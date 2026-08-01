@@ -170,18 +170,20 @@ class MtefWriterTest {
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x50, 0x00}),
-            "limit should use tmLim with lower-slot and summation-style placement");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.SYM}),
-            "tmLim path should not emit a separate SYM operator record");
-        // 回归：TM_LIM 的 main slot 必须包含算子名字符（FN_FUNCTION 直立体），
+        // 与 MathType 7 实测一致：\lim 用 tmSUMOP(0x16)，variation=0x50（TV_BO_SUM|TV_BO_LOWER）
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x50, 0x00}),
+            "limit should use tmSUMOP with lower-slot and summation-style placement");
+        // 算子名 slot 由 SYM 字号记录包裹（真 MathType 结构）
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.SYM}),
+            "tmSUMOP operator slot should be wrapped in a SYM size record");
+        // 回归：operator slot 必须包含算子名字符（FN_FUNCTION 直立体），
         // 否则 MathType 打开时 "lim" 丢失（FN_FUNCTION=2 → typeface 0x82）
         assertTrue(containsBytes(mtef, new byte[]{(byte) 0x82, 0x6c}),
-            "tmLim main slot should contain operator name char 'l'");
+            "tmSUMOP operator slot should contain operator name char 'l'");
         assertTrue(containsBytes(mtef, new byte[]{(byte) 0x82, 0x69}),
-            "tmLim main slot should contain operator name char 'i'");
+            "tmSUMOP operator slot should contain operator name char 'i'");
         assertTrue(containsBytes(mtef, new byte[]{(byte) 0x82, 0x6d}),
-            "tmLim main slot should contain operator name char 'm'");
+            "tmSUMOP operator slot should contain operator name char 'm'");
     }
 
     @Test
@@ -1026,8 +1028,8 @@ class MtefWriterTest {
         byte[] mtef = writer.write(parser.parseMathIR("\\lim_{n\\to\\infty} a_n"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x50, 0x00}),
-            "IR path should lower \\lim to tmLIM");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x50, 0x00}),
+            "IR path should lower \\lim to tmSUMOP (matching real MathType 7)");
     }
 
     @Test

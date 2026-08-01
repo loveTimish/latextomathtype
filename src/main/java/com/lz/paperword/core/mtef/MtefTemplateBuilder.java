@@ -328,6 +328,20 @@ public class MtefTemplateBuilder {
         writeTemplateHeader(out, MtefRecord.TM_LIM, variation, 0x00);
     }
 
+    /**
+     * 写入 tmSUMOP 模板头部（用于 \lim 等极限算子）。
+     *
+     * <p>与 MathType 7 实测输出一致：\lim 使用 tmSUMOP(0x16) 而非 tmLIM，
+     * variation 恒带 TV_BO_SUM（求和式上下限排布），再按存在性叠加
+     * TV_BO_LOWER / TV_BO_UPPER。</p>
+     */
+    public static void writeSumOpLimitHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
+        int variation = MtefRecord.TV_BO_SUM;
+        if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
+        if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;
+        writeTemplateHeader(out, MtefRecord.TM_SUMOP, variation, 0x00);
+    }
+
     // ===== 长除法模板（Long Division）=====
 
     /**
