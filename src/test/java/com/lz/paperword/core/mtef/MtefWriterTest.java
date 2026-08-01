@@ -174,6 +174,14 @@ class MtefWriterTest {
             "limit should use tmLim with lower-slot and summation-style placement");
         assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.SYM}),
             "tmLim path should not emit a separate SYM operator record");
+        // 回归：TM_LIM 的 main slot 必须包含算子名字符（FN_FUNCTION 直立体），
+        // 否则 MathType 打开时 "lim" 丢失（FN_FUNCTION=2 → typeface 0x82）
+        assertTrue(containsBytes(mtef, new byte[]{(byte) 0x82, 0x6c}),
+            "tmLim main slot should contain operator name char 'l'");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) 0x82, 0x69}),
+            "tmLim main slot should contain operator name char 'i'");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) 0x82, 0x6d}),
+            "tmLim main slot should contain operator name char 'm'");
     }
 
     @Test

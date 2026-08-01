@@ -1639,9 +1639,11 @@ public class MtefWriter {
                                     java.util.List<LaTeXNode> contentNodes) throws IOException {
         MtefTemplateBuilder.writeLimitHeader(out, bigOp.lower() != null, bigOp.upper() != null);
 
+        // main slot（LimBoxClass 第一个子对象）：算子名本身，如 lim —— FN_FUNCTION 直立体字符。
+        // 此前这里错写成内容 slot，导致 "lim" 完全丢失、分式挤占算子位，MathType 无法解析。
         out.write(MtefRecord.LINE);
         out.write(0x00);
-        writeContentNodes(out, contentNodes);
+        writeFunctionName(out, bigOp.cmd().substring(1));
         out.write(MtefRecord.END);
 
         if (bigOp.lower() != null) {
@@ -1651,6 +1653,10 @@ public class MtefWriter {
             writeSlot(out, bigOp.upper());
         }
         out.write(MtefRecord.END);
+
+        // 算子之后的内容（如 \frac{\sin x}{x}=1）不属于 LIM 模板槽位，
+        // 作为模板之后的兄弟节点写回父级对象列表
+        writeContentNodes(out, contentNodes);
     }
 
     /**
