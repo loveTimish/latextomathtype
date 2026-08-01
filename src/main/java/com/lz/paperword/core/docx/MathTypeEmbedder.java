@@ -194,8 +194,11 @@ public class MathTypeEmbedder {
                 "<o:lock v:ext=\"edit\" aspectratio=\"t\"/>" +
                 "</v:shapetype>" +
 
-                "<v:shape id=\"" + shapeId + "\" type=\"#_x0000_t75\" " +
-                "style=\"width:" + styleWidth + ";height:" + styleHeight + "\" o:ole=\"\">" +
+                // o:ole 必须为 "t"（VML 布尔真值）——空字符串是假值，
+                // Word 会把形状当普通图片，双击不激活 MathType；WPS 不检查此属性
+                "<v:shape id=\"" + shapeId + "\" o:spt=\"75\" type=\"#_x0000_t75\" " +
+                "style=\"width:" + styleWidth + ";height:" + styleHeight + "\" " +
+                "o:ole=\"t\" filled=\"f\" o:preferrelative=\"t\" stroked=\"f\" coordsize=\"21600,21600\">" +
                 "<v:imagedata r:id=\"" + imgRelId + "\" o:title=\"" + xmlAttr(formulaTraceId) + "\"/>" +
                 "</v:shape>" +
 
