@@ -258,29 +258,35 @@ public class OlePackager {
      */
     private byte[] createCompObjStream() throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream(256);
-        ByteBuffer buf;
 
-        // === 28 字节头部 ===
-        buf = ByteBuffer.allocate(28).order(ByteOrder.LITTLE_ENDIAN);
-        buf.putInt(0xFFFFFFFF); // 保留字段（固定值）
-        buf.putInt(0x00000002); // CompObj 流版本号
-        // 20 字节系统信息：字节序(2) + OS版本(2) + OS类型(2) + 未使用(10) + 保留(4)
-        buf.putShort((short) 0xFFFE); // 字节序标记：小端序（Intel）
-        buf.putShort((short) 0x000A); // OS 版本
-        buf.putInt(0x00000002);       // OS 类型：Win32
-        for (int i = 0; i < 8; i++) buf.put((byte) 0); // 剩余保留字节填零
+        // === 12 字节头部（OLE2 规范：reserved1 + version + reserved2）===
+        // 与真 MathType 对象逐字节一致：01 00 fe ff / 03 0a 00 00 / ff ff ff ff
+        ByteBuffer buf = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN);
+        buf.putInt(0xFFFE0001);
+        buf.putInt(0x00000A03);
+        buf.putInt(0xFFFFFFFF);
         out.write(buf.array());
+
+        // CLSID：Equation.DSMT4 的类 ID（0002CE03-0000-0000-C000-000000000046）
+        // MathType OLE 服务器激活时据此识别对象归属，缺失会导致激活失败
+        out.write(new byte[]{
+            0x03, (byte) 0xCE, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+            (byte) 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46});
 
         // AnsiUserType：人类可读的对象类型名称（在 Word 对象属性中显示）
         writeAnsiString(out, "MathType 6.0 Equation");
 
-        // AnsiClipboardFormat：剪贴板格式（0 = 无特定注册格式）
-        buf = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN);
-        buf.putInt(0x00000000);
-        out.write(buf.array());
+        // AnsiClipboardFormat：注册剪贴板格式名 "MathType EF"——
+        // MathType 服务器靠它定位 Equation Native 数据格式，写 0 会被拒
+        writeAnsiString(out, "MathType EF");
 
         // AnsiProgID：程序标识符，Word 通过此 ProgID 查找并激活 MathType
         writeAnsiString(out, "Equation.DSMT4");
+
+        // 尾部 16 字节：真 MathType 7 对象中的固定内容（与本机实测一致）
+        out.write(new byte[]{
+            (byte) 0xF4, 0x39, (byte) 0xB2, 0x71, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x33, 0x4D, 0x76, 0x55, 0x4D, 0x00, 0x00});
 
         return out.toByteArray();
     }
