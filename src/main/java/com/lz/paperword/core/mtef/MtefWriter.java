@@ -98,6 +98,37 @@ public class MtefWriter {
     private final MtefPileRulerWriter pileRulerWriter = new MtefPileRulerWriter();
     private FormulaStyleHints currentStyleHints = FormulaStyleHints.empty();
 
+    /**
+     * 当前 MTEF 流的 typesize 上下文（FULL/SUB/SYM 等记录类型值；-1 表示流起始）。
+     *
+     * <p>真 MathType 的字号记录是<strong>全局状态机的差分编码</strong>：字号上下文贯穿
+     * 整个公式流（跨 LINE/TMPL 边界保留，不随槽位切换复位），仅在实际发生切换时
+     * 才写出 FULL/SUB/SYM 记录。证据：real-src.docx 541 个真对象全部符合差分规则；
+     * 课程文档中的 DSMT6/DSMT7 嵌套根式对象（如 oleObject117）显示——被开方数以
+     * tmSUP 结尾时上下文已是 SUB，index 槽前不再写 SUB；分母以普通字符结尾且
+     * 分式后还有兄弟时，也不写 FULL。</p>
+     */
+    private int currentTypeSize = -1;
+
+    /**
+     * 当前 LINE（槽位）的目标字号：LINE 开口时的字号上下文。
+     * 兄弟节点之间的字号恢复以此为目标——顶层和 FULL 槽恢复到 FULL，
+     * 上标/下限等缩小槽内部恢复到 SUB（即不恢复）。初始为 FULL（顶层 LINE）。
+     */
+    private int currentLineTargetSize = MtefRecord.FULL;
+
+    /**
+     * 差分写入 typesize 记录：仅在字号上下文实际切换时输出记录字节。
+     * 这精确复刻真 MathType 的行为，替代此前"模板后无条件补 FULL / 槽前无条件补 SUB"
+     * 的近似写法——近似写法在嵌套结构中会产生真 MathType 不会写的多余记录。
+     */
+    private void writeTypeSize(ByteArrayOutputStream out, int sizeRecord) {
+        if (currentTypeSize != sizeRecord) {
+            out.write(sizeRecord);
+            currentTypeSize = sizeRecord;
+        }
+    }
+
     /** OLE 模板资源路径 — 包含一个由 MathType 生成的已知正确的 OLE 对象，用于提取 MTEF 前缀 */
     private static final String TEMPLATE_OLE_RESOURCE = "/mathtype-template/oleObject-template.bin";
 
@@ -245,6 +276,7 @@ public class MtefWriter {
 
     private byte[] writeFullStream(LaTeXNode root) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream(256);
+        currentTypeSize = -1;      // 流起始：强制 writeDefaultTypesizeRecord 写出初始 FULL
         writeHeader(out);          // 写入 MTEF v5 文件头（12 字节）
         writeFontStyleDefs(out);   // 写入字体样式定义记录
         writeDefaultTypesizeRecord(out); // 使用 MathType 默认全尺寸字号，不在 OLE 本体写死点字号
@@ -305,6 +337,8 @@ public class MtefWriter {
 
         ByteArrayOutputStream out = new ByteArrayOutputStream(512);
         out.write(LONG_DIVISION_REFERENCE_PREFIX);
+        // 参考前缀末尾的字号上下文为 FULL（前缀内含 0x0a 记录）
+        currentTypeSize = MtefRecord.FULL;
         longDivision.setMetadata("skipLongDivisionLeadingDivisor", "true");
         LaTeXNode divisor = childAt(longDivision, 0);
         if (divisor != null) {
@@ -473,6 +507,9 @@ public class MtefWriter {
     private byte[] writeByTemplatePrefix(LaTeXNode root) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream(512);
         out.write(TEMPLATE_MTEF_PREFIX);   // 写入模板前缀（header + 字体 + SIZE + LINE 开头）
+        // 前缀末尾已含默认 FULL 字号记录（见 loadTemplateMtefPrefix），
+        // 因此字号状态机初始上下文直接置为 FULL。
+        currentTypeSize = MtefRecord.FULL;
         if (currentStyleHints.explicitBlackColor()) {
             writeExplicitBlackColor(out);
         }
@@ -740,7 +777,7 @@ public class MtefWriter {
      * OLE 预览框处理，避免 MathType 打开公式时继承不必要的字号覆盖。</p>
      */
     private void writeDefaultTypesizeRecord(ByteArrayOutputStream out) {
-        out.write(MtefRecord.FULL);
+        writeTypeSize(out, MtefRecord.FULL);
     }
 
     /**
@@ -840,7 +877,7 @@ public class MtefWriter {
                 writeLeadingScriptAttachment(out, leadingScript);
                 writeNode(out, nodes.get(i + 1)); // scripted item 紧随模板出现
                 if (i + 1 < nodes.size() - 1) {
-                    out.write(MtefRecord.FULL);
+                    writeTypeSize(out, currentLineTargetSize);
                 }
                 i++; // 连同被附着的基底节点一起消费
                 continue;
@@ -878,9 +915,9 @@ public class MtefWriter {
                                 writeParenFence(out, openCh, closeCh, parenContent);
                             }
                             writeSupSubAttachment(out, closeNode);
-                            // 括号+上下标组合也是模板，后面有更多内容时需要 FULL 恢复字号
+                            // 括号+上下标组合也是模板，后面有更多内容时按差分状态机恢复 FULL
                             if (closeIdx < nodes.size() - 1) {
-                                out.write(MtefRecord.FULL);
+                                writeTypeSize(out, currentLineTargetSize);
                             }
                             i = closeIdx; // 跳过已处理的括号内容和闭括号节点
                             continue;
@@ -906,12 +943,12 @@ public class MtefWriter {
             // ========== 普通节点处理 ==========
             writeNode(out, child);
 
-            // ========== FULL 记录插入 ==========
-            // 当当前节点生成了模板（上标/下标/根号/分数）且后面还有更多兄弟节点时，
-            // 插入 FULL 记录恢复全尺寸字号。
+            // ========== FULL 记录插入（差分状态机）==========
+            // 真 MathType 规则：后续还有兄弟节点且当前字号上下文被缩小（SUB/SYM）时，
+            // 才写 FULL 恢复；上下文已是 FULL 时不写（差分编码，由 writeTypeSize 判定）。
             // 关键：在 slot 末尾（即 i == nodes.size()-1 时）不能插入 FULL，
             // 否则会在 LINE END 之前产生多余的 FULL 记录导致 MathType 解析错误。
-            if (i < nodes.size() - 1 && generatesTemplate(child)) {
+            if (i < nodes.size() - 1) {
                 writePostTemplateFullSize(out, child, nodes.subList(i + 1, nodes.size()));
             }
         }
@@ -1244,7 +1281,9 @@ public class MtefWriter {
             writeExplicitFullSizeRecord(out);
             return;
         }
-        out.write(MtefRecord.FULL);
+        // 差分状态机：仅当模板把字号上下文缩小时才恢复——目标是本 LINE 的目标字号
+        // （顶层/FULL 槽恢复 FULL；缩小槽内部恢复 SUB，即无多余记录）
+        writeTypeSize(out, currentLineTargetSize);
     }
 
     private void writeExplicitFullSizeRecord(ByteArrayOutputStream out) {
@@ -1252,6 +1291,7 @@ public class MtefWriter {
         out.write(0x65);
         out.write(0x50);
         out.write(0x01);
+        currentTypeSize = MtefRecord.FULL;  // 显式全尺寸记录同样把上下文置为 FULL
     }
 
     private void writeExplicitBlackColor(ByteArrayOutputStream out) throws IOException {
@@ -1263,25 +1303,6 @@ public class MtefWriter {
         out.write(0x00);
         out.write(MtefRecord.COLOR);
         out.write(0x01);
-    }
-
-    /**
-     * 判断一个 AST 节点是否会生成 MTEF 模板（TMPL 记录）。
-     *
-     * <p>生成模板的节点类型包括：上标（TM_SUP）、下标（TM_SUB）、根号（TM_ROOT）、分数（TM_FRACT）。
-     * 这些模板内部使用 SUB typesize 记录缩小字号，因此在模板后需要 FULL 恢复。</p>
-     */
-    private boolean generatesTemplate(LaTeXNode node) {
-        return switch (node.getType()) {
-            case SUPERSCRIPT, SUBSCRIPT, SQRT, FRACTION, LONG_DIVISION -> true;
-            default -> {
-                String value = node.getValue();
-                yield switch (value == null ? "" : value) {
-                    case "\\overbrace", "\\underbrace", "\\overbracket", "\\underbracket" -> true;
-                    default -> false;
-                };
-            }
-        };
     }
 
     /**
@@ -1335,7 +1356,7 @@ public class MtefWriter {
 
         if (lower != null && upper != null) {
             MtefTemplateBuilder.writeLeadingSubSuperscriptHeader(out);
-            out.write(MtefRecord.SUB);
+            writeTypeSize(out, MtefRecord.SUB);
             writeNullLine(out);
             writeSlot(out, lower);
             writeSlot(out, upper);
@@ -1344,7 +1365,7 @@ public class MtefWriter {
         }
         if (lower != null) {
             MtefTemplateBuilder.writeLeadingSubscriptHeader(out);
-            out.write(MtefRecord.SUB);
+            writeTypeSize(out, MtefRecord.SUB);
             writeSlot(out, lower);
             writeNullLine(out);
             out.write(MtefRecord.END);
@@ -1352,7 +1373,7 @@ public class MtefWriter {
         }
         if (upper != null) {
             MtefTemplateBuilder.writeLeadingSuperscriptHeader(out);
-            out.write(MtefRecord.SUB);
+            writeTypeSize(out, MtefRecord.SUB);
             writeNullLine(out);
             writeSlot(out, upper);
             out.write(MtefRecord.END);
@@ -1459,19 +1480,16 @@ public class MtefWriter {
         for (int ci = 0; ci < content.size(); ci++) {
             LaTeXNode n = content.get(ci);
             writeNode(out, n);
-            // 内容中的模板节点后面有更多内容时，也需要 FULL 恢复字号
-            if (ci < content.size() - 1 && generatesTemplate(n)) {
+            // 内容中的节点后面还有更多内容时，按差分状态机恢复 FULL
+            if (ci < content.size() - 1) {
                 writePostTemplateFullSize(out, n, content.subList(ci + 1, content.size()));
             }
         }
         out.write(MtefRecord.END); // 关闭内容 LINE
 
-        // FULL 条件插入：仅当内容最后一个元素是模板节点（字号被缩小）时，
-        // 需要在 FN_EXPAND 分隔符之前插入 FULL 恢复全尺寸。
-        // 纯字符内容不会改变字号，无需 FULL。
-        if (!content.isEmpty() && generatesTemplate(content.get(content.size() - 1))) {
-            out.write(MtefRecord.FULL);
-        }
+        // FULL 差分插入：仅当内容结束时字号上下文已被缩小（如以脚本模板结尾）时，
+        // 才在 FN_EXPAND 分隔符之前写出 FULL 恢复全尺寸；上下文已是 FULL 则不写。
+        writeTypeSize(out, currentLineTargetSize);
 
         // FN_EXPAND 分隔符字符：MathType 使用特殊的 EXPAND 字体来绘制可拉伸的括号
         writeCharRecord(out, MtefRecord.FN_EXPAND, openCh);  // 开括号
@@ -1505,7 +1523,7 @@ public class MtefWriter {
             if (base != null && base.getType() == LaTeXNode.Type.SUBSCRIPT) {
                 LaTeXNode sub = childAt(base, 1);
                 MtefTemplateBuilder.writeSubSuperscriptHeader(out);
-                out.write(MtefRecord.SUB);    // typesize 记录
+                writeTypeSize(out, MtefRecord.SUB);    // typesize 差分记录
                 writeNullLine(out);            // slot 0: NULL base（base 是前面的 fence）
                 writeSlot(out, sub);           // slot 1: 下标
                 writeSlot(out, exp);           // slot 2: 上标
@@ -1515,7 +1533,7 @@ public class MtefWriter {
 
             // 仅上标模式：)^{exp}
             MtefTemplateBuilder.writeSuperscriptHeader(out);
-            out.write(MtefRecord.SUB);    // typesize 记录
+            writeTypeSize(out, MtefRecord.SUB);    // typesize 差分记录
             writeNullLine(out);            // TM_SUP slot 顺序：先 NULL base
             writeSlot(out, exp);           // 再写上标内容
             out.write(MtefRecord.END);     // 关闭模板
@@ -1523,7 +1541,7 @@ public class MtefWriter {
             // 仅下标模式：)_{sub}
             LaTeXNode sub = childAt(supSubNode, 1);
             MtefTemplateBuilder.writeSubscriptHeader(out);
-            out.write(MtefRecord.SUB);    // typesize 记录
+            writeTypeSize(out, MtefRecord.SUB);    // typesize 差分记录
             writeSlot(out, sub);           // TM_SUB slot 顺序：先写下标内容
             writeNullLine(out);            // 再 NULL base
             out.write(MtefRecord.END);     // 关闭模板
@@ -1649,28 +1667,34 @@ public class MtefWriter {
         // main slot：空（NULL LINE，无 END）
         writeNullLine(out);
 
-        // lower slot：SUB 字号 + LINE
+        // lower slot：SUB 字号 + LINE（差分：上下文已是 SUB 时不重复写）
         if (bigOp.lower() != null) {
-            out.write(MtefRecord.SUB);
+            writeTypeSize(out, MtefRecord.SUB);
             writeSlot(out, bigOp.lower());
         }
 
         // upper slot：\lim 实践中无上限，统一写 NULL LINE 占位
         if (bigOp.upper() != null) {
-            out.write(MtefRecord.SUB);
+            writeTypeSize(out, MtefRecord.SUB);
             writeSlot(out, bigOp.upper());
         } else {
             writeNullLine(out);
         }
 
         // operator slot：SYM 字号 + LINE + 算子名字符（FN_FUNCTION 直立体）
-        out.write(MtefRecord.SYM);
+        writeTypeSize(out, MtefRecord.SYM);
         out.write(MtefRecord.LINE);
         out.write(0x00);
         writeFunctionName(out, bigOp.cmd().substring(1));
         out.write(MtefRecord.END);
 
         out.write(MtefRecord.END); // 关闭模板
+
+        // 真 MathType 在 tmSUMOP 模板结束后、后续兄弟节点之前写 FULL 复位
+        // （operator 槽把上下文留在 SYM；仅当后面还有内容时才写）
+        if (!contentNodes.isEmpty()) {
+            writeTypeSize(out, currentLineTargetSize);
+        }
 
         // 算子之后的内容（如 \frac{\sin x}{x}=1）不属于模板槽位，
         // 作为模板之后的兄弟节点写回父级对象列表
@@ -1899,14 +1923,11 @@ public class MtefWriter {
 
         MtefTemplateBuilder.writeArrowHeader(out, pointsLeft, true, hasBottom);
         writeSlot(out, topAnnotation);
-        if (needsFullAfterSlot(topAnnotation)) {
-            out.write(MtefRecord.FULL);
-        }
+        // 差分状态机：顶部注记以缩小字号结尾时才写出 FULL
+        writeTypeSize(out, currentLineTargetSize);
         if (hasBottom) {
             writeSlot(out, bottomAnnotation);
-            if (needsFullAfterSlot(bottomAnnotation)) {
-                out.write(MtefRecord.FULL);
-            }
+            writeTypeSize(out, currentLineTargetSize);
         }
         writeCharRecord(out, MtefRecord.FN_EXPAND, pointsLeft ? 0x2190 : 0x2192);
         out.write(MtefRecord.END);
@@ -1968,9 +1989,9 @@ public class MtefWriter {
         writeSlot(out, mainContent);
 
         if (annotation != null && !isEmptyContent(annotation)) {
-            out.write(MtefRecord.SUB);
+            writeTypeSize(out, MtefRecord.SUB);
             writeSlot(out, annotation);
-            out.write(MtefRecord.FULL);
+            writeTypeSize(out, currentLineTargetSize);
         }
 
         writeCharRecord(out, MtefRecord.FN_EXPAND, onTop ? topCharCode : bottomCharCode);
@@ -1995,15 +2016,11 @@ public class MtefWriter {
         MtefTemplateBuilder.writeDiracHeader(out, hasLeft, hasRight);
         if (hasLeft) {
             writeSlot(out, leftContent);
-            if (needsFullAfterSlot(leftContent)) {
-                out.write(MtefRecord.FULL);
-            }
+            writeTypeSize(out, currentLineTargetSize);
         }
         if (hasRight) {
             writeSlot(out, rightContent);
-            if (needsFullAfterSlot(rightContent)) {
-                out.write(MtefRecord.FULL);
-            }
+            writeTypeSize(out, currentLineTargetSize);
         }
         if (hasLeft) {
             writeCharRecord(out, MtefRecord.FN_EXPAND, 0x27E8);
@@ -2370,9 +2387,8 @@ public class MtefWriter {
             default -> throw new IllegalArgumentException("Unsupported fence selector: " + spec.selector());
         }
         writeSlot(out, content);
-        if (needsFullAfterSlot(content)) {
-            out.write(MtefRecord.FULL);
-        }
+        // 差分状态机：内容以缩小字号结尾时才写出 FULL
+        writeTypeSize(out, currentLineTargetSize);
         if (spec.hasLeft()) {
             writeCharRecord(out, MtefRecord.FN_EXPAND, spec.leftChar());
         }
@@ -2419,12 +2435,11 @@ public class MtefWriter {
         } else {
             writeSlot(out, numerator);
         }
-        // 条件性 FULL：仅当分子末尾是缩小字号的模板时才插入
-        if (currentStyleHints.explicitFractionFullSize()) {
-            // Reference MathType objects in the XSC corpus often write explicit full-size records
-            // at the beginning of both fraction slots rather than a single FULL between slots.
-        } else if (needsFullAfterSlot(numerator)) {
-            out.write(MtefRecord.FULL);
+        // 差分 FULL：仅当分子结束时字号上下文已被缩小（真 MathType 差分编码规则，
+        // 证据：real-src.docx oleObject144 中分子以 tmSUB 结尾的分式在槽间写 FULL，
+        // 分子以普通字符结尾的 222/224 个真分式均不写）
+        if (!currentStyleHints.explicitFractionFullSize()) {
+            writeTypeSize(out, currentLineTargetSize);
         }
         // Slot 1: 分母
         if (currentStyleHints.explicitFractionFullSize()) {
@@ -2443,54 +2458,6 @@ public class MtefWriter {
             writeNode(out, node);
         }
         out.write(MtefRecord.END);
-    }
-
-    /**
-     * 判断一个 slot 的内容是否会使字号上下文处于缩小状态，需要在 slot 之后插入 FULL 恢复。
-     *
-     * <p>FULL 需求规则：</p>
-     * <ul>
-     *   <li>TM_SUP（上标）、TM_SUB（下标）、TM_ROOT（根号）内部使用 SUB typesize，
-     *       会将字号缩小；如果 slot 以这些模板结尾，字号处于缩小状态 → 需要 FULL</li>
-     *   <li>TM_PAREN（括号）内部自带 FULL 恢复，不会留下缩小的字号 → 不需要 FULL</li>
-     *   <li>普通字符不改变字号 → 不需要 FULL</li>
-     * </ul>
-     *
-     * <p>Check if a slot's content leaves the size context in a reduced state,
-     * requiring a FULL record after the slot to restore normal size.
-     * TM_SUP, TM_SUB, TM_ROOT use SUB typesize internally and leave size reduced.
-     * TM_PAREN has its own internal FULL and doesn't leave size reduced.</p>
-     */
-    private boolean needsFullAfterSlot(LaTeXNode slotNode) {
-        LaTeXNode last = getEffectiveLastChild(slotNode);
-        if (last == null) return false;
-        return switch (last.getType()) {
-            case SUPERSCRIPT, SUBSCRIPT, SQRT -> true;  // 缩小字号的模板 → 需要 FULL
-            default -> false;                            // 字符或括号 → 不需要
-        };
-    }
-
-    /**
-     * 获取节点的"有效最后子节点"，递归穿透 GROUP/ROOT 包装层。
-     *
-     * <p>LaTeX 解析器可能生成多层嵌套的 GROUP/ROOT 节点，
-     * 这个方法递归深入找到实际的最后一个内容节点。</p>
-     *
-     * <p>Get the effective last child of a node, recursing through GROUP/ROOT wrappers.</p>
-     */
-    private LaTeXNode getEffectiveLastChild(LaTeXNode node) {
-        if (node == null) return null;
-        if (node.getType() == LaTeXNode.Type.ROOT || node.getType() == LaTeXNode.Type.GROUP) {
-            java.util.List<LaTeXNode> children = node.getChildren();
-            if (children.isEmpty()) return null;
-            LaTeXNode last = children.get(children.size() - 1);
-            // 如果最后一个子节点仍然是 GROUP/ROOT 包装，继续递归
-            if (last.getType() == LaTeXNode.Type.ROOT || last.getType() == LaTeXNode.Type.GROUP) {
-                return getEffectiveLastChild(last);
-            }
-            return last;
-        }
-        return node;
     }
 
     /**
@@ -2520,17 +2487,19 @@ public class MtefWriter {
             // n 次根：\sqrt[n]{content}，AST 子节点 [0]=次数 n, [1]=被开方数
             MtefTemplateBuilder.writeNthRootHeader(out);       // variation = TV_ROOT_NTH (0x01)
             writeSlot(out, node.getChildren().get(1));         // slot 0: 被开方数（content）
-            out.write(MtefRecord.SUB);                         // 1 字节 typesize 记录
+            // 差分状态机：真 MathType 仅在被开方数结束时上下文不是 SUB 才写 SUB
+            // （DSMT7 oleObject117：被开方数以 tmSUP 结尾时 index 槽前无 SUB）
+            writeTypeSize(out, MtefRecord.SUB);
             writeSlot(out, node.getChildren().get(0));         // slot 1: 次数（n）
         } else if (node.getChildren().size() == 1) {
             // 平方根：\sqrt{content}，AST 子节点 [0]=被开方数
             MtefTemplateBuilder.writeSqrtHeader(out);          // variation = 0x00（标准平方根）
             writeSlot(out, node.getChildren().get(0));         // slot 0: 被开方数（content）
-            out.write(MtefRecord.SUB);                         // 1 字节 typesize 记录
+            writeTypeSize(out, MtefRecord.SUB);                // 差分 typesize 记录
             writeNullLine(out);                                // slot 1: 次数为空（NULL LINE）
         }
         out.write(MtefRecord.END); // 关闭根号模板
-        // FULL 由外层 writeContentNodes 在有更多兄弟节点时自动插入
+        // FULL 由外层 writeContentNodes 在有更多兄弟节点时按差分状态机自动插入
     }
 
     /**
@@ -2579,7 +2548,7 @@ public class MtefWriter {
             // base 写在模板外部
             if (innerBase != null) writeNode(out, innerBase);
             MtefTemplateBuilder.writeSubSuperscriptHeader(out);  // TM_SUBSUP 模板
-            out.write(MtefRecord.SUB);    // typesize 记录
+            writeTypeSize(out, MtefRecord.SUB);    // typesize 差分记录
             writeNullLine(out);            // slot 0: NULL base
             writeSlot(out, sub);           // slot 1: 下标
             writeSlot(out, sup);           // slot 2: 上标
@@ -2590,14 +2559,14 @@ public class MtefWriter {
         // 标准上标模式：base^{sup}
         if (base != null) writeNode(out, base);    // base 写在模板外部
         if (currentStyleHints.explicitScriptFullSize()) {
-            out.write(MtefRecord.FULL);
+            writeTypeSize(out, MtefRecord.FULL);
         }
         MtefTemplateBuilder.writeSuperscriptHeader(out);  // TM_SUP 模板
-        out.write(MtefRecord.SUB);    // typesize 记录
+        writeTypeSize(out, MtefRecord.SUB);    // typesize 差分记录
         writeNullLine(out);            // slot 0: NULL base（base 已在外部写入）
         writeSlot(out, sup);           // slot 1: 上标内容
         out.write(MtefRecord.END);     // 关闭模板
-        // FULL 由外层 writeContentNodes 在有更多兄弟节点时自动插入
+        // FULL 由外层 writeContentNodes 在有更多兄弟节点时按差分状态机自动插入
     }
 
     /**
@@ -2636,14 +2605,14 @@ public class MtefWriter {
         // base 写在模板外部
         if (base != null) writeNode(out, base);
         if (currentStyleHints.explicitScriptFullSize()) {
-            out.write(MtefRecord.FULL);
+            writeTypeSize(out, MtefRecord.FULL);
         }
         MtefTemplateBuilder.writeSubscriptHeader(out);  // TM_SUB 模板
-        out.write(MtefRecord.SUB);    // typesize 记录
+        writeTypeSize(out, MtefRecord.SUB);    // typesize 差分记录
         writeSlot(out, sub);           // slot 0: 下标内容（TM_SUB 先写内容！）
         writeNullLine(out);            // slot 1: NULL base（TM_SUB 后写 base！）
         out.write(MtefRecord.END);     // 关闭模板
-        // FULL 由外层 writeContentNodes 在有更多兄弟节点时自动插入
+        // FULL 由外层 writeContentNodes 在有更多兄弟节点时按差分状态机自动插入
     }
 
     /**
@@ -3189,8 +3158,17 @@ public class MtefWriter {
     private void writeSlot(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
         out.write(MtefRecord.LINE);
         out.write(0x00); // options: 0x00 = 非空行
-        if (node != null) {
-            writeNode(out, node);
+        // 槽位目标字号 = LINE 开口时的字号上下文（SUB 槽保持 SUB，FULL 槽保持 FULL）。
+        // 槽内兄弟节点间的字号恢复以此为目标，而不是一律恢复 FULL——
+        // 否则 \lim 下限槽、上标槽等多字符缩小槽会被插进多余的 FULL 记录。
+        int savedTarget = currentLineTargetSize;
+        currentLineTargetSize = currentTypeSize;
+        try {
+            if (node != null) {
+                writeNode(out, node);
+            }
+        } finally {
+            currentLineTargetSize = savedTarget;
         }
         out.write(MtefRecord.END); // 关闭 LINE（slot 结束）
     }
@@ -3512,9 +3490,9 @@ public class MtefWriter {
         boolean hasLower = lower != null;
         boolean hasUpper = upper != null;
 
-        // SUB 记录：包含上下限 slot
+        // SUB 记录：包含上下限 slot（差分：上下文已是 SUB 时不重复写）
         if (hasLower || hasUpper) {
-            out.write(MtefRecord.SUB); // record type 11（typesize + limit slots）
+            writeTypeSize(out, MtefRecord.SUB); // record type 11（typesize + limit slots）
             if (hasLower) writeSlot(out, lower);  // 下限 slot
             if (hasUpper) writeSlot(out, upper);  // 上限 slot
         }
@@ -3522,7 +3500,7 @@ public class MtefWriter {
         // SYM 记录：算子符号字符（通过字符映射表查找）
         MtefCharMap.CharEntry entry = MtefCharMap.lookup(cmd);
         if (entry != null) {
-            out.write(MtefRecord.SYM); // record type 13
+            writeTypeSize(out, MtefRecord.SYM); // record type 13
             writeCharRecord(out, entry.typeface(), entry.mtcode());
         }
 

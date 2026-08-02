@@ -221,7 +221,10 @@ public class MtefTemplateBuilder {
      * @throws IOException 写入异常
      */
     public static void writeSumHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
-        int variation = 0;
+        // 真 MathType 求和类大算子恒带 TV_BO_SUM（上下限按求和式排在符号上下方，
+        // 证据：real-src.docx oleObject37/39 的 tmSUM variation=0x70 = SUM|LOWER|UPPER）；
+        // 积分类不带此位（限值排在符号右侧），故此处与 writeIntegralHeader 保持不同。
+        int variation = MtefRecord.TV_BO_SUM;
         if (hasLower) variation |= MtefRecord.TV_BO_LOWER;  // bit4：下限存在
         if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;  // bit5：上限存在
         writeTemplateHeader(out, MtefRecord.TM_SUM, variation, 0x00);
@@ -269,7 +272,7 @@ public class MtefTemplateBuilder {
      * @throws IOException 写入异常
      */
     public static void writeProductHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
-        int variation = 0;
+        int variation = MtefRecord.TV_BO_SUM;  // 求和式排布（与 tmSUM 实测一致）
         if (hasLower) variation |= MtefRecord.TV_BO_LOWER;  // bit4：下限存在
         if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;  // bit5：上限存在
         writeTemplateHeader(out, MtefRecord.TM_PROD, variation, 0x00);
@@ -287,21 +290,21 @@ public class MtefTemplateBuilder {
      * @throws IOException 写入异常
      */
     public static void writeCoproductHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
-        int variation = 0;
+        int variation = MtefRecord.TV_BO_SUM;  // 求和式排布（与 tmSUM 实测一致）
         if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
         if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;
         writeTemplateHeader(out, MtefRecord.TM_COPROD, variation, 0x00);
     }
 
     public static void writeUnionHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
-        int variation = 0;
+        int variation = MtefRecord.TV_BO_SUM;  // 求和式排布（与 tmSUM 实测一致）
         if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
         if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;
         writeTemplateHeader(out, MtefRecord.TM_UNION, variation, 0x00);
     }
 
     public static void writeIntersectionHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
-        int variation = 0;
+        int variation = MtefRecord.TV_BO_SUM;  // 求和式排布（与 tmSUM 实测一致）
         if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
         if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;
         writeTemplateHeader(out, MtefRecord.TM_INTER, variation, 0x00);
@@ -315,7 +318,7 @@ public class MtefTemplateBuilder {
     }
 
     public static void writeSummationStyleBigOpHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
-        int variation = 0;
+        int variation = MtefRecord.TV_BO_SUM;  // 求和式排布（与 tmSUM/tmSUMOP 实测一致）
         if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
         if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;
         writeTemplateHeader(out, MtefRecord.TM_SUMOP, variation, 0x00);

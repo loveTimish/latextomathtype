@@ -212,11 +212,11 @@ class MtefWriterTest {
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_COPROD, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_COPROD, 0x70, 0x00}),
             "coproduct should use tmCOPROD with both upper/lower limit bits");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "coproduct should not fall back to tmSUM");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PROD, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PROD, 0x70, 0x00}),
             "coproduct should not fall back to tmPROD");
     }
 
@@ -226,9 +226,9 @@ class MtefWriterTest {
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UNION, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UNION, 0x70, 0x00}),
             "bigcup should use tmUNION with both upper/lower limit bits");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "bigcup should not fall back to tmSUM");
     }
 
@@ -238,9 +238,9 @@ class MtefWriterTest {
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTER, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTER, 0x70, 0x00}),
             "bigcap should use tmINTER with both upper/lower limit bits");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "bigcap should not fall back to tmSUM");
     }
 
@@ -250,9 +250,9 @@ class MtefWriterTest {
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x70, 0x00}),
             "bigoplus should use tmSUMOP with both upper/lower limit bits");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "bigoplus should not fall back to tmSUM");
     }
 
@@ -1037,9 +1037,9 @@ class MtefWriterTest {
         byte[] mtef = writer.write(parser.parseMathIR("\\coprod_{i=1}^{n} A_i"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_COPROD, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_COPROD, 0x70, 0x00}),
             "IR path should lower \\coprod to tmCOPROD");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "IR path should not route \\coprod through tmSUM fallback");
     }
 
@@ -1048,9 +1048,9 @@ class MtefWriterTest {
         byte[] mtef = writer.write(parser.parseMathIR("\\bigcup_{i=1}^{n} A_i"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UNION, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UNION, 0x70, 0x00}),
             "IR path should lower \\bigcup to tmUNION");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "IR path should not route \\bigcup through tmSUM fallback");
     }
 
@@ -1059,9 +1059,9 @@ class MtefWriterTest {
         byte[] mtef = writer.write(parser.parseMathIR("\\bigcap_{i=1}^{n} A_i"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTER, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTER, 0x70, 0x00}),
             "IR path should lower \\bigcap to tmINTER");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "IR path should not route \\bigcap through tmSUM fallback");
     }
 
@@ -1070,7 +1070,7 @@ class MtefWriterTest {
         byte[] mtef = writer.write(parser.parseMathIR("\\bigotimes_{i=1}^{n} A_i"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x70, 0x00}),
             "IR path should lower \\bigotimes to tmSUMOP");
     }
 
@@ -1499,6 +1499,108 @@ class MtefWriterTest {
         byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
         assertEquals(0, countOccurrences(mtef, box),
             "large-number multiplication equations do not follow the one-digit boxed operand pattern");
+    }
+
+    // =====================================================================
+    // typesize 差分状态机测试（与真 MathType 差分编码逐字节对齐）
+    // 证据：real-src.docx 541 个真对象 + 课程文档 DSMT6/DSMT7 嵌套根式对象。
+    // =====================================================================
+
+    @Test
+    void testNestedSqrtSkipsRedundantSubBeforeIndexSlot() {
+        // 被开方数以 tmSUP 结尾时，字号上下文已是 SUB，
+        // 真 MathType（DSMT7 oleObject117）在 index 槽前不再写 SUB。
+        LaTeXNode ast = parser.parseLaTeX("\\sqrt{a^{2}+b^{2}}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        // 整个流只应有 2 条 SUB 记录（两个 tmSUP 各一条）；
+        // 旧行为会在 ROOT index 槽前再写第 3 条。
+        byte sub = (byte) MtefRecord.SUB;
+        int subCount = 0;
+        // 从表达式区域开始数（跳过前缀——前缀 EQN_PREFS 不含孤立 0x0b 记录语义，
+        // 但保险起见用 END+SUB 序列统计 ROOT index 前的 SUB 是否出现）
+        for (int i = 12; i < mtef.length; i++) {
+            if (mtef[i] == sub) {
+                subCount++;
+            }
+        }
+        assertEquals(2, subCount,
+            "radicand ends with tmSUP: size context already SUB, root index slot must not emit another SUB");
+        // 序列校验：radicand LINE 的 END 之后应直接跟 index NULL LINE（00 00 01 01）。
+        // 旧行为是 00 00 0b 01 01（END+END+SUB+NULL LINE），真 MathType 不写那个 SUB。
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.END, (byte) MtefRecord.END,
+                        (byte) MtefRecord.LINE, 0x01}),
+            "radicand END must be followed directly by the index NULL LINE (no SUB in between)");
+    }
+
+    @Test
+    void testSimpleSqrtStillEmitsSubBeforeIndexSlot() {
+        // 被开方数以普通字符结尾（上下文 FULL）时，index 槽前必须写 SUB。
+        LaTeXNode ast = parser.parseLaTeX("\\sqrt{x+1}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.END, (byte) MtefRecord.SUB,
+                        (byte) MtefRecord.LINE, 0x01}),
+            "radicand ends at FULL size: root index slot needs the SUB typesize record");
+    }
+
+    @Test
+    void testFractionWithPlainNumeratorHasNoFullBeforeFollowingSibling() {
+        // 分子以普通字符结尾（上下文 FULL）且分式后还有兄弟时，
+        // 真 MathType 不写 FULL（222/224 真分式验证）。
+        LaTeXNode ast = parser.parseLaTeX("\\frac{a}{b}+c");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.END, (byte) MtefRecord.FULL,
+                        (byte) MtefRecord.CHAR}),
+            "fraction leaving FULL context must not be followed by a spurious FULL record");
+    }
+
+    @Test
+    void testFractionWithScriptedNumeratorKeepsFullBetweenSlots() {
+        // 分子以 tmSUB 结尾（上下文 SUB）时，槽间必须写 FULL 恢复分母字号
+        // （真 MathType oleObject144 实测模式）。
+        LaTeXNode ast = parser.parseLaTeX("\\frac{b_{8}}{81}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.END, (byte) MtefRecord.FULL,
+                        (byte) MtefRecord.LINE, 0x00}),
+            "numerator ending with a script template leaves SUB context: FULL required before denominator slot");
+    }
+
+    @Test
+    void testLimFollowedByContentEmitsFullAfterTemplate() {
+        // 真 MathType 在 tmSUMOP 模板结束后、后续兄弟之前写 FULL 复位
+        // （operator 槽把上下文留在 SYM）。
+        LaTeXNode ast = parser.parseLaTeX("\\lim_{x \\to 0} \\frac{\\sin x}{x}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.END, (byte) MtefRecord.FULL,
+                        (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_FRACT}),
+            "tmSUMOP template must be followed by a FULL record before the next sibling");
+        // 缩小槽（lower slot）内部的多字符内容保持 SUB 字号：
+        // 'x'(fn=VARIABLE 0x83, mt=0x0078) 之后必须直接跟下一条 CHAR 记录，
+        // 不能插入 FULL——真 MathType 的缩小槽内不写字号恢复记录。
+        assertTrue(containsBytes(mtef, new byte[]{(byte) 0x83, 0x78, 0x00, (byte) MtefRecord.CHAR}),
+            "reduced (SUB) slot content must stay at SUB size: no FULL between slot characters");
+    }
+
+    @Test
+    void testSumVariationIncludesSummationStyleBit() {
+        // 真 MathType tmSUM variation 恒含 TV_BO_SUM(0x40)：
+        // oleObject37/39 实测 var=0x70 = SUM|LOWER|UPPER。
+        LaTeXNode ast = parser.parseLaTeX("\\sum_{i=1}^{n} i");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00,
+                        (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
+            "sum with both limits should use variation 0x70 (TV_BO_SUM|TV_BO_LOWER|TV_BO_UPPER)");
     }
 
     private boolean containsRecord(byte[] bytes, int recordType) {
