@@ -24,7 +24,7 @@ class OfficialVectorWmfWordAcceptanceTest {
 
     private static final Path CORPUS = Path.of("docs/reference/mathtype/latex-coverage-corpus.json");
     private static final Path OUTPUT = Path.of(
-        "target/vector-acceptance/official-238-vector-wmf.docx");
+        "target/vector-acceptance/official-238-vector-wmf-machine-corpus.docx");
 
     @Test
     void generateSingleWordDocumentWithEveryOfficialVectorPreview() throws Exception {
@@ -49,12 +49,12 @@ class OfficialVectorWmfWordAcceptanceTest {
 
         PaperExportRequest request = new PaperExportRequest();
         PaperExportRequest.PaperInfo paper = new PaperExportRequest.PaperInfo();
-        paper.setName("Official LaTeX Pure Vector WMF Acceptance");
+        paper.setName("Machine Coverage Corpus - Official LaTeX Vector WMF");
         paper.setScore(questions.size());
         paper.setSuggestTime(30);
         request.setPaper(paper);
         SectionDTO section = new SectionDTO();
-        section.setHeadline("MathJax SVG to Batik POLYPOLYGON WMF - 238 official examples");
+        section.setHeadline("238 raw coverage examples - not intended for human visual review");
         section.setQuestions(questions);
         request.setSections(List.of(section));
 

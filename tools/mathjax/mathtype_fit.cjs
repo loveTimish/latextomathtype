@@ -38,17 +38,15 @@ const DEFAULT_PARAMS = {
   slotScale: 1.0,     // MathType uses full-size numerator/denominator
   moScaleX: 1.0,      // horizontal compression for operators (disabled: with
   miScaleX: 1.0,      // spacing fixed, MJ glyph widths already match GT)
-  spaceScale: 0.85    // inter-atom gap scale around operators; the 12pt target
-                      // (fresh MathType factory settings) spaces nearly full-TeX
+  spaceScale: 1.0     // keep MathJax's natural inter-atom spacing. Compressing
+                      // this made linear formulas visibly crowded in Word.
 };
 
-// Per-operator spacing overrides, calibrated against fresh MathType 12pt
-// equations (factory defaults). The old 10.5pt reference document used
-// tighter custom spacing (0.575 / 0.3); see git history for those values.
-const DEFAULT_SPACE_BY_C = { D7: 0.85, "22C5": 0.85, "2212": 0.55, "2B": 0.9, "3D": 0.85 };
+// Ordinary operators retain MathJax's natural advance and spacing. Structure
+// fitting (fractions, piles and tall delimiters) remains independent below.
+const DEFAULT_SPACE_BY_C = {};
 
-// Per-operator glyph x-compression (GT minus is a short text-style dash).
-const DEFAULT_GLYPH_SCALE_BY_C = { "2212": 0.6 };
+const DEFAULT_GLYPH_SCALE_BY_C = {};
 
 // ---------------------------------------------------------------------------
 // Minimal XML parse/serialize for MathJax SVG. Text nodes are preserved on
@@ -450,9 +448,8 @@ function firstPathDataC(el) {
   return null;
 }
 
-// Horizontally compress operator/letter glyphs (left-anchored) and shrink
-// the inter-atom gaps around operators (MathType spacing is much tighter
-// than TeX's med/thick spaces), shifting following siblings accordingly.
+// Apply optional caller-provided glyph/spacing adjustments while shifting
+// following siblings consistently. Defaults preserve natural MathJax layout.
 function compressGlyphs(container, emUnits, params) {
   const moK = params.moScaleX;
   const miK = params.miScaleX;

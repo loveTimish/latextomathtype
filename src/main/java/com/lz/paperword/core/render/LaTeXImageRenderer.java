@@ -100,11 +100,11 @@ public class LaTeXImageRenderer {
     private static final double MATHJAX_DEFAULT_PADDING_PT = 2.3d;
     private static final double MATHJAX_DEFAULT_MAX_WIDTH_PT = 400.0d;
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v301-batik-vector-wmf";
+    private static final String CACHE_VERSION = "v302-batik-vector-wmf-ink";
     private static final String EXPECTED_NODE_VERSION = "v24.9.0";
     private static final String EXPECTED_MATHJAX_VERSION = "3.2.2";
     private static final String EXPECTED_MATHJAX_BUNDLE_HASH =
-        "25b54e1bdcab669e9e7d53f97f81d161a760c813356cecc9b99aea968d17bc35";
+        "c2b620e67102608a19c6c9729960cfa96fd14c9fe1b125b23def61dd544faf37";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(

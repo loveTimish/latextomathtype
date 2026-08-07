@@ -79,6 +79,18 @@ class SvgVectorWmfRendererTest {
     }
 
     @Test
+    void shouldPreserveAspectRatioWhenTargetBoxDiffersFromSvgViewport() throws Exception {
+        String svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20pt\" height=\"10pt\" "
+            + "viewBox=\"0 0 200 100\"><rect x=\"20\" y=\"20\" width=\"160\" height=\"60\"/></svg>";
+        byte[] wmf = SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 20d, 20d);
+        int[] bounds = drawingBounds(wmf);
+        double ratio = (bounds[2] - bounds[0]) / (double) (bounds[3] - bounds[1]);
+
+        assertTrue(ratio > 2.4d && ratio < 2.9d,
+            "目标框比例不同也必须等比缩放，实际墨迹宽高比=" + ratio);
+    }
+
+    @Test
     void shouldExpandStrokeAndKeepColor() throws Exception {
         String svg = SIMPLE_SVG.replace("<path d=", "<path stroke=\"#ff0000\" stroke-width=\"10\" d=");
         SvgVectorWmfRenderer.VectorWmfResult result = SvgVectorWmfRenderer.renderDetailed(
@@ -213,5 +225,38 @@ class SvgVectorWmfRendererTest {
             offset += (int) sizeWords * 2;
         }
         return count;
+    }
+
+    private static int[] drawingBounds(byte[] wmf) {
+        int[] bounds = {Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MIN_VALUE, Integer.MIN_VALUE};
+        int offset = 22 + 18;
+        while (offset + 10 <= wmf.length) {
+            long sizeWords = u32(wmf, offset);
+            int func = (wmf[offset + 4] & 0xFF) | ((wmf[offset + 5] & 0xFF) << 8);
+            if (func == 0x0538) {
+                int polygonCount = (wmf[offset + 6] & 0xFF) | ((wmf[offset + 7] & 0xFF) << 8);
+                int totalPoints = 0;
+                int countsOffset = offset + 8;
+                for (int i = 0; i < polygonCount; i++) {
+                    totalPoints += (wmf[countsOffset + i * 2] & 0xFF)
+                        | ((wmf[countsOffset + i * 2 + 1] & 0xFF) << 8);
+                }
+                int pointOffset = countsOffset + polygonCount * 2;
+                for (int i = 0; i < totalPoints; i++) {
+                    int x = (short) ((wmf[pointOffset] & 0xFF) | ((wmf[pointOffset + 1] & 0xFF) << 8));
+                    int y = (short) ((wmf[pointOffset + 2] & 0xFF) | ((wmf[pointOffset + 3] & 0xFF) << 8));
+                    bounds[0] = Math.min(bounds[0], x);
+                    bounds[1] = Math.min(bounds[1], y);
+                    bounds[2] = Math.max(bounds[2], x);
+                    bounds[3] = Math.max(bounds[3], y);
+                    pointOffset += 4;
+                }
+            }
+            if (sizeWords < 3 || offset + sizeWords * 2 > wmf.length || func == 0) {
+                break;
+            }
+            offset += (int) sizeWords * 2;
+        }
+        return bounds;
     }
 }

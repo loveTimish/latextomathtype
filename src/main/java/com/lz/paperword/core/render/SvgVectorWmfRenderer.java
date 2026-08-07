@@ -12,6 +12,7 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -59,6 +60,11 @@ public final class SvgVectorWmfRenderer {
     /** 逻辑坐标单位：每英寸单位数（0.01mm = 2540）。超出 int16 范围时自动降低。 */
     private static final int PREFERRED_UNITS_PER_INCH = 2540;
     private static final int INT16_SAFE = 32000;
+    /**
+     * Word 在双页等低缩放视图中会把很细的填充轮廓采样得发灰。按物理尺寸向
+     * 轮廓两侧补少量墨量，既不依赖目标 DPI，也不会改变公式的排版位置。
+     */
+    private static final double INK_EXPANSION_PT = 0.12d;
 
     private static final int REC_EOF = 0x0000;
     private static final int REC_SET_MAP_MODE = 0x0103;
@@ -112,7 +118,8 @@ public final class SvgVectorWmfRenderer {
         List<PaintedPolygon> polygons = new ArrayList<>();
         Set<Integer> colors = new LinkedHashSet<>();
         for (BatikVectorSceneBuilder.PaintedShape painted : scene.shapes()) {
-            List<List<double[]>> contours = flattenShape(painted.shape(), toWmf);
+            Shape finalShape = prepareFinalShape(painted.shape(), toWmf, unitsPerInch);
+            List<List<double[]>> contours = flattenShape(finalShape);
             if (!contours.isEmpty()) {
                 int rgb = painted.color().getRGB() & 0xFFFFFF;
                 colors.add(rgb);
@@ -144,12 +151,13 @@ public final class SvgVectorWmfRenderer {
         BufferedImage image = new BufferedImage(widthPx, heightPx, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = image.createGraphics();
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        AffineTransform toPixels = AffineTransform.getScaleInstance(
-            widthPx / (double) layout.widthUnits(), heightPx / (double) layout.heightUnits());
-        toPixels.concatenate(layout.toWmf());
         for (BatikVectorSceneBuilder.PaintedShape painted : scene.shapes()) {
             graphics.setColor(painted.color());
-            graphics.fill(toPixels.createTransformedShape(painted.shape()));
+            Shape finalShape = prepareFinalShape(
+                painted.shape(), layout.toWmf(), layout.unitsPerInch());
+            graphics.fill(AffineTransform.getScaleInstance(
+                widthPx / (double) layout.widthUnits(),
+                heightPx / (double) layout.heightUnits()).createTransformedShape(finalShape));
         }
         graphics.dispose();
         return image;
@@ -176,10 +184,13 @@ public final class SvgVectorWmfRenderer {
         double rightPad = inkBounds != null && inkBounds.getMaxX() >= scene.viewportWidth() - 0.01d ? safePx : 0d;
         double topPad = inkBounds != null && inkBounds.getMinY() <= 0.01d ? safePx : 0d;
         double bottomPad = inkBounds != null && inkBounds.getMaxY() >= scene.viewportHeight() - 0.01d ? safePx : 0d;
-        double scaleX = wUnits / (scene.viewportWidth() + leftPad + rightPad);
-        double scaleY = hUnits / (scene.viewportHeight() + topPad + bottomPad);
+        double paddedWidth = scene.viewportWidth() + leftPad + rightPad;
+        double paddedHeight = scene.viewportHeight() + topPad + bottomPad;
+        double scale = Math.min(wUnits / paddedWidth, hUnits / paddedHeight);
+        double offsetX = (wUnits - paddedWidth * scale) / 2d + leftPad * scale;
+        double offsetY = (hUnits - paddedHeight * scale) / 2d + topPad * scale;
         AffineTransform toWmf = new AffineTransform(
-            scaleX, 0d, 0d, scaleY, leftPad * scaleX, topPad * scaleY);
+            scale, 0d, 0d, scale, offsetX, offsetY);
         return new SceneLayout(wUnits, hUnits, unitsPerInch, toWmf);
     }
 
@@ -208,10 +219,20 @@ public final class SvgVectorWmfRenderer {
                                AffineTransform toWmf) {
     }
 
-    private static List<List<double[]>> flattenShape(Shape shape, AffineTransform toWmf)
+    private static Shape prepareFinalShape(Shape shape, AffineTransform toWmf, int unitsPerInch) {
+        Shape transformed = toWmf.createTransformedShape(shape);
+        Area finalArea = new Area(transformed);
+        float expansionStroke = (float) (2d * INK_EXPANSION_PT / 72d * unitsPerInch);
+        BasicStroke inkStroke = new BasicStroke(
+            expansionStroke, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND);
+        finalArea.add(new Area(inkStroke.createStrokedShape(transformed)));
+        return finalArea;
+    }
+
+    private static List<List<double[]>> flattenShape(Shape shape)
         throws SvgVectorWmfException {
         Area normalized = new Area(shape);
-        PathIterator iterator = normalized.getPathIterator(toWmf, 0.5d);
+        PathIterator iterator = normalized.getPathIterator(null, 0.5d);
         List<List<double[]>> contours = new ArrayList<>();
         List<double[]> current = null;
         double[] start = null;
