@@ -35,11 +35,12 @@ public class MathIRConverter {
     );
 
     private static final Set<String> OVER_ACCENTS = Set.of(
-        "\\overline", "\\bar", "\\hat", "\\tilde", "\\vec", "\\dot", "\\jstatus", "\\jointstatus"
+        "\\overline", "\\bar", "\\hat", "\\tilde", "\\vec", "\\dot", "\\jstatus", "\\jointstatus",
+        "\\overleftarrow", "\\overleftrightarrow", "\\overrightarrow"
     );
 
     private static final Set<String> UNDER_ACCENTS = Set.of(
-        "\\underline"
+        "\\underline", "\\underleftarrow", "\\underleftrightarrow", "\\underrightarrow"
     );
 
     private static final Set<String> ARC_ACCENTS = Set.of(
@@ -55,7 +56,7 @@ public class MathIRConverter {
     );
 
     private static final Set<String> SPACING_COMMANDS = Set.of(
-        "\\ ", "\\,", "\\;", "\\:", "\\!", "\\enspace", "\\quad", "\\qquad", "\\hspace", "\\hskip"
+        "\\,", "\\;", "\\:", "\\!", "\\enspace", "\\quad", "\\qquad", "\\hspace", "\\hskip"
     );
 
     public MathIRNode convert(LaTeXNode root) {
@@ -114,6 +115,7 @@ public class MathIRConverter {
             case SUPERSCRIPT -> convertSuperscriptNode(node);
             case SUBSCRIPT -> convertSubscriptNode(node);
             case TEXT -> convertTextNode(node);
+            case STYLE -> convertStyleNode(node);
             case ARRAY -> convertTableNode(node);
             case ROW -> convertLinearContainer(node, MathIRNode.Type.TABLE_ROW);
             case CELL -> convertLinearContainer(node, MathIRNode.Type.TABLE_CELL);
@@ -144,7 +146,7 @@ public class MathIRConverter {
         if (SPACING_COMMANDS.contains(command)) {
             return null;
         }
-        if (isLeftFenceCommand(command)) {
+        if (isLeftFenceCommand(command) && !node.getChildren().isEmpty()) {
             return convertFenceNode(node);
         }
         if (isHorizontalFenceCommand(command)) {
@@ -157,13 +159,13 @@ public class MathIRConverter {
             }
             return convertOverUnderSetNode(node, command);
         }
-        if ("\\xrightarrow".equals(command) || "\\xleftarrow".equals(command)) {
+        if (isExtensibleArrowCommand(command)) {
             return convertArrowNode(node, command);
         }
         if ("\\bra".equals(command) || "\\ket".equals(command) || "\\braket".equals(command)) {
             return convertDiracNode(node, command);
         }
-        if (isEnclosureCommand(command)) {
+        if (isEnclosureCommand(command) || "\\not".equals(command)) {
             return convertEnclosureNode(node, command);
         }
         if (ARC_ACCENTS.contains(command)) {
@@ -194,7 +196,8 @@ public class MathIRConverter {
             function.setMetadata("latexCommand", command);
             function.setMetadata("role", isBigOperatorCommand(command) ? "big-operator" : "function");
             if (isBigOperatorCommand(command)) {
-                function.setMetadata("limitPlacement", limitPlacement(command));
+                function.setMetadata("limitPlacement",
+                    firstNonBlank(node.getMetadata("limitPlacement"), limitPlacement(command)));
             }
             return function;
         }
@@ -206,7 +209,8 @@ public class MathIRConverter {
             mapped.setMetadata("latexCommand", command);
             if (isBigOperatorCommand(command)) {
                 mapped.setMetadata("role", "big-operator");
-                mapped.setMetadata("limitPlacement", limitPlacement(command));
+                mapped.setMetadata("limitPlacement",
+                    firstNonBlank(node.getMetadata("limitPlacement"), limitPlacement(command)));
             }
             return mapped;
         }
@@ -238,6 +242,7 @@ public class MathIRConverter {
     private MathIRNode convertOverUnderSetNode(LaTeXNode node, String command) {
         MathIRNode ir = new MathIRNode("\\overset".equals(command) ? MathIRNode.Type.OVER : MathIRNode.Type.UNDER);
         copyMetadata(node, ir);
+        ir.setMetadata("latexCommand", command);
         ir.addChild(convertArgument(childAt(node, 1)));
         ir.addChild(convertArgument(childAt(node, 0)));
         return ir;
@@ -287,7 +292,8 @@ public class MathIRConverter {
         MathIRNode arrow = new MathIRNode(MathIRNode.Type.ARROW);
         copyMetadata(node, arrow);
         arrow.setMetadata("latexCommand", command);
-        arrow.setMetadata("direction", "\\xleftarrow".equals(command) ? "left" : "right");
+        arrow.setMetadata("direction", firstNonBlank(node.getMetadata("arrowDirection"),
+            "\\xleftarrow".equals(command) ? "left" : "right"));
         arrow.setMetadata("variant", firstNonBlank(node.getMetadata("arrowVariant"), "single"));
 
         MathIRNode topAnnotation = convertArgument(childAt(node, 0));
@@ -299,6 +305,12 @@ public class MathIRConverter {
             arrow.addChild(bottomAnnotation);
         }
         return arrow;
+    }
+
+    private boolean isExtensibleArrowCommand(String command) {
+        return Set.of("\\xrightarrow", "\\xleftarrow", "\\xleftrightarrow", "\\xlongequal",
+            "\\xLeftrightarrow", "\\xLongleftarrow", "\\xLongleftrightarrow", "\\xLongrightarrow",
+            "\\xlongleftarrow", "\\xlongleftrightarrow", "\\xlongrightarrow").contains(command);
     }
 
     private MathIRNode convertDiracNode(LaTeXNode node, String command) {
@@ -423,7 +435,16 @@ public class MathIRConverter {
     private MathIRNode convertTextNode(LaTeXNode node) {
         MathIRNode text = new MathIRNode(MathIRNode.Type.TEXT, flattenText(node));
         copyMetadata(node, text);
+        text.setMetadata("latexCommand", node.getValue());
         return text;
+    }
+
+    private MathIRNode convertStyleNode(LaTeXNode node) {
+        MathIRNode style = new MathIRNode(MathIRNode.Type.STYLE, node.getValue());
+        copyMetadata(node, style);
+        style.setMetadata("latexCommand", node.getValue());
+        appendConvertedChildren(node.getChildren(), style);
+        return style;
     }
 
     private MathIRNode convertTableNode(LaTeXNode node) {
@@ -563,6 +584,7 @@ public class MathIRConverter {
             case "\\cancel" -> "updiagonalstrike";
             case "\\bcancel" -> "downdiagonalstrike";
             case "\\xcancel" -> "updiagonalstrike downdiagonalstrike";
+            case "\\not" -> "updiagonalstrike";
             default -> command;
         };
     }
@@ -575,7 +597,8 @@ public class MathIRConverter {
         return node != null
             && node.getType() == LaTeXNode.Type.COMMAND
             && node.getValue() != null
-            && UNDER_OVER_BIGOPS.contains(node.getValue());
+            && UNDER_OVER_BIGOPS.contains(node.getValue())
+            && !"scripts".equals(node.getMetadata("limitPlacement"));
     }
 
     private String limitPlacement(String command) {

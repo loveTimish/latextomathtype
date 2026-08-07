@@ -13,7 +13,10 @@ import org.apache.poi.xwpf.usermodel.XWPFTable;
 import org.apache.poi.xwpf.usermodel.XWPFTableCell;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPageMar;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPageSz;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTPPr;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSectPr;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSpacing;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.STLineSpacingRule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -158,6 +161,7 @@ public class LayoutDocxBuilder {
                 cell.removeParagraph(0);
                 XWPFParagraph para = cell.addParagraph();
                 LayoutDocumentRequest.Style style = block.getStyle() == null ? new LayoutDocumentRequest.Style() : block.getStyle();
+                applyParagraphStyle(para, tableCellStyle(style), LayoutDocumentRequest.BlockType.PARAGRAPH);
                 if (cells != null && columnIndex < cells.size()) {
                     writeContentWithMath(para, "", cells.get(columnIndex).getText(), style);
                 }
@@ -223,6 +227,33 @@ public class LayoutDocxBuilder {
         }
         para.setSpacingBefore(safeInt(effective.getSpacingBeforeTwips(), defaultSpacingBefore(type)));
         para.setSpacingAfter(safeInt(effective.getSpacingAfterTwips(), defaultSpacingAfter(type)));
+        applyLineSpacingMultiple(para, effective.getLineSpacingMultiple());
+    }
+
+    private LayoutDocumentRequest.Style tableCellStyle(LayoutDocumentRequest.Style source) {
+        LayoutDocumentRequest.Style effective = source == null ? new LayoutDocumentRequest.Style() : source;
+        LayoutDocumentRequest.Style cellStyle = new LayoutDocumentRequest.Style();
+        cellStyle.setAlignment(effective.getAlignment());
+        cellStyle.setFontFamily(effective.getFontFamily());
+        cellStyle.setFontSizePt(effective.getFontSizePt());
+        cellStyle.setBold(effective.isBold());
+        cellStyle.setItalic(effective.isItalic());
+        cellStyle.setIndentLeftTwips(effective.getIndentLeftTwips());
+        cellStyle.setSpacingBeforeTwips(0);
+        cellStyle.setSpacingAfterTwips(0);
+        cellStyle.setLineSpacingMultiple(effective.getLineSpacingMultiple());
+        return cellStyle;
+    }
+
+    private void applyLineSpacingMultiple(XWPFParagraph para, Double lineSpacingMultiple) {
+        if (lineSpacingMultiple == null || !Double.isFinite(lineSpacingMultiple) || lineSpacingMultiple <= 0) {
+            return;
+        }
+        long lineTwips = Math.max(1L, Math.round(lineSpacingMultiple * 240.0d));
+        CTPPr pPr = para.getCTP().isSetPPr() ? para.getCTP().getPPr() : para.getCTP().addNewPPr();
+        CTSpacing spacing = pPr.isSetSpacing() ? pPr.getSpacing() : pPr.addNewSpacing();
+        spacing.setLine(BigInteger.valueOf(lineTwips));
+        spacing.setLineRule(STLineSpacingRule.AUTO);
     }
 
     private void writeContentWithMath(XWPFParagraph para, String prefix, String content,
@@ -380,12 +411,12 @@ public class LayoutDocxBuilder {
     }
 
     private void writeMathExpression(XWPFParagraph para, String latex, LayoutDocumentRequest.Style style) {
-        try {
-            writeMathAst(para, latex, latexParser.parseLaTeX(latex), style);
-        } catch (Exception e) {
-            log.error("Failed to parse formula, falling back to text: {}", latex, e);
-            writeTextSegment(para, latex, style);
+        LaTeXParser.DetailedParseResult parsed = latexParser.parseDetailed(latex);
+        if (!parsed.isSupported()) {
+            throw new IllegalArgumentException("Unsupported LaTeX formula: " + latex
+                + "; diagnostics=" + parsed.diagnostics());
         }
+        writeMathAst(para, latex, parsed.ast(), style);
     }
 
     private void writeMathAst(XWPFParagraph para, String rawLatex, LaTeXNode ast,

@@ -21,20 +21,23 @@ import (
 const oleCbHdr = uint16(28)
 
 type StyleHint struct {
-	ObjectIndex            int      `json:"objectIndex"`
-	Entry                  string   `json:"entry"`
-	Hints                  []string `json:"hints,omitempty"`
-	AsciiFunctionParen     int      `json:"asciiFunctionParen"`
-	FullwidthTextParen     int      `json:"fullwidthTextParen"`
-	ExplicitScriptFullSize bool     `json:"explicitScriptFullSize"`
-	ExplicitFractionFullSize bool   `json:"explicitFractionFullSize"`
-	ExplicitTopFullSize    bool     `json:"explicitTopFullSize"`
-	ForceExplicitFenceTemplate bool `json:"forceExplicitFenceTemplate"`
-	ExplicitBlackColor    bool      `json:"explicitBlackColor"`
-	FlatParenTemplate     bool      `json:"flatParenTemplate"`
-	LetterGroupObarTemplate bool    `json:"letterGroupObarTemplate"`
-	TextFeComma           bool      `json:"textFeComma"`
-	Error                  string   `json:"error,omitempty"`
+	ObjectIndex                int      `json:"objectIndex"`
+	Entry                      string   `json:"entry"`
+	Hints                      []string `json:"hints,omitempty"`
+	AsciiFunctionParen         int      `json:"asciiFunctionParen"`
+	FullwidthTextParen         int      `json:"fullwidthTextParen"`
+	LegacyEuclidOneParen       int      `json:"legacyEuclidOneParen"`
+	LegacyEuclidTwoParen       int      `json:"legacyEuclidTwoParen"`
+	ExplicitScriptFullSize     bool     `json:"explicitScriptFullSize"`
+	ExplicitFractionFullSize   bool     `json:"explicitFractionFullSize"`
+	ExplicitTopFullSize        bool     `json:"explicitTopFullSize"`
+	ForceExplicitFenceTemplate bool     `json:"forceExplicitFenceTemplate"`
+	ExplicitBlackColor         bool     `json:"explicitBlackColor"`
+	FlatParenTemplate          bool     `json:"flatParenTemplate"`
+	LetterGroupObarTemplate    bool     `json:"letterGroupObarTemplate"`
+	TextFeComma                bool     `json:"textFeComma"`
+	LegacyTextFeAscii          int      `json:"legacyTextFeAscii"`
+	Error                      string   `json:"error,omitempty"`
 }
 
 func main() {
@@ -85,21 +88,28 @@ func extract(docxPath string) ([]StyleHint, error) {
 			out = append(out, hint)
 			continue
 		}
-		hint.AsciiFunctionParen = countSeq(body, []byte{0x02, 0x00, 0x82, 0x28, 0x00}) +
-			countSeq(body, []byte{0x02, 0x00, 0x82, 0x29, 0x00}) +
-			countSeq(body, []byte{0x02, 0x82, 0x28, 0x00}) +
-			countSeq(body, []byte{0x02, 0x82, 0x29, 0x00})
-		hint.FullwidthTextParen = countSeq(body, []byte{0x02, 0x00, 0x8c, 0x08, 0xff}) +
-			countSeq(body, []byte{0x02, 0x00, 0x8c, 0x09, 0xff})
-		hint.ExplicitScriptFullSize = bytes.Contains(body, []byte{0x09, 0x65, 0x50, 0x01})
-		hint.ExplicitFractionFullSize = hasExplicitFractionFullSize(body)
-		hint.ExplicitTopFullSize = hasExplicitTopFullSize(formulaTail(body))
-		hint.ForceExplicitFenceTemplate = hasFenceTemplate(body)
-		hint.ExplicitBlackColor = hasExplicitBlackColor(formulaTail(body))
-		hint.FlatParenTemplate = hasFlatParenTemplate(body)
-		hint.LetterGroupObarTemplate = hasObarTemplate(body)
-		hint.TextFeComma = bytes.Contains(body, []byte{0x02, 0x00, 0x8c, 0x0c, 0xff})
-		if hint.AsciiFunctionParen > hint.FullwidthTextParen {
+		formula := formulaRegion(body)
+		hint.AsciiFunctionParen = countCharMtcode(formula, 0x0028) + countCharMtcode(formula, 0x0029)
+		hint.FullwidthTextParen = countCharMtcode(formula, 0xff08) + countCharMtcode(formula, 0xff09)
+		hint.LegacyEuclidOneParen = countPlainChar(formula, 0x7f, 0x0028) + countPlainChar(formula, 0x7f, 0x0029)
+		hint.LegacyEuclidTwoParen = countPlainChar(formula, 0x7e, 0x0028) + countPlainChar(formula, 0x7e, 0x0029)
+		normalAsciiParen := hint.AsciiFunctionParen - hint.LegacyEuclidOneParen - hint.LegacyEuclidTwoParen
+		hint.ExplicitScriptFullSize = bytes.Contains(formula, []byte{0x09, 0x65, 0x50, 0x01})
+		hint.ExplicitFractionFullSize = hasExplicitFractionFullSize(formula)
+		hint.ExplicitTopFullSize = hasExplicitTopFullSize(formula)
+		hint.ForceExplicitFenceTemplate = hasFenceTemplate(formula)
+		hint.ExplicitBlackColor = hasExplicitBlackColor(formula)
+		hint.FlatParenTemplate = hasFlatParenTemplate(formula)
+		hint.LetterGroupObarTemplate = hasObarTemplate(formula)
+		hint.TextFeComma = bytes.Contains(formula, []byte{0x02, 0x00, 0x8c, 0x0c, 0xff})
+		hint.LegacyTextFeAscii = countAsciiPlainTypeface(formula, 0x8c)
+		if hint.LegacyEuclidOneParen > 0 && hint.LegacyEuclidTwoParen == 0 && normalAsciiParen == 0 {
+			hint.Hints = append(hint.Hints, "asciiFlatParens")
+		} else if hint.LegacyEuclidOneParen > 0 && hint.LegacyEuclidTwoParen > 0 && normalAsciiParen == 0 {
+			hint.Hints = append(hint.Hints, "asciiFlatParens")
+		} else if normalAsciiParen > 0 && hint.FullwidthTextParen > 0 {
+			hint.Hints = append(hint.Hints, "mixedAsciiFullwidthParens")
+		} else if hint.AsciiFunctionParen > hint.FullwidthTextParen {
 			hint.Hints = append(hint.Hints, "asciiFlatParens")
 		}
 		if hint.FullwidthTextParen > hint.AsciiFunctionParen {
@@ -129,6 +139,9 @@ func extract(docxPath string) ([]StyleHint, error) {
 		if hint.TextFeComma {
 			hint.Hints = append(hint.Hints, "textFeComma")
 		}
+		if hint.FullwidthTextParen > 0 && hint.LegacyTextFeAscii > 0 {
+			hint.Hints = append(hint.Hints, "legacyTextFeParenContent")
+		}
 		out = append(out, hint)
 	}
 	return out, nil
@@ -145,6 +158,60 @@ func hasFlatParenTemplate(body []byte) bool {
 
 func hasObarTemplate(body []byte) bool {
 	return bytes.Contains(body, []byte{0x03, 0x00, 0x0d, 0x00, 0x00})
+}
+
+func formulaRegion(body []byte) []byte {
+	start := 5
+	for start < len(body) && body[start] != 0 {
+		start++
+	}
+	start = min(len(body), start+2) // application-key terminator and equation options
+	prefs := bytes.IndexByte(body[start:], 0x12)
+	if prefs < 0 {
+		return body[start:]
+	}
+	cursor := start + prefs + 1
+	if cursor >= len(body) {
+		return nil
+	}
+	cursor++ // EQN_PREFS options
+	cursor = skipDimensionArray(body, cursor)
+	cursor = skipDimensionArray(body, cursor)
+	if cursor >= len(body) {
+		return nil
+	}
+	styleCount := int(body[cursor])
+	cursor++
+	for i := 0; i < styleCount && cursor < len(body); i++ {
+		fontDefinition := body[cursor]
+		cursor++
+		if fontDefinition != 0 && cursor < len(body) {
+			cursor++
+		}
+	}
+	return body[min(cursor, len(body)):]
+}
+
+func skipDimensionArray(body []byte, offset int) int {
+	if offset >= len(body) {
+		return len(body)
+	}
+	count := int(body[offset])
+	byteOffset := offset + 1
+	nibbleOffset := 0
+	completed := 0
+	for byteOffset+nibbleOffset/2 < len(body) && completed < count {
+		packed := body[byteOffset+nibbleOffset/2]
+		nibble := packed >> 4
+		if nibbleOffset&1 != 0 {
+			nibble = packed & 0x0f
+		}
+		nibbleOffset++
+		if nibble == 0x0f {
+			completed++
+		}
+	}
+	return min(len(body), byteOffset+(nibbleOffset+1)/2)
 }
 
 func formulaTail(body []byte) []byte {
@@ -237,6 +304,33 @@ func countSeq(data, seq []byte) int {
 	count := 0
 	for i := 0; i+len(seq) <= len(data); i++ {
 		if bytes.Equal(data[i:i+len(seq)], seq) {
+			count++
+		}
+	}
+	return count
+}
+
+func countCharMtcode(data []byte, mtcode uint16) int {
+	count := 0
+	for i := 0; i+4 < len(data); i++ {
+		if data[i] != 0x02 || data[i+1]&0x20 != 0 {
+			continue
+		}
+		if binary.LittleEndian.Uint16(data[i+3:i+5]) == mtcode {
+			count++
+		}
+	}
+	return count
+}
+
+func countPlainChar(data []byte, typeface byte, mtcode uint16) int {
+	return countSeq(data, []byte{0x02, 0x00, typeface, byte(mtcode), byte(mtcode >> 8)})
+}
+
+func countAsciiPlainTypeface(data []byte, typeface byte) int {
+	count := 0
+	for i := 0; i+4 < len(data); i++ {
+		if data[i] == 0x02 && data[i+1] == 0x00 && data[i+2] == typeface && data[i+4] == 0x00 {
 			count++
 		}
 	}

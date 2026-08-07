@@ -10,6 +10,16 @@ class MathIRConverterTest {
     private final LaTeXParser parser = new LaTeXParser();
 
     @Test
+    void leftPrefixedArrowCommandsRemainOperatorsInsteadOfFences() {
+        MathIRNode ir = parser.parseMathIR("\\leftarrowtail+\\leftharpoondown");
+
+        assertEquals(MathIRNode.Type.OPERATOR, ir.child(0).getType());
+        assertEquals("\\leftarrowtail", ir.child(0).getMetadata("latexCommand"));
+        assertEquals(MathIRNode.Type.OPERATOR, ir.child(2).getType());
+        assertEquals("\\leftharpoondown", ir.child(2).getMetadata("latexCommand"));
+    }
+
+    @Test
     void testParseMathIrNormalizesRootsScriptsAndFractions() {
         MathIRNode ir = parser.parseMathIR("\\frac{1}{\\sqrt[3]{x_i}}");
 
@@ -47,6 +57,16 @@ class MathIRConverterTest {
         assertEquals("big-operator", ir.child(0).child(0).getMetadata("role"));
         assertEquals("underover", ir.child(0).child(0).getMetadata("limitPlacement"));
         assertEquals(MathIRNode.Type.SUB, ir.child(1).getType());
+    }
+
+    @Test
+    void testParseMathIrPreservesExplicitNolimitsPlacement() {
+        MathIRNode ir = parser.parseMathIR("\\sum\\nolimits_{i=1}");
+
+        assertEquals(MathIRNode.Type.SUB, ir.child(0).getType());
+        assertEquals(MathIRNode.Type.OPERATOR, ir.child(0).child(0).getType());
+        assertEquals("scripts", ir.child(0).child(0).getMetadata("limitPlacement"));
+        assertEquals("\\nolimits", ir.child(0).child(0).getMetadata("limitCommand"));
     }
 
     @Test
@@ -182,12 +202,14 @@ class MathIRConverterTest {
     }
 
     @Test
-    void testParseMathIrTreatsBoldsymbolAsTextWrapper() {
+    void testParseMathIrTreatsBoldsymbolAsStyleScope() {
         MathIRNode ir = parser.parseMathIR("\\boldsymbol{\\pi}");
 
         assertEquals(MathIRNode.Type.MATH, ir.getType());
         assertTrue(ir.getChildren().stream().noneMatch(node -> node.getType() == MathIRNode.Type.UNSUPPORTED));
-        assertEquals(MathIRNode.Type.TEXT, ir.child(0).getType());
+        assertEquals(MathIRNode.Type.STYLE, ir.child(0).getType());
+        assertEquals("bold", ir.child(0).getMetadata("fontVariant"));
+        assertEquals(MathIRNode.Type.IDENT, ir.child(0).child(0).child(0).getType());
     }
 
     @Test

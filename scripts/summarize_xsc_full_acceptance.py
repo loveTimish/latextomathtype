@@ -91,6 +91,7 @@ def main() -> None:
     covered: list[int] = []
     size_totals: dict[str, int] = {}
     mtef_totals: dict[str, int] = {}
+    exact_mtef_totals: dict[str, int] = {}
     failure_classes: Counter[str] = Counter()
     suspect_classes: Counter[str] = Counter()
     batch_reports = []
@@ -109,12 +110,21 @@ def main() -> None:
 
         size = data["size"]
         mtef = data["mtef"]
+        exact_mtef = data.get("exactMtef") or {}
         add_counts(size_totals, size, [
             "pairedObjects",
             "targetMetricObjects",
             "targetWidthWithin1pct",
             "targetHeightWithin1pct",
             "nonWmfGenerated",
+            "wmfWidthExact",
+            "wmfHeightExact",
+            "shapeWidthExact",
+            "shapeHeightExact",
+            "dxaOrigExact",
+            "dyaOrigExact",
+            "baselineCompared",
+            "baselineExact",
         ])
         add_counts(mtef_totals, mtef, [
             "pairs",
@@ -124,6 +134,13 @@ def main() -> None:
             "acceptedHeaderPrefixPairs",
             "lowTailPairs",
             "lowCoreTailPairs",
+        ])
+        add_counts(exact_mtef_totals, exact_mtef, [
+            "expectedObjects",
+            "generatedObjects",
+            "validGeneratedOle",
+            "normalizedStructureEqual",
+            "rawMtefEqual",
         ])
         failure_classes.update(mtef.get("failureClassCounts") or {})
         suspect_classes.update(mtef.get("suspectClassCounts") or {})
@@ -144,6 +161,17 @@ def main() -> None:
                     "suspectClassCounts",
                 ]
             },
+            "exactMtef": {
+                key: exact_mtef.get(key)
+                for key in [
+                    "expectedObjects",
+                    "generatedObjects",
+                    "validGeneratedOle",
+                    "normalizedStructureEqual",
+                    "rawMtefEqual",
+                    "passed",
+                ]
+            },
         })
 
     expected = set(expected_docs(args.start, args.end))
@@ -157,9 +185,17 @@ def main() -> None:
         "coveredExpectedDocs": not missing_docs and not extra_docs and not duplicate_docs,
         "noMissingSummaryFiles": not missing_files,
         "allGeneratedPreviewsAreWmf": args.allow_non_wmf or int(size_totals.get("nonWmfGenerated") or 0) == 0,
-        "targetWidthWithinThreshold": paired == int(size_totals.get("targetWidthWithin1pct") or 0),
-        "targetHeightWithinThreshold": paired == int(size_totals.get("targetHeightWithin1pct") or 0),
+        "allWmfPhysicalBoundsExact": paired == int(size_totals.get("wmfWidthExact") or 0)
+            and paired == int(size_totals.get("wmfHeightExact") or 0),
+        "allObjectShapeSizesExact": paired == int(size_totals.get("shapeWidthExact") or 0)
+            and paired == int(size_totals.get("shapeHeightExact") or 0),
+        "allOriginalSizesExact": paired == int(size_totals.get("dxaOrigExact") or 0)
+            and paired == int(size_totals.get("dyaOrigExact") or 0),
+        "allBaselinesExact": paired == int(size_totals.get("baselineCompared") or 0)
+            and paired == int(size_totals.get("baselineExact") or 0),
         "mtefPairsMatchSizePairs": paired == int(mtef_totals.get("pairs") or 0),
+        "allGeneratedOleValid": paired == int(exact_mtef_totals.get("validGeneratedOle") or 0),
+        "allNormalizedMtefStructuresEqual": paired == int(exact_mtef_totals.get("normalizedStructureEqual") or 0),
     }
     passed = all(gates.values())
     allowed_prefix = int(suspect_classes.get("source_header_or_style_prefix") or 0)
@@ -185,6 +221,7 @@ def main() -> None:
             "failureClassCounts": dict(sorted(failure_classes.items())),
             "suspectClassCounts": dict(sorted(suspect_classes.items())),
         },
+        "exactMtef": exact_mtef_totals,
         "mtefEffective": {
             "allowedHeaderOrStylePrefixPairs": allowed_prefix,
             "allowedCharStreamStylePairs": allowed_char_stream,

@@ -59,6 +59,60 @@ class LaTeXImageRendererTest {
     }
 
     @Test
+    void shouldRemoveStandaloneAlignmentMarkerBeforeLocalRender() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
+        method.setAccessible(true);
+
+        String normalized = (String) method.invoke(
+            new LaTeXImageRenderer(), "&=20.08\\times (200.9-200.7)");
+
+        assertEquals("=20.08\\times (200.9-200.7)", normalized);
+    }
+
+    @Test
+    void shouldNormalizeLegacyUnbracedBbbToReadableGlyph() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
+        method.setAccessible(true);
+
+        assertEquals("x", method.invoke(new LaTeXImageRenderer(), "\\Bbb x"));
+        assertEquals("\\Bbb{x}", method.invoke(new LaTeXImageRenderer(), "\\Bbb{x}"));
+    }
+
+    @Test
+    void shouldSeparateNestedRadicalDegreeBeforeLocalRender() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
+        method.setAccessible(true);
+
+        String normalized = (String) method.invoke(new LaTeXImageRenderer(),
+            "\\sqrt[1+\\sqrt[2]{3}+4]{5}-\\sqrt[6]{7}");
+
+        assertEquals("{}^{1+\\sqrt[2]{3}+4}\\!\\sqrt{5}-\\sqrt[6]{7}", normalized);
+    }
+
+    @Test
+    void shouldRenderLegacyUnbracedBbbAsReadableDoubleStruckGlyph() {
+        LaTeXImageRenderer.PreviewImage preview =
+            new LaTeXImageRenderer().renderForOlePreview("\\Bbb x");
+
+        assertEquals("wmf", preview.extension());
+        WmfPreviewInspector.Inspection inspection = WmfPreviewInspector.inspect(preview.data());
+        assertTrue(inspection.valid());
+        assertTrue(inspection.foregroundPixels() > 0);
+    }
+
+    @Test
+    void shouldHoistStyleWrappedArrayAlignmentMarkerBeforeLocalRender() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
+        method.setAccessible(true);
+
+        String normalized = (String) method.invoke(new LaTeXImageRenderer(),
+            "\\begin{array}{l}21x\\mathbf{&=}140\\\\20x\\mathbf{&=}65\\end{array}");
+
+        assertFalse(normalized.contains("\\mathbf{&="));
+        assertTrue(normalized.contains("x&\\mathbf{=}"));
+    }
+
+    @Test
     void shouldReplaceCompositeLongDivisionHeaderInsideSingleBlock() throws Exception {
         Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
         method.setAccessible(true);
@@ -71,6 +125,27 @@ class LaTeXImageRendererTest {
         assertTrue(normalized.contains("\\overset{570}{\\overline{\\left)3420\\right.}}"), "预览图应保留长除法头部");
         assertTrue(normalized.contains("\\begin{array}{l}"), "单块复合长除法的步骤区应继续保留");
         assertTrue(normalized.contains("\\underline{30}"), "显式步骤区应继续进入预览渲染");
+    }
+
+    @Test
+    void shouldEscapeRawUnicodeSymbolsForMathJaxWithoutChangingText() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
+        method.setAccessible(true);
+
+        String normalized = (String) method.invoke(new LaTeXImageRenderer(),
+            "\\begin{array}{r}2.30€\\\\中文𝛼\\end{array}");
+
+        assertEquals("\\begin{array}{r}2.30\\unicode{x20AC}\\\\中文\\unicode{x1D6FC}\\end{array}", normalized);
+    }
+
+    @Test
+    void shouldRenderEuroArrayAsEditableOlePreview() {
+        LaTeXImageRenderer.PreviewImage preview = new LaTeXImageRenderer().renderForOlePreview(
+            "\\begin{array}{r}2.30€\\\\55.60€\\\\1001.00€\\end{array}");
+
+        assertEquals("wmf", preview.extension());
+        assertFalse(preview.placeholder());
+        assertTrue(preview.data().length > 0);
     }
 
     @Test

@@ -9,14 +9,22 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$resolvedDocx = [IO.Path]::GetFullPath((Join-Path (Get-Location) $OutDocx))
+function Resolve-OutputPath {
+    param([string]$Path)
+    if ([IO.Path]::IsPathRooted($Path)) {
+        return [IO.Path]::GetFullPath($Path)
+    }
+    return [IO.Path]::GetFullPath((Join-Path (Get-Location) $Path))
+}
+
+$resolvedDocx = Resolve-OutputPath $OutDocx
 $docxDir = Split-Path -Parent $resolvedDocx
 New-Item -ItemType Directory -Force -Path $docxDir | Out-Null
 
 if ([string]::IsNullOrWhiteSpace($OutSourceReport)) {
     $OutSourceReport = [IO.Path]::ChangeExtension($resolvedDocx, ".source-report.json")
 }
-$resolvedReport = [IO.Path]::GetFullPath((Join-Path (Get-Location) $OutSourceReport))
+$resolvedReport = Resolve-OutputPath $OutSourceReport
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $resolvedReport) | Out-Null
 
 $word = New-Object -ComObject Word.Application
@@ -24,18 +32,40 @@ $word.Visible = [bool]$Visible
 $word.DisplayAlerts = 0
 $word.ScreenUpdating = [bool]$Visible
 $doc = $null
+function Convert-ToTexToggleInput {
+    param([string]$Tex)
+    if ($Tex -match '^\\mbox\{(\\(?:tiny|scriptsize|footnotesize|small|normalsize|large|Large|LARGE|huge|Huge))?\$([^$]+)\$\}(.*)$') {
+        $size = [string]$Matches[1]
+        $math = [string]$Matches[2]
+        $tail = [string]$Matches[3]
+        $separator = if ([string]::IsNullOrEmpty($size)) { '' } else { ' ' }
+        return '{' + $size + $separator + $math + '}' + $tail
+    }
+    return $Tex
+}
+
 try {
     $doc = $word.Documents.Add()
     $equations = @()
     $mathTypeOleCount = 0
     foreach ($tex in $Formula) {
+        $texToggleInput = Convert-ToTexToggleInput $tex
         $selection = $word.Selection
         $selection.EndKey(6) | Out-Null
         if ($doc.Content.End -gt 1) {
             $selection.TypeParagraph()
         }
+        # TeXToggle inherits the current Word insertion formatting. Force the
+        # reference input to Word's automatic (black) color so UI state from a
+        # previous document cannot leak COLOR records into the golden object.
+        $selection.Font.Color = -16777216
         $start = $selection.Start
-        $wrapped = '$' + $tex + '$'
+        $wrapped = if ($texToggleInput -match '^\$\$[\s\S]*\$\$$' -or
+            $texToggleInput -match '^\$(?!\$)[\s\S]*\$$') {
+            $texToggleInput
+        } else {
+            '$' + $texToggleInput + '$'
+        }
         $selection.TypeText($wrapped)
         $end = $selection.Start
         $range = $doc.Range($start, $end)
@@ -68,6 +98,7 @@ try {
             inlineShapeIndex = $doc.InlineShapes.Count
             formulaIndex = $mathTypeOleCount - 1
             output = $tex
+            texToggleInput = $texToggleInput
             status = "word-mathtype-tex-toggle"
             progId = "Equation.DSMT4"
             widthPt = [Math]::Round([double]$createdShape.Width, 3)

@@ -82,6 +82,7 @@ public class LayoutDocumentRequest {
         private Integer indentLeftTwips;
         private Integer spacingBeforeTwips;
         private Integer spacingAfterTwips;
+        private Double lineSpacingMultiple;
     }
 
     public enum Alignment {

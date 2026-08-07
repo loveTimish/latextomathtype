@@ -22,6 +22,7 @@ public class MathIRNode {
         NUMBER,
         OPERATOR,
         TEXT,
+        STYLE,
         FRACTION,
         SQRT,
         ROOT,

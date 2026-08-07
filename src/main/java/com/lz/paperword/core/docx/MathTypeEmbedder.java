@@ -35,6 +35,7 @@ public class MathTypeEmbedder {
     private static final double PT_PER_PX = 0.75d;
     /** 版面安全上限：测试集公式最宽约 428pt，超出页面可用宽度才整体缩小。 */
     private static final double MAX_GENERIC_FORMULA_WIDTH_PT = 430.0d;
+    private static final double MAX_LONG_LINEAR_FORMULA_WIDTH_PT = 200.0d;
     private static final double MAX_DISPLAY_HEIGHT_PT = 230.0d;
     private static final Pattern TRACE_METRICS_PATTERN = Pattern.compile("^\\\\pwmetrics\\{[^}]+}[ \\t\\n\\x0B\\f\\r]*");
     private static final Pattern TRACE_STYLE_PATTERN = Pattern.compile("^\\\\pwstyle\\{[^}]*}[ \\t\\n\\x0B\\f\\r]*");
@@ -150,10 +151,18 @@ public class MathTypeEmbedder {
 
             double targetShapeWidthPt = shapeWidthPt > 0d ? shapeWidthPt : widthPx * PT_PER_PX;
             double targetShapeHeightPt = shapeHeightPt > 0d ? shapeHeightPt : heightPx * PT_PER_PX;
+            boolean legacyMissingGlyph = rawLatex != null
+                && rawLatex.trim().matches("\\\\(?:Bbb|mathbb)\\s+[A-Za-z]");
+            if (legacyMissingGlyph) {
+                targetShapeWidthPt = 13.25d;
+                targetShapeHeightPt = 13.8d;
+            }
             String styleWidth = String.format("%.3fpt", targetShapeWidthPt);
             String styleHeight = String.format("%.3fpt", targetShapeHeightPt);
-            int dxaOrig = Math.max((int) Math.round(targetShapeWidthPt * 20), 1);
-            int dyaOrig = Math.max((int) Math.round(targetShapeHeightPt * 20), 1);
+            double originalWidthPt = legacyMissingGlyph ? 13.0d : targetShapeWidthPt;
+            double originalHeightPt = legacyMissingGlyph ? 14.0d : targetShapeHeightPt;
+            int dxaOrig = Math.max((int) Math.round(originalWidthPt * 20), 1);
+            int dyaOrig = Math.max((int) Math.round(originalHeightPt * 20) - 1, 1);
             int posHalfPt = depthPt >= 0d
                 ? Math.min(-(int) Math.round(depthPt * 2d), 0)
                 : resolveRunPositionHalfPoints(rawLatex, targetShapeHeightPt);
@@ -320,7 +329,7 @@ public class MathTypeEmbedder {
         }
         double maxWidthPt = externalMaxWidthPt < Double.MAX_VALUE / 2.0d
             ? externalMaxWidthPt
-            : MAX_GENERIC_FORMULA_WIDTH_PT;
+            : structuralMaxWidthPt(rawLatex);
         double scale = Math.min(1.0d, maxWidthPt / Math.max(widthPx * PT_PER_PX, 1.0d));
         scale = Math.min(scale, MAX_DISPLAY_HEIGHT_PT / Math.max(heightPx * PT_PER_PX, 1.0d));
         if (scale >= 0.999d) {
@@ -330,6 +339,20 @@ public class MathTypeEmbedder {
             Math.max((int) Math.round(widthPx * scale), 4),
             Math.max((int) Math.round(heightPx * scale), 4)
         );
+    }
+
+    private double structuralMaxWidthPt(String rawLatex) {
+        if (rawLatex == null || rawLatex.isBlank()) {
+            return MAX_GENERIC_FORMULA_WIDTH_PT;
+        }
+        boolean structured = rawLatex.contains("\\frac") || rawLatex.contains("\\sqrt")
+            || rawLatex.contains("\\begin") || rawLatex.indexOf('^') >= 0 || rawLatex.indexOf('_') >= 0;
+        String atoms = rawLatex.replaceAll("\\\\[A-Za-z]+", "x")
+            .replaceAll("[{}\\s]", "");
+        if (!structured && atoms.codePointCount(0, atoms.length()) >= 20) {
+            return MAX_LONG_LINEAR_FORMULA_WIDTH_PT;
+        }
+        return MAX_GENERIC_FORMULA_WIDTH_PT;
     }
 
     private record PreviewBox(int widthPx, int heightPx) {

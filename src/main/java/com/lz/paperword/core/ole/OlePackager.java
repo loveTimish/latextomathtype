@@ -15,6 +15,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.HexFormat;
 
 /**
  * 将 MTEF 二进制数据打包为 MathType OLE2 复合文档（Microsoft Structured Storage 格式）。
@@ -109,7 +110,7 @@ public class OlePackager {
 
             // 2. 写入 "\001CompObj" 流 — COM 对象标识，包含 ProgID "Equation.DSMT4"
             //    Word 根据此流判断嵌入对象类型并关联 MathType 编辑器
-            fs.createDocument(new ByteArrayInputStream(createCompObjStream()),
+            fs.createDocument(new ByteArrayInputStream(createCompObjStream(isMathType7Mtef(mtefData))),
                 "\u0001CompObj");
 
             // 3. 写入 "Equation Native" 流 — 28 字节 EQNOLEFILEHDR 头 + MTEF 二进制数据
@@ -183,7 +184,8 @@ public class OlePackager {
                 if (root.hasEntry("\u0001CompObj")) {
                     root.getEntry("\u0001CompObj").delete();
                 }
-                root.createDocument("\u0001CompObj", new ByteArrayInputStream(createCompObjStream()));
+                root.createDocument("\u0001CompObj",
+                    new ByteArrayInputStream(createCompObjStream(isMathType7Mtef(mtefData))));
 
                 // 创建新的 "Equation Native" 流：保留模板头部 + 替换 MTEF 数据负载
                 root.createDocument("Equation Native",
@@ -238,7 +240,7 @@ public class OlePackager {
      * <p>CompObj 流是 OLE 规范中定义的对象标识流，Word 通过读取此流来确定
      * 嵌入对象的类型和关联的编辑程序。该流包含三个关键信息：</p>
      * <ul>
-     *   <li><b>AnsiUserType</b> — 人类可读的类型名称 "MathType 6.0 Equation"，
+     *   <li><b>AnsiUserType</b> — 人类可读的类型名称 "MathType 7.0 Equation"，
      *       在 Word 的"对象属性"对话框中显示</li>
      *   <li><b>AnsiClipboardFormat</b> — 剪贴板格式标识（此处为 0，表示无注册格式）</li>
      *   <li><b>AnsiProgID</b> — 程序标识符 "Equation.DSMT4"，Word 通过此字符串
@@ -256,7 +258,7 @@ public class OlePackager {
      * @return CompObj 流的字节数据
      * @throws IOException 写入内部缓冲区失败时抛出
      */
-    private byte[] createCompObjStream() throws IOException {
+    private byte[] createCompObjStream(boolean mathType7) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream(256);
 
         // === 12 字节头部（OLE2 规范：reserved1 + version + reserved2）===
@@ -274,7 +276,7 @@ public class OlePackager {
             (byte) 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46});
 
         // AnsiUserType：人类可读的对象类型名称（在 Word 对象属性中显示）
-        writeAnsiString(out, "MathType 6.0 Equation");
+        writeAnsiString(out, mathType7 ? "MathType 7.0 Equation" : "MathType 6.0 Equation");
 
         // AnsiClipboardFormat：注册剪贴板格式名 "MathType EF"——
         // MathType 服务器靠它定位 Equation Native 数据格式，写 0 会被拒
@@ -318,6 +320,9 @@ public class OlePackager {
      * @return 完整的 "Equation Native" 流字节数据（28 字节头 + MTEF 负载）
      */
     private byte[] createEquationNativeStream(byte[] mtefData) {
+        if (isMathType7Mtef(mtefData)) {
+            return createPinnedMathType7EquationNativeStream(mtefData);
+        }
         int hdrSize = 28;
         ByteBuffer buf = ByteBuffer.allocate(hdrSize + mtefData.length).order(ByteOrder.LITTLE_ENDIAN);
         buf.putShort((short) hdrSize);      // cbHdr：头部大小 = 28
@@ -346,23 +351,33 @@ public class OlePackager {
      * @return 组装后的 "Equation Native" 流字节数据
      */
     private byte[] createEquationNativeStreamFromTemplate(byte[] templateEquationNative, byte[] mtefData) {
-        // 模板数据不可用或不足以包含完整头部时，退化为从零构建
-        if (templateEquationNative == null || templateEquationNative.length < 28) {
-            return createEquationNativeStream(mtefData);
+        if (!isMathType7Mtef(mtefData)) {
+            if (templateEquationNative == null || templateEquationNative.length < 28) {
+                return createEquationNativeStream(mtefData);
+            }
+            int hdrSize = Short.toUnsignedInt(ByteBuffer.wrap(templateEquationNative, 0, 2)
+                .order(ByteOrder.LITTLE_ENDIAN).getShort());
+            if (hdrSize < 12 || templateEquationNative.length < hdrSize) {
+                return createEquationNativeStream(mtefData);
+            }
+            byte[] out = new byte[hdrSize + mtefData.length];
+            System.arraycopy(templateEquationNative, 0, out, 0, hdrSize);
+            ByteBuffer.wrap(out, 8, 4).order(ByteOrder.LITTLE_ENDIAN).putInt(mtefData.length);
+            System.arraycopy(mtefData, 0, out, hdrSize, mtefData.length);
+            return out;
         }
+        return createPinnedMathType7EquationNativeStream(mtefData);
+    }
 
-        // 从模板头部前 2 字节读取 cbHdr（头部大小）
-        ByteBuffer hdrLenBuf = ByteBuffer.wrap(templateEquationNative, 0, 2).order(ByteOrder.LITTLE_ENDIAN);
-        int hdrSize = Short.toUnsignedInt(hdrLenBuf.getShort());
-
-        // 头部大小不合理时退化
-        if (hdrSize < 12 || templateEquationNative.length < hdrSize) {
-            return createEquationNativeStream(mtefData);
-        }
-
-        // 复制模板头部，追加新的 MTEF 数据
+    private byte[] createPinnedMathType7EquationNativeStream(byte[] mtefData) {
+        // Pinned from MathType 7.11.1.462. The bundled display template predates MathType 7;
+        // retaining its container header while emitting MathType 7 typefaces can make Format
+        // Equations loop indefinitely. cbObject at offset 8 is the only formula-dependent field.
+        byte[] mathType7Header = HexFormat.of().parseHex(
+            "1c0000000200f1c308010000000000005c75e6080d3bdd000c001f08");
+        int hdrSize = mathType7Header.length;
         byte[] out = new byte[hdrSize + mtefData.length];
-        System.arraycopy(templateEquationNative, 0, out, 0, hdrSize);
+        System.arraycopy(mathType7Header, 0, out, 0, hdrSize);
 
         // 更新 cbObject 字段（EQNOLEFILEHDR 偏移 8 处的 DWORD）为新 MTEF 数据长度
         ByteBuffer.wrap(out, 8, 4).order(ByteOrder.LITTLE_ENDIAN).putInt(mtefData.length);
@@ -370,6 +385,10 @@ public class OlePackager {
         // 将新的 MTEF 数据写入头部之后
         System.arraycopy(mtefData, 0, out, hdrSize, mtefData.length);
         return out;
+    }
+
+    private boolean isMathType7Mtef(byte[] mtefData) {
+        return mtefData != null && mtefData.length > 4 && Byte.toUnsignedInt(mtefData[3]) >= 7;
     }
 
     /**

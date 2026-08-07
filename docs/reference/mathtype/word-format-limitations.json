@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "environment": {
+    "mathTypeVersion": "7.11.1.462",
+    "wordVersion": "16.0.20228.20124"
+  },
+  "selectionGroups": [
+    {
+      "name": "root-operator-over-fraction-batch",
+      "globalIndices": [169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180],
+      "evidence": "The 12-object batch deadlocks in WholeDocument mode and completes all 12 editable objects in 34.4 seconds with ChunkSize 1.",
+      "reason": "Isolate adjacent root, operator-name, and infix-over templates from MathType 7.11 cross-object formatter state."
+    },
+    {
+      "name": "over-under-arrow-batch",
+      "globalIndices": [183, 184],
+      "evidence": "Both complex arrow objects format individually and the original batch completes in 8.3 seconds with ChunkSize 1, while WholeDocument deadlocks.",
+      "reason": "Isolate adjacent over/under and labeled-arrow template state in MathType 7.11."
+    },
+    {
+      "name": "sideset-labeled-arrow-batch",
+      "globalIndices": [193, 194],
+      "evidence": "Both objects format individually and the original batch completes in 8.3 seconds with ChunkSize 1, while WholeDocument deadlocks.",
+      "reason": "Isolate sideset pre/post scripts from the following labeled-arrow template state."
+    }
+  ],
+  "shardGroups": [
+    {
+      "name": "special-symbol-greek-pair",
+      "globalIndices": [6, 7],
+      "evidence": "The special-symbol and uppercase-Greek pair deadlocks in WholeDocument mode and on its first Selection chunk after standard dynamic font binding is applied.",
+      "reason": "Format the two font-definition-heavy objects in isolated Word and PowerShell processes, then merge them in source order."
+    },
+    {
+      "name": "mbox-size-fence-pair",
+      "globalIndices": [144, 145],
+      "evidence": "The mbox size/script object completes individually in 12.6 seconds, while its adjacent fence batch deadlocks in WholeDocument mode.",
+      "reason": "Isolate mbox size state from the following explicit fence object."
+    },
+    {
+      "name": "left-aligned-single-column-arrays",
+      "globalIndices": [39, 40],
+      "evidence": "The two-object batch remained blocked for more than four minutes after both objects were regenerated with the pinned MathType matrix alignment header.",
+      "reason": "Format each left-aligned single-column matrix in an independent Word and MathType process to prevent cross-object matrix state deadlock."
+    },
+    {
+      "name": "partitioned-array-pair",
+      "globalIndices": [44, 45],
+      "evidence": "The two-object array batch remained in MTCommand_FormatEqns for more than one minute after regeneration with desktop matrix headers.",
+      "reason": "Refresh each partitioned array and its WMF in a separate Word and MathType process."
+    },
+    {
+      "name": "fenced-matrix-batch",
+      "globalIndices": [47, 48, 49, 50],
+      "evidence": "These four adjacent formulas all contain matrix records and follow the same cross-object formatter state path that blocked the preceding regenerated array batches.",
+      "reason": "Isolate each fenced matrix so its alignment state and WMF are rebuilt in a fresh desktop MathType process."
+    },
+    {
+      "name": "bracketed-matrix-pair",
+      "globalIndices": [55, 56],
+      "evidence": "The adjacent row and column bmatrix objects share the matrix formatter state implicated by the preceding blocked batches.",
+      "reason": "Format the row and column matrices independently to prevent shape-state carryover."
+    },
+    {
+      "name": "equivalent-radical-delimiter-forms",
+      "globalIndices": [196, 197, 198, 199, 200],
+      "evidence": "The radical objects format individually, but WholeDocument and repeated Selection formatting deadlock when adjacent radical forms share one Word document.",
+      "reason": "Format each editable OLE in a one-object DOCX and merge the formatted objects back in source order."
+    },
+    {
+      "name": "empty-root-stackrel-pair",
+      "globalIndices": [207, 208],
+      "evidence": "Both project-generated editable OLE objects complete individually in 13.8 and 10.8 seconds, while WholeDocument and repeated Selection formatting deadlock for the adjacent pair.",
+      "reason": "Format the empty radical and following stackrel object in separate one-object DOCX files, then merge them in source order."
+    },
+    {
+      "name": "text-inline-math-pair",
+      "globalIndices": [217, 218],
+      "evidence": "The text and nested-inline-math objects complete individually in 15.2 and 10.8 seconds, while WholeDocument formatting deadlocks for the adjacent pair.",
+      "reason": "Isolate MathType text-mode formatter state in one-object DOCX files and merge the editable objects in source order."
+    },
+    {
+      "name": "text-mode-corpus-batch",
+      "globalIndices": [220, 221, 222, 223],
+      "evidence": "The four-object text batch deadlocks in WholeDocument mode and on its first Selection chunk; one-object shards provide independent completion reports before merge.",
+      "reason": "Isolate long text, escaped text symbols, and text subscripts from cross-object MathType formatter state."
+    },
+    {
+      "name": "text-font-fraction-batch",
+      "globalIndices": [226, 227, 228, 229],
+      "evidence": "The adjacent textrm, text fraction, and typewriter objects deadlock in WholeDocument mode; each one-object shard must complete before merge.",
+      "reason": "Isolate text font and fraction state transitions in separate Word documents."
+    },
+    {
+      "name": "underbrace-underset-pair",
+      "globalIndices": [230, 231],
+      "evidence": "The adjacent underbrace and underset objects deadlock in WholeDocument mode; each one-object shard must complete before merge.",
+      "reason": "Isolate lower annotation template state between the two editable objects."
+    },
+    {
+      "name": "labeled-arrow-final-batch",
+      "globalIndices": [235, 236, 237],
+      "evidence": "The final labeled-arrow batch deadlocks in WholeDocument mode and on its first Selection chunk; each one-object shard must complete before merge.",
+      "reason": "Isolate repeated and extended labeled-arrow template state in separate Word documents."
+    },
+    {
+      "name": "layout-sensitive-standard-preferences",
+      "globalIndices": [78, 88, 101, 119, 134, 204],
+      "evidence": "A one-object indexed-root run with the pinned 12pt clipboard preference object reached SSIM=1.0 and foreground IoU=1.0, while the same normalized MTEF formatted as the third object retained the preceding objects' layout state.",
+      "reason": "Isolate fraction, limit, and indexed-root families whose WMF layout inherits cross-object MathType formatter state."
+    }
+  ],
+  "limitations": [
+    {
+      "globalIndex": 3,
+      "formula": "\\Bbb x",
+      "mode": "preserve",
+      "evidence": "The one-object DOCX generated by MathType TeXToggle also times out after 120 seconds in MTCommand_FormatEqns.",
+      "reason": "MathType 7.11 Format Equations cannot complete for its own editable reference object."
+    },
+    {
+      "globalIndex": 9,
+      "formula": "\\eth, \\Finv, \\Game, \\geqq, \\geqslant, \\ggg, \\gggtr, \\gnapprox, \\gneq, \\gneqq, \\gnsim, \\gt, \\gtrapprox, \\gtreqless, \\gtreqqless, \\gtrless, \\gtrsim, \\gvertneqq",
+      "mode": "preserve",
+      "evidence": "Confirmed as unsupported by the pinned MathType formatter during the official ordered-corpus run.",
+      "reason": "Preserve the editable project OLE instead of allowing this formula to lock the Word batch."
+    },
+    {
+      "globalIndex": 137,
+      "formula": "\\int^x_a sin(x)",
+      "mode": "selection",
+      "evidence": "The four-object integral batch deadlocks in WholeDocument mode; every object and the original batch complete with ChunkSize 1.",
+      "reason": "Format adjacent integral objects through Word selection ranges to avoid MathType 7.11 cross-object state leakage."
+    },
+    {
+      "globalIndex": 138,
+      "formula": "\\int_0^1\\sin x\\operatorname dx",
+      "mode": "selection",
+      "evidence": "The four-object integral batch deadlocks in WholeDocument mode; every object and the original batch complete with ChunkSize 1.",
+      "reason": "Format adjacent integral objects through Word selection ranges to avoid MathType 7.11 cross-object state leakage."
+    },
+    {
+      "globalIndex": 139,
+      "formula": "\\int_0^1x^2dx",
+      "mode": "selection",
+      "evidence": "The four-object integral batch deadlocks in WholeDocument mode; every object and the original batch complete with ChunkSize 1.",
+      "reason": "Format adjacent integral objects through Word selection ranges to avoid MathType 7.11 cross-object state leakage."
+    },
+    {
+      "globalIndex": 140,
+      "formula": "\\int_{\\partial D}f(z)dz",
+      "mode": "selection",
+      "evidence": "The four-object integral batch deadlocks in WholeDocument mode; every object and the original batch complete with ChunkSize 1.",
+      "reason": "Format adjacent integral objects through Word selection ranges to avoid MathType 7.11 cross-object state leakage."
+    },
+    {
+      "globalIndex": 149,
+      "formula": "\\overline{\\left)x\\right.}",
+      "mode": "selection",
+      "evidence": "Both objects in the batch format individually and the original batch completes with ChunkSize 1, while WholeDocument deadlocks.",
+      "reason": "Keep one-sided fence formatting isolated from the following styled radical object."
+    },
+    {
+      "globalIndex": 150,
+      "formula": "\\style{font-size:22px}{\\sqrt{32\\mathbf5\\left|\\mathbf{46}\\right|}}",
+      "mode": "selection",
+      "evidence": "Both objects in the batch format individually and the original batch completes with ChunkSize 1, while WholeDocument deadlocks.",
+      "reason": "Keep explicit-size radical formatting isolated from the preceding one-sided fence object."
+    }
+  ]
+}

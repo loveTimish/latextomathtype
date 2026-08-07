@@ -109,7 +109,11 @@ public class MtefTemplateBuilder {
      * @throws IOException 写入异常
      */
     public static void writeFractionHeader(ByteArrayOutputStream out) throws IOException {
-        writeTemplateHeader(out, MtefRecord.TM_FRACT, 0x00, 0x00);
+        writeFractionHeader(out, 0x00);
+    }
+
+    public static void writeFractionHeader(ByteArrayOutputStream out, int variation) throws IOException {
+        writeTemplateHeader(out, MtefRecord.TM_FRACT, variation, 0x00);
     }
 
     // ===== 根号模板（Roots）=====
@@ -317,6 +321,14 @@ public class MtefTemplateBuilder {
         writeTemplateHeader(out, MtefRecord.TM_INTOP, variation, 0x00);
     }
 
+    public static void writeSideLimitSumHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper)
+            throws IOException {
+        int variation = 0;
+        if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
+        if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;
+        writeTemplateHeader(out, MtefRecord.TM_SUM, variation, 0x00);
+    }
+
     public static void writeSummationStyleBigOpHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
         int variation = MtefRecord.TV_BO_SUM;  // 求和式排布（与 tmSUM/tmSUMOP 实测一致）
         if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
@@ -326,6 +338,16 @@ public class MtefTemplateBuilder {
 
     public static void writeLimitHeader(ByteArrayOutputStream out, boolean hasLower, boolean hasUpper) throws IOException {
         int variation = MtefRecord.TV_BO_SUM;
+        if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
+        if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;
+        writeTemplateHeader(out, MtefRecord.TM_LIM, variation, 0x00);
+    }
+
+    /** MathType native mathop/limits form, which does not set TV_BO_SUM. */
+    public static void writeMathOperatorLimitHeader(ByteArrayOutputStream out,
+                                                    boolean hasLower,
+                                                    boolean hasUpper) throws IOException {
+        int variation = 0;
         if (hasLower) variation |= MtefRecord.TV_BO_LOWER;
         if (hasUpper) variation |= MtefRecord.TV_BO_UPPER;
         writeTemplateHeader(out, MtefRecord.TM_LIM, variation, 0x00);
@@ -521,14 +543,32 @@ public class MtefTemplateBuilder {
                                         boolean pointsLeft,
                                         boolean hasTop,
                                         boolean hasBottom) throws IOException {
-        int variation = MtefRecord.TV_AR_SINGLE;
+        writeArrowHeader(out, "single", pointsLeft, !pointsLeft, hasTop, hasBottom);
+    }
+
+    public static void writeArrowHeader(ByteArrayOutputStream out,
+                                        String variant,
+                                        boolean pointsLeft,
+                                        boolean pointsRight,
+                                        boolean hasTop,
+                                        boolean hasBottom) throws IOException {
+        int variation = switch (variant == null ? "single" : variant) {
+            case "double" -> MtefRecord.TV_AR_DOUBLE;
+            case "harpoon" -> MtefRecord.TV_AR_HARPOON;
+            default -> MtefRecord.TV_AR_SINGLE;
+        };
         if (hasTop) {
             variation |= MtefRecord.TV_AR_TOP;
         }
         if (hasBottom) {
             variation |= MtefRecord.TV_AR_BOTTOM;
         }
-        variation |= pointsLeft ? MtefRecord.TV_AR_LEFT : MtefRecord.TV_AR_RIGHT;
+        if (pointsLeft) {
+            variation |= MtefRecord.TV_AR_LEFT;
+        }
+        if (pointsRight) {
+            variation |= MtefRecord.TV_AR_RIGHT;
+        }
         writeTemplateHeader(out, MtefRecord.TM_ARROW, variation, 0x00);
     }
 
@@ -542,7 +582,11 @@ public class MtefTemplateBuilder {
      * @throws IOException 写入异常
      */
     public static void writeVecHeader(ByteArrayOutputStream out) throws IOException {
-        writeTemplateHeader(out, MtefRecord.TM_VEC, MtefRecord.TV_VE_RIGHT, 0x00);
+        writeVecHeader(out, MtefRecord.TV_VE_RIGHT);
+    }
+
+    public static void writeVecHeader(ByteArrayOutputStream out, int variation) throws IOException {
+        writeTemplateHeader(out, MtefRecord.TM_VEC, variation, 0x00);
     }
 
     /**

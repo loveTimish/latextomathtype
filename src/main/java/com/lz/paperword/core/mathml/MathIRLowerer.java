@@ -19,6 +19,7 @@ public class MathIRLowerer {
             case SEQUENCE -> lowerContainer(node, LaTeXNode.Type.GROUP);
             case IDENT, NUMBER, OPERATOR -> lowerToken(node);
             case TEXT -> lowerText(node);
+            case STYLE -> lowerStyle(node);
             case FRACTION -> lowerFraction(node);
             case SQRT -> lowerSqrt(node);
             case ROOT -> lowerRoot(node);
@@ -76,6 +77,17 @@ public class MathIRLowerer {
         return text;
     }
 
+    private LaTeXNode lowerStyle(MathIRNode node) {
+        String command = node.getMetadata("latexCommand");
+        LaTeXNode style = new LaTeXNode(LaTeXNode.Type.STYLE,
+            command == null ? node.getValue() : command);
+        copyMetadata(node, style);
+        for (MathIRNode child : node.getChildren()) {
+            style.addChild(lower(child));
+        }
+        return style;
+    }
+
     private LaTeXNode lowerFraction(MathIRNode node) {
         LaTeXNode fraction = new LaTeXNode(LaTeXNode.Type.FRACTION, "\\frac");
         copyMetadata(node, fraction);
@@ -129,6 +141,9 @@ public class MathIRLowerer {
     }
 
     private LaTeXNode lowerUnder(MathIRNode node) {
+        if ("\\underset".equals(node.getMetadata("latexCommand"))) {
+            return lowerOverUnderSet(node, "\\underset");
+        }
         String accentCommand = node.getMetadata("accentCommand");
         if (accentCommand != null && !accentCommand.isBlank()) {
             LaTeXNode command = new LaTeXNode(LaTeXNode.Type.COMMAND, accentCommand);
@@ -147,6 +162,9 @@ public class MathIRLowerer {
     }
 
     private LaTeXNode lowerOver(MathIRNode node) {
+        if ("\\overset".equals(node.getMetadata("latexCommand"))) {
+            return lowerOverUnderSet(node, "\\overset");
+        }
         String accentCommand = node.getMetadata("accentCommand");
         if (accentCommand != null && !accentCommand.isBlank()) {
             LaTeXNode command = new LaTeXNode(LaTeXNode.Type.COMMAND, accentCommand);
@@ -162,6 +180,14 @@ public class MathIRLowerer {
             return sup;
         }
         return lowerBigOperatorScript(node, true);
+    }
+
+    private LaTeXNode lowerOverUnderSet(MathIRNode node, String command) {
+        LaTeXNode lowered = new LaTeXNode(LaTeXNode.Type.COMMAND, command);
+        copyMetadata(node, lowered);
+        lowered.addChild(lowerArgument(node.child(1)));
+        lowered.addChild(lowerArgument(node.child(0)));
+        return lowered;
     }
 
     private LaTeXNode lowerUnderOver(MathIRNode node) {
@@ -204,7 +230,7 @@ public class MathIRLowerer {
             case "⟦" -> "\\left\\llbracket";
             case "⟧" -> "\\left\\rrbracket";
             case "|" -> "\\left|";
-            case "||" -> "\\left\\lVert";
+            case "||", "\\|", "\\Vert", "\\lVert", "\\rVert" -> "\\left\\lVert";
             case "⌊" -> "\\left\\lfloor";
             case "⌋" -> "\\left\\rfloor";
             case "⌈" -> "\\left\\lceil";

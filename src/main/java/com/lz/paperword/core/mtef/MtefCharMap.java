@@ -1,5 +1,9 @@
 package com.lz.paperword.core.mtef;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -64,13 +68,53 @@ public final class MtefCharMap {
      * @param typeface 字型样式 ID，对应 {@link MtefRecord} 中的 FN_* 常量
      * @param mtcode   MathType 字符码，通常为 Unicode 码点
      */
-    public record CharEntry(int typeface, int mtcode) {}
+    public static final int AUTO_BITS8 = -2;
+
+    public record CharEntry(int typeface, int mtcode, int bits8, String dynamicFontProfile) {
+        public CharEntry(int typeface, int mtcode, int bits8) {
+            this(typeface, mtcode, bits8, null);
+        }
+
+        public CharEntry(int typeface, int mtcode) {
+            this(typeface, mtcode, AUTO_BITS8, null);
+        }
+    }
+
+    public enum MappingSource {
+        CURATED,
+        PINNED_MATHTYPE,
+        GENERATED_MATHJAX,
+        PROVISIONAL,
+        BUILTIN
+    }
+
+    public record EncodingProfile(
+        String latex,
+        int typeface,
+        int mtcode,
+        int bits8,
+        MappingSource source,
+        boolean mathTypeVerified
+    ) {}
 
     /**
      * 核心映射表：LaTeX 命令/字符字符串 → MTEF 字符条目。
      * 使用 HashMap 实现 O(1) 查找性能。
      */
     private static final Map<String, CharEntry> LATEX_TO_MTEF = new HashMap<>();
+    private static final Map<String, MappingSource> MAPPING_SOURCES = new HashMap<>();
+    private static final java.util.Set<String> MATHTYPE_VERIFIED_COMMANDS = new java.util.HashSet<>(java.util.Set.of(
+        "\\times", "\\nearrow", "\\searrow", "\\swarrow", "\\nwarrow",
+        "\\int", "\\sum", "\\prod", "\\oint",
+        "\\cdot", "\\cdots", "\\div", "\\sim", "\\vdots",
+        "\\Alpha", "\\Beta", "\\Gamma", "\\Delta", "\\Epsilon", "\\Zeta",
+        "\\Eta", "\\Theta", "\\Iota", "\\Kappa", "\\Lambda", "\\Xi",
+        "\\Pi", "\\Rho", "\\Sigma", "\\Tau", "\\Upsilon", "\\Phi",
+        "\\Chi", "\\Psi", "\\Omega",
+        "\\bowtie", "\\cong", "\\sqsubset", "\\sqsupset",
+        "\\smile", "\\frown", "\\sqsubseteq", "\\sqsupseteq",
+        "\\ni", "\\vdash", "\\dashv"
+    ));
 
     static {
         // ==================== 希腊小写字母（typeface = FN_LC_GREEK = 4）====================
@@ -122,6 +166,17 @@ public final class MtefCharMap {
         putGreekUpper("\\Phi",     0x03A6);  // Φ
         putGreekUpper("\\Psi",     0x03A8);  // Ψ
         putGreekUpper("\\Omega",   0x03A9);  // Ω
+        // WIRIS also accepts names for capitals that standard TeX normally spells as Latin glyphs.
+        putGreekUpper("\\Alpha",   0x0391);  // Α
+        putGreekUpper("\\Beta",    0x0392);  // Β
+        putGreekUpper("\\Epsilon", 0x0395);  // Ε
+        putGreekUpper("\\Zeta",    0x0396);  // Ζ
+        putGreekUpper("\\Eta",     0x0397);  // Η
+        putGreekUpper("\\Iota",    0x0399);  // Ι
+        putGreekUpper("\\Kappa",   0x039A);  // Κ
+        putGreekUpper("\\Rho",     0x03A1);  // Ρ
+        putGreekUpper("\\Tau",     0x03A4);  // Τ
+        putGreekUpper("\\Chi",     0x03A7);  // Χ
 
         // ==================== 数学符号（typeface = FN_SYMBOL = 6）====================
         // 常用数学运算符、关系符、集合符号、逻辑符号、箭头等
@@ -150,7 +205,7 @@ public final class MtefCharMap {
         putSymbol("\\ne",        0x2260);  // ≠（\neq 的简写）
         putSymbol("\\approx",    0x2248);  // ≈ 约等于
         putSymbol("\\equiv",     0x2261);  // ≡ 恒等于
-        putSymbol("\\sim",       0x223C);  // ∼ 相似
+        putFunction("\\sim",     0x007E);  // MathType xsc source uses function-style ASCII tilde
         putSymbol("\\backsim",   0x223D);  // ∽ 反向相似
         putSymbol("\\simeq",     0x2243);  // ≃ 渐近相等
         putSymbol("\\cong",      0x2245);  // ≅ 全等/同余
@@ -221,6 +276,17 @@ public final class MtefCharMap {
         putText("\\Sun",          0x2609);  // ☉ Pandoc/test-set sun alias
         putText("\\underbracechar",0xFE38);  // ︸ 下花括号展示符
         putText("\\euro",          0x20AC);  // € docx2tex 偶发占位命令
+        putProvisional("\\textsterling", MtefRecord.FN_TEXT, 0x00A3);  // £
+        putProvisional("\\lVert", MtefRecord.FN_SYMBOL, 0x2016);  // ‖
+        putProvisional("\\rVert", MtefRecord.FN_SYMBOL, 0x2016);  // ‖
+        putProvisional("\\lvert", MtefRecord.FN_SYMBOL, 0x007C);  // |
+        putProvisional("\\rvert", MtefRecord.FN_SYMBOL, 0x007C);  // |
+        putProvisional("\\upslopeellipsis", MtefRecord.FN_SYMBOL, 0x22F0); // ⋰
+        putProvisional("\\nwsearrow", MtefRecord.FN_SYMBOL, 0x2921);  // ⤡
+        putProvisional("\\neswarrow", MtefRecord.FN_SYMBOL, 0x2922);  // ⤢
+        putProvisional("\\dlsh", MtefRecord.FN_SYMBOL, 0x21B2);  // ↲
+        putProvisional("\\leftbarharpoon", MtefRecord.FN_SYMBOL, 0x296A); // ⥪
+        putProvisional("\\rightbarharpoon", MtefRecord.FN_SYMBOL, 0x296C); // ⥬
         putSymbol("\\therefore", 0x2234);  // ∴ 所以
         putSymbol("\\because",   0x2235);  // ∵ 因为
 
@@ -246,7 +312,7 @@ public final class MtefCharMap {
         // 省略号
         putSymbol("\\ldots",     0x2026);  // … 底部省略号
         putMtExtra("\\cdots",    0x22EF);  // ⋯ 居中省略号，MathType 原生使用 MT Extra
-        putSymbol("\\vdots",     0x22EE);  // ⋮ 垂直省略号
+        putMtExtra("\\vdots",    0x22EE);  // ⋮ MathType xsc source: MT Extra position 0x4D
         putSymbol("\\ddots",     0x22F1);  // ⋱ 对角省略号
 
         // 其他
@@ -270,6 +336,11 @@ public final class MtefCharMap {
         putSymbol("\\biguplus",  0x2A04);  // ⨄ n-ary union with plus
         putSymbol("\\bigoplus",  0x2A01);  // ⨁ n-ary circled plus
         putSymbol("\\bigotimes", 0x2A02);  // ⨂ n-ary circled times
+
+        // Fill the remaining official WIRIS/MathJax symbol commands. Curated mappings above win.
+        loadGeneratedOfficialSymbols();
+        // Exact MathType encodings override Unicode-derived and hand-curated guesses.
+        loadPinnedMathTypeSymbols();
 
         // ==================== ASCII 可打印字符默认映射 ====================
         // 将 ASCII 可打印字符范围 '!' (0x21) 到 '~' (0x7E) 默认映射为变量样式 FN_VARIABLE
@@ -297,11 +368,12 @@ public final class MtefCharMap {
         LATEX_TO_MTEF.put(">", new CharEntry(MtefRecord.FN_SYMBOL, '>'));
 
         // 标点符号和括号使用 FN_TEXT（文本样式），保持直立体显示
-        LATEX_TO_MTEF.put(",", new CharEntry(MtefRecord.FN_TEXT, ','));
+        LATEX_TO_MTEF.put(",", new CharEntry(MtefRecord.FN_FUNCTION, ','));
         LATEX_TO_MTEF.put(".", new CharEntry(MtefRecord.FN_FUNCTION, '.'));
         LATEX_TO_MTEF.put(":", new CharEntry(MtefRecord.FN_TEXT, ':'));
         LATEX_TO_MTEF.put(";", new CharEntry(MtefRecord.FN_TEXT, ';'));
-        LATEX_TO_MTEF.put("!", new CharEntry(MtefRecord.FN_TEXT, '!'));
+        LATEX_TO_MTEF.put("!", new CharEntry(MtefRecord.FN_FUNCTION, '!'));
+        LATEX_TO_MTEF.put("*", new CharEntry(MtefRecord.FN_FUNCTION, '*'));
         LATEX_TO_MTEF.put("?", new CharEntry(MtefRecord.FN_TEXT, '?'));
         LATEX_TO_MTEF.put("(", new CharEntry(MtefRecord.FN_TEXT, '('));
         LATEX_TO_MTEF.put(")", new CharEntry(MtefRecord.FN_TEXT, ')'));
@@ -315,14 +387,34 @@ public final class MtefCharMap {
         // 空格字符映射：不同 LaTeX 空格命令对应不同宽度的 Unicode 空格
         LATEX_TO_MTEF.put(" ", new CharEntry(MtefRecord.FN_TEXT, ' '));         // 普通空格
         LATEX_TO_MTEF.put("\\,", new CharEntry(MtefRecord.FN_SPACE, 0x2006)); // 细空格（Six-Per-Em Space）
+        LATEX_TO_MTEF.put("\\ ", new CharEntry(MtefRecord.FN_SPACE, 0xEF04)); // MathType explicit math space
         LATEX_TO_MTEF.put("\\;", new CharEntry(MtefRecord.FN_SPACE, 0x2005)); // 中等空格（Four-Per-Em Space）
         LATEX_TO_MTEF.put("\\quad", new CharEntry(MtefRecord.FN_SPACE, 0x2001)); // 全方空格（Em Quad）
 
         // LaTeX 转义字符：需要反斜杠转义的特殊字符
         LATEX_TO_MTEF.put("\\%", new CharEntry(MtefRecord.FN_TEXT, '%'));
-        LATEX_TO_MTEF.put("\\_", new CharEntry(MtefRecord.FN_TEXT, '_'));
+        LATEX_TO_MTEF.put("\\$", new CharEntry(MtefRecord.FN_TEXT, '$'));
+        LATEX_TO_MTEF.put("\\_", new CharEntry(MtefRecord.FN_FUNCTION, '_'));
         LATEX_TO_MTEF.put("\\{", new CharEntry(MtefRecord.FN_TEXT, '{'));
         LATEX_TO_MTEF.put("\\}", new CharEntry(MtefRecord.FN_TEXT, '}'));
+
+        // MathType 7.11.1 TeXToggle encodings, verified against the pinned relation-symbol sample.
+        LATEX_TO_MTEF.put("\\bowtie", new CharEntry(MtefRecord.FN_MTEXTRA, 0xFFFD, 0x6E));
+        LATEX_TO_MTEF.put("\\cong", new CharEntry(MtefRecord.FN_SYMBOL, 0x2245, 0x40));
+        LATEX_TO_MTEF.put("\\sqsubset", new CharEntry(0x7F, 0x228F, 0xF0, "EuclidMath2"));
+        LATEX_TO_MTEF.put("\\sqsupset", new CharEntry(0x7F, 0x2290, 0xF1, "EuclidMath2"));
+        LATEX_TO_MTEF.put("\\smile", new CharEntry(MtefRecord.FN_MTEXTRA, 0x2323, 0x28));
+        LATEX_TO_MTEF.put("\\frown", new CharEntry(MtefRecord.FN_MTEXTRA, 0x2322, 0x29));
+        LATEX_TO_MTEF.put("\\sqsubseteq", new CharEntry(0x7F, 0x2291, 0xF4, "EuclidMath2"));
+        LATEX_TO_MTEF.put("\\sqsupseteq", new CharEntry(0x7F, 0x2292, 0xF5, "EuclidMath2"));
+        LATEX_TO_MTEF.put("\\ni", new CharEntry(MtefRecord.FN_TEXT_FE, 0x220B, -1));
+        LATEX_TO_MTEF.put("\\vdash", new CharEntry(0x7E, 0x22A2, 0x90, "EuclidMath1"));
+        LATEX_TO_MTEF.put("\\dashv", new CharEntry(0x7E, 0x22A3, 0x94, "EuclidMath1"));
+        for (String command : java.util.List.of(
+            "\\bowtie", "\\cong", "\\sqsubset", "\\sqsupset", "\\smile", "\\frown",
+            "\\sqsubseteq", "\\sqsupseteq", "\\ni", "\\vdash", "\\dashv")) {
+            MAPPING_SOURCES.put(command, MappingSource.CURATED);
+        }
     }
 
     /**
@@ -333,6 +425,7 @@ public final class MtefCharMap {
      */
     private static void putGreekLower(String latex, int mtcode) {
         LATEX_TO_MTEF.put(latex, new CharEntry(MtefRecord.FN_LC_GREEK, mtcode));
+        MAPPING_SOURCES.put(latex, MappingSource.CURATED);
     }
 
     /**
@@ -343,6 +436,7 @@ public final class MtefCharMap {
      */
     private static void putGreekUpper(String latex, int mtcode) {
         LATEX_TO_MTEF.put(latex, new CharEntry(MtefRecord.FN_UC_GREEK, mtcode));
+        MAPPING_SOURCES.put(latex, MappingSource.CURATED);
     }
 
     /**
@@ -353,6 +447,12 @@ public final class MtefCharMap {
      */
     private static void putSymbol(String latex, int mtcode) {
         LATEX_TO_MTEF.put(latex, new CharEntry(MtefRecord.FN_SYMBOL, mtcode));
+        MAPPING_SOURCES.put(latex, MappingSource.CURATED);
+    }
+
+    private static void putFunction(String latex, int mtcode) {
+        LATEX_TO_MTEF.put(latex, new CharEntry(MtefRecord.FN_FUNCTION, mtcode, -1));
+        MAPPING_SOURCES.put(latex, MappingSource.CURATED);
     }
 
     /**
@@ -366,6 +466,7 @@ public final class MtefCharMap {
      */
     private static void putText(String latex, int mtcode) {
         LATEX_TO_MTEF.put(latex, new CharEntry(MtefRecord.FN_TEXT, mtcode));
+        MAPPING_SOURCES.put(latex, MappingSource.CURATED);
     }
 
     /**
@@ -379,6 +480,72 @@ public final class MtefCharMap {
      */
     private static void putMtExtra(String latex, int mtcode) {
         LATEX_TO_MTEF.put(latex, new CharEntry(MtefRecord.FN_MTEXTRA, mtcode));
+        MAPPING_SOURCES.put(latex, MappingSource.CURATED);
+    }
+
+    private static void putProvisional(String latex, int typeface, int mtcode) {
+        LATEX_TO_MTEF.put(latex, new CharEntry(typeface, mtcode));
+        MAPPING_SOURCES.put(latex, MappingSource.PROVISIONAL);
+    }
+
+    private static void loadGeneratedOfficialSymbols() {
+        try (InputStream input = MtefCharMap.class.getResourceAsStream("/mtef/official-latex-symbols.tsv")) {
+            if (input == null) {
+                throw new IllegalStateException("Missing generated official LaTeX symbol map");
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.isBlank() || line.startsWith("#")) {
+                        continue;
+                    }
+                    String[] fields = line.split("\\t");
+                    if (fields.length != 3) {
+                        throw new IllegalStateException("Malformed official symbol mapping: " + line);
+                    }
+                    if (!LATEX_TO_MTEF.containsKey(fields[0])) {
+                        LATEX_TO_MTEF.put(fields[0], new CharEntry(
+                            Integer.parseInt(fields[1]),
+                            Integer.parseInt(fields[2], 16)
+                        ));
+                        MAPPING_SOURCES.put(fields[0], MappingSource.GENERATED_MATHJAX);
+                    }
+                }
+            }
+        } catch (Exception exception) {
+            throw new ExceptionInInitializerError(exception);
+        }
+    }
+
+    private static void loadPinnedMathTypeSymbols() {
+        try (InputStream input = MtefCharMap.class.getResourceAsStream("/mtef/official-mathtype-symbols.tsv")) {
+            if (input == null) {
+                throw new IllegalStateException("Missing pinned MathType symbol map");
+            }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.isBlank() || line.startsWith("#")) {
+                        continue;
+                    }
+                    String[] fields = line.split("\\t");
+                    if (fields.length != 4 && fields.length != 5) {
+                        throw new IllegalStateException("Malformed pinned MathType symbol mapping: " + line);
+                    }
+                    String command = fields[0];
+                    LATEX_TO_MTEF.put(command, new CharEntry(
+                        Integer.parseInt(fields[1]),
+                        Integer.parseInt(fields[2], 16),
+                        Integer.parseInt(fields[3]),
+                        fields.length == 5 && !fields[4].isBlank() ? fields[4] : null
+                    ));
+                    MAPPING_SOURCES.put(command, MappingSource.PINNED_MATHTYPE);
+                    MATHTYPE_VERIFIED_COMMANDS.add(command);
+                }
+            }
+        } catch (Exception exception) {
+            throw new ExceptionInInitializerError(exception);
+        }
     }
 
     /**
@@ -393,6 +560,21 @@ public final class MtefCharMap {
             return timesEntry();
         }
         return LATEX_TO_MTEF.get(latex);
+    }
+
+    public static EncodingProfile encodingProfile(String latex) {
+        CharEntry entry = lookup(latex);
+        if (entry == null) {
+            return null;
+        }
+        return new EncodingProfile(
+            latex,
+            entry.typeface(),
+            entry.mtcode(),
+            entry.bits8() == AUTO_BITS8 ? getSymbolBits8(entry.mtcode()) : entry.bits8(),
+            MAPPING_SOURCES.getOrDefault(latex, MappingSource.BUILTIN),
+            MATHTYPE_VERIFIED_COMMANDS.contains(latex)
+        );
     }
 
     private static CharEntry timesEntry() {
@@ -458,15 +640,28 @@ public final class MtefCharMap {
         UNICODE_TO_SYMBOL_BITS8.put(0x03F1, 0x72); // ϱ (varrho) → 'r'
 
         // --- 希腊大写字母在 Symbol 字体中的位置 ---
+        UNICODE_TO_SYMBOL_BITS8.put(0x0391, 0x41); // Α → 'A'
+        UNICODE_TO_SYMBOL_BITS8.put(0x0392, 0x42); // Β → 'B'
         UNICODE_TO_SYMBOL_BITS8.put(0x0393, 0x47); // Γ → 'G'
         UNICODE_TO_SYMBOL_BITS8.put(0x0394, 0x44); // Δ → 'D'
+        UNICODE_TO_SYMBOL_BITS8.put(0x0395, 0x45); // Ε → 'E'
+        UNICODE_TO_SYMBOL_BITS8.put(0x0396, 0x5A); // Ζ → 'Z'
+        UNICODE_TO_SYMBOL_BITS8.put(0x0397, 0x48); // Η → 'H'
         UNICODE_TO_SYMBOL_BITS8.put(0x0398, 0x51); // Θ → 'Q'
+        UNICODE_TO_SYMBOL_BITS8.put(0x0399, 0x49); // Ι → 'I'
+        UNICODE_TO_SYMBOL_BITS8.put(0x039A, 0x4B); // Κ → 'K'
         UNICODE_TO_SYMBOL_BITS8.put(0x039B, 0x4C); // Λ → 'L'
+        UNICODE_TO_SYMBOL_BITS8.put(0x039C, 0x4D); // Μ → 'M'
+        UNICODE_TO_SYMBOL_BITS8.put(0x039D, 0x4E); // Ν → 'N'
         UNICODE_TO_SYMBOL_BITS8.put(0x039E, 0x58); // Ξ → 'X'
+        UNICODE_TO_SYMBOL_BITS8.put(0x039F, 0x4F); // Ο → 'O'
         UNICODE_TO_SYMBOL_BITS8.put(0x03A0, 0x50); // Π → 'P'
+        UNICODE_TO_SYMBOL_BITS8.put(0x03A1, 0x52); // Ρ → 'R'
         UNICODE_TO_SYMBOL_BITS8.put(0x03A3, 0x53); // Σ → 'S'
+        UNICODE_TO_SYMBOL_BITS8.put(0x03A4, 0x54); // Τ → 'T'
         UNICODE_TO_SYMBOL_BITS8.put(0x03A5, 0x55); // Υ → 'U'
         UNICODE_TO_SYMBOL_BITS8.put(0x03A6, 0x46); // Φ → 'F'
+        UNICODE_TO_SYMBOL_BITS8.put(0x03A7, 0x43); // Χ → 'C'
         UNICODE_TO_SYMBOL_BITS8.put(0x03A8, 0x59); // Ψ → 'Y'
         UNICODE_TO_SYMBOL_BITS8.put(0x03A9, 0x57); // Ω → 'W'
 
@@ -516,6 +711,7 @@ public final class MtefCharMap {
         UNICODE_TO_SYMBOL_BITS8.put(0x2203, 0x24); // ∃
         UNICODE_TO_SYMBOL_BITS8.put(0x22C5, 0xD7); // ⋅
         UNICODE_TO_SYMBOL_BITS8.put(0x22EF, 0x4C); // ⋯ MathType MT Extra centered ellipsis
+        UNICODE_TO_SYMBOL_BITS8.put(0x22EE, 0x4D); // ⋮ MathType MT Extra vertical ellipsis
         UNICODE_TO_SYMBOL_BITS8.put(0x2218, 0x6F); // ∘ MathType MT Extra composition ring
         UNICODE_TO_SYMBOL_BITS8.put(0x2026, 0xBC); // …
         UNICODE_TO_SYMBOL_BITS8.put(0x2032, 0xA2); // ′

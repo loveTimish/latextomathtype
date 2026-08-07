@@ -35,10 +35,16 @@ SAFE_STYLE_HINTS = {
     "letterGroupObarTemplate",
     "textFeComma",
     "explicitFractionFullSize",
+    "mixedAsciiFullwidthParens",
+    "legacyTextFeParenContent",
 }
 PIC_RE = re.compile(r"beginPic\{([^}]+)\}endPic")
 INCLUDEGRAPHICS_RE = re.compile(r"\\includegraphics(?:\[[^\]]*])?\{([^}]+)\}")
-INCLUDEGRAPHICS_LOOSE_RE = re.compile(r"\\includegraphics(?:\[[^\]]*])?\s+([^\s]+?\.(?:png|jpe?g))")
+INCLUDEGRAPHICS_LOOSE_RE = re.compile(
+    r"\\includegraphics(?:\[[^\]]*])?\s+"
+    r"([^\s]+?\.(?:png|jpe?g|gif|bmp|emf|wmf|bin)(?:\?[^\s$]*)?|[^\s$]+)",
+    re.IGNORECASE,
+)
 MATH_SPAN_RE = re.compile(r"(\$\$.*?\$\$|\$.*?\$)", re.S)
 METRICS_RE = re.compile(r"^\\pwmetrics\{[^}]+}\s*")
 STYLE_RE = re.compile(r"^\\pwstyle\{[^}]*}\s*")
@@ -237,10 +243,17 @@ def report_equations(index: int, latex_root: Path) -> list[dict]:
     if not report_path.exists():
         return []
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    return [
-        item for item in report.get("equations", [])
-        if item.get("status") == "converted" and item.get("output")
-    ]
+    equations = []
+    for item in report.get("equations", []):
+        if item.get("status") != "converted":
+            continue
+        if item.get("sourceRepairReason") == "empty-output":
+            item = dict(item)
+            item["output"] = ""
+            equations.append(item)
+        elif item.get("output"):
+            equations.append(item)
+    return equations
 
 
 def metric_prefix(item: dict) -> str:
@@ -784,6 +797,11 @@ def equation_metric_lookup(equations: list[dict]) -> dict[str, deque[dict]]:
 
 
 def normalize_math_delimiters(text: str) -> str:
+    # docx2tex can place an unresolved preview immediately before adjacent
+    # MathType spans. Remove it before MATH_SPAN_RE sees the dollar run, or
+    # ``image.emf$$...$$$...$`` is paired as one malformed formula.
+    text = INCLUDEGRAPHICS_RE.sub("", text)
+    text = INCLUDEGRAPHICS_LOOSE_RE.sub("", text)
     text = re.sub(
         r"\\\[(.+?)\\\]",
         lambda m: "$$" + unwrap_inline_math_inside_command_args(m.group(1).strip()) + "$$",
@@ -976,10 +994,25 @@ def strip_minipage_environments(text: str) -> str:
 
 
 def strip_non_content_latex_commands_fragment(text: str) -> str:
+    text = re.sub(
+        r"\\begin\s+table\s+\\begin\s+tabularx\b.*?\\arraybackslash\s*",
+        " ",
+        text,
+        flags=re.S,
+    )
+    text = re.sub(r"\\(?:begin|end)(?:\{(?:table|tabularx)\}|\s+(?:table|tabularx)\b)", " ", text)
+    text = re.sub(
+        r"\\(?:arraybackslash|textwidth|linewidth|tabcolsep|arrayrulewidth|dimexpr|"
+        r"textsuperscript|textsubscript)\b",
+        " ",
+        text,
+    )
+    text = text.replace("&", " ")
     text = strip_minipage_environments(text)
     text = strip_latex_wrapper_commands(text)
+    text = re.sub(r"\\(?:fbox|mbox|makebox)\b\s*", "", text)
     text = strip_latex_text_format_commands(text)
-    text = re.sub(r"\\textcolor\s+[A-Za-z]+\s+", " ", text)
+    text = re.sub(r"\\textcolor\s+[A-Za-z][A-Za-z0-9_-]*\s*", " ", text)
     text = re.sub(r"\\(?:textbf|textit|textnormal|textrm|mathrm|textsc|emph|uline)\b\s*", "", text)
     text = DASHLINE_RE.sub(" ", text)
     text = TAG_RE.sub(" ", text)

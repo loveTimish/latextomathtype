@@ -9,9 +9,12 @@ param(
     [string]$GeneratedDir = "",
     [string]$RequestDir = "",
     [string]$DatasetManifest = "",
+    [string]$FormatPreferenceDocx = "",
     [double]$MaxTargetSizeErrorPct = 1.0,
+    [int]$ExpectedOleTotal = 39551,
     [switch]$SkipMtef,
-    [switch]$SkipGenerate
+    [switch]$SkipGenerate,
+    [switch]$GenerateOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,12 +28,24 @@ $mvn = Join-Path $repoRoot ".mvn\apache-maven-3.9.12\bin\mvn.cmd"
 if (-not (Test-Path -LiteralPath $mvn)) {
     throw "Bundled Maven not found: $mvn"
 }
+$formatPreferencePath = if ([string]::IsNullOrWhiteSpace($FormatPreferenceDocx)) {
+    $null
+} elseif ([IO.Path]::IsPathRooted($FormatPreferenceDocx)) {
+    [IO.Path]::GetFullPath($FormatPreferenceDocx)
+} else {
+    [IO.Path]::GetFullPath((Join-Path $repoRoot $FormatPreferenceDocx))
+}
+if ($formatPreferencePath -and -not (Test-Path -LiteralPath $formatPreferencePath)) {
+    throw "missing pinned MathType format preference DOCX: $formatPreferencePath"
+}
 $docxOut = if ($GeneratedDir) { $GeneratedDir } else { Join-Path $AnalysisDir "batch10-full-docx\$Stamp" }
 $requestOut = if ($RequestDir) { $RequestDir } else { Join-Path $AnalysisDir "batch10-full-requests\$Stamp" }
 $styleHintsOut = Join-Path $AnalysisDir "mtef-style-hints"
 $sizeOut = Join-Path $AnalysisDir "pair-metrics-latex\$Stamp-target-direct"
 $mtefOut = Join-Path $AnalysisDir "mtef-report\$Stamp-keyed-object"
+$exactMtefOut = Join-Path $AnalysisDir "mtef-exact-report\$Stamp"
 $strictOut = Join-Path $AnalysisDir "acceptance-strict\$Stamp"
+$runRoot = Join-Path $AnalysisDir "unattended-runs\$Stamp"
 $compareMetricsScript = Join-Path $repoRoot "scripts\compare_docx_pair_metrics.py"
 if (-not (Test-Path -LiteralPath $compareMetricsScript)) {
     $compareMetricsScript = Join-Path $AnalysisDir "compare_docx_pair_metrics.py"
@@ -38,6 +53,10 @@ if (-not (Test-Path -LiteralPath $compareMetricsScript)) {
 $compareMtefScript = Join-Path $repoRoot "scripts\compare_mtef_native.go"
 if (-not (Test-Path -LiteralPath $compareMtefScript)) {
     throw "missing compare mtef script: $compareMtefScript"
+}
+$restoreGeometryScript = Join-Path $repoRoot "scripts\restore_formatted_docx_geometry.py"
+if (-not (Test-Path -LiteralPath $restoreGeometryScript)) {
+    throw "missing formatted geometry restore script: $restoreGeometryScript"
 }
 
 Write-Host "stamp=$Stamp"
@@ -248,6 +267,7 @@ if (-not $SkipGenerate) {
             "-Dxsc.full.run.output.dir=$docxOut",
             "-Dxsc.full.start=$Start",
             "-Dxsc.full.end=$End",
+            "-Dxsc.full.resume=true",
             "test"
         )
     } finally {
@@ -255,8 +275,87 @@ if (-not $SkipGenerate) {
     }
 }
 
+if ($GenerateOnly) {
+    $generationScanDir = Join-Path $strictOut "generation-only"
+    New-Item -ItemType Directory -Force -Path $generationScanDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $runRoot | Out-Null
+    $expectedTotal = 0
+    $generatedTotal = 0
+    $validTotal = 0
+    $leakTotal = 0
+    $documents = @()
+    for ($i = $Start; $i -le $End; $i++) {
+        $pad = "{0:D2}" -f $i
+        $generatedDocx = Find-GeneratedDocx $docxOut $pad
+        $reportPath = Join-Path $LatexRoot "$i\$i.report.json"
+        if (-not (Test-Path -LiteralPath $generatedDocx)) { throw "missing generated docx: $generatedDocx" }
+        $expected = $null
+        if (Test-Path -LiteralPath $reportPath) {
+            $sourceReport = Get-Content -LiteralPath $reportPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $expected = @($sourceReport.equations).Count
+        }
+        $scanPath = Join-Path $generationScanDir "generated-$pad.json"
+        $reuseScan = (Test-Path -LiteralPath $scanPath) -and
+            ((Get-Item -LiteralPath $scanPath).LastWriteTimeUtc -ge (Get-Item -LiteralPath $generatedDocx).LastWriteTimeUtc)
+        if (-not $reuseScan) {
+            $scanArgs = @((Join-Path $repoRoot "scripts\scan_docx_latex_leaks.py"), $generatedDocx, "--out", $scanPath)
+            if ($null -ne $expected) {
+                $scanArgs += @("--expect-ole-count", "$expected")
+            }
+            & python @scanArgs | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "generated OLE validation failed for doc $i; inspect $scanPath" }
+        }
+        $scan = Get-Content -LiteralPath $scanPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ([int]$scan.leakCount -ne 0 -or [int]$scan.invalidMathTypeOleCount -ne 0) {
+            throw "generated OLE validation failed for doc $i; inspect $scanPath"
+        }
+        if ($null -ne $expected -and
+                ([int]$scan.oleEmbeddingCount -ne [int]$expected -or
+                 [int]$scan.validMathTypeOleCount -ne [int]$expected)) {
+            throw "generated OLE count mismatch for doc $i; inspect $scanPath"
+        }
+        $observedExpected = if ($null -ne $expected) { [int]$expected } else { [int]$scan.oleEmbeddingCount }
+        $expectedTotal += $observedExpected
+        $generatedTotal += [int]$scan.oleEmbeddingCount
+        $validTotal += [int]$scan.validMathTypeOleCount
+        $leakTotal += [int]$scan.leakCount
+        $documents += [pscustomobject]@{
+            index = $i
+            generated = $generatedDocx
+            expectedOle = $observedExpected
+            sourceReportBacked = $null -ne $expected
+            generatedOle = [int]$scan.oleEmbeddingCount
+            validOle = [int]$scan.validMathTypeOleCount
+            latexLeaks = [int]$scan.leakCount
+            scan = $scanPath
+        }
+    }
+    $generationReport = [ordered]@{
+        schemaVersion = 1
+        mode = "project-generation-only"
+        range = [ordered]@{ start = $Start; end = $End }
+        expectedOleCount = $ExpectedOleTotal
+        observedRequestOleCount = $expectedTotal
+        generatedOleCount = $generatedTotal
+        validOleCount = $validTotal
+        latexLeakCount = $leakTotal
+        pairTargetReached = $generatedTotal -ge $ExpectedOleTotal
+        passed = $generatedTotal -gt 0 -and $generatedTotal -eq $validTotal -and $leakTotal -eq 0
+        documents = $documents
+    }
+    $generationReportPath = Join-Path $runRoot "generation-only-summary.json"
+    $generationReport | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $generationReportPath -Encoding UTF8
+    Write-Host "generationOnlyReport=$generationReportPath"
+    Write-Host "expectedOle=$ExpectedOleTotal observedRequestOle=$expectedTotal generatedOle=$generatedTotal validOle=$validTotal leaks=$leakTotal"
+    if (-not $generationReport.passed) { throw "xsc generation-only gate failed; inspect $generationReportPath" }
+    exit 0
+}
+
 New-Item -ItemType Directory -Force -Path $sizeOut | Out-Null
 New-Item -ItemType Directory -Force -Path $strictOut | Out-Null
+$formattedOut = Join-Path $runRoot "mathtype-formatted"
+New-Item -ItemType Directory -Force -Path $formattedOut | Out-Null
+$formatScript = Join-Path $repoRoot "scripts\format_word_mathtype_equations.ps1"
 $strictItems = @()
 for ($i = $Start; $i -le $End; $i++) {
     $pad = "{0:D2}" -f $i
@@ -274,6 +373,20 @@ for ($i = $Start; $i -le $End; $i++) {
     if (-not (Test-Path -LiteralPath $reportPath)) { throw "missing source report json: $reportPath" }
     $requestPath = Join-Path $requestOut "full-$pad.request.json"
     if (-not (Test-Path -LiteralPath $requestPath)) { throw "missing request json: $requestPath" }
+    $formattedDocx = Join-Path $formattedOut ("generated-{0}.docx" -f $pad)
+    $formatReport = Join-Path $formattedOut ("generated-{0}.format-report.json" -f $pad)
+    $documentPreferencePath = if ($formatPreferencePath) { $formatPreferencePath } else { $sourceDocx }
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $formatScript `
+        -InputDocx $generatedDocx -OutputDocx $formattedDocx -OutReport $formatReport `
+        -PreferenceSource Clipboard -PreferenceDocx $documentPreferencePath | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "MathType Format Equations failed for doc $i" }
+    $geometryReport = Join-Path $formattedOut ("generated-{0}.geometry-report.json" -f $pad)
+    # xsc is a DOCX round trip: keep MathType's rewritten OLE/WMF drawing records,
+    # but preserve the source object's Word box and baseline exactly.
+    $geometryResult = & python $restoreGeometryScript $sourceDocx $formattedDocx $formattedDocx
+    if ($LASTEXITCODE -ne 0) { throw "formatted geometry restore failed for doc $i" }
+    $geometryResult | Set-Content -LiteralPath $geometryReport -Encoding UTF8
+    $generatedDocx = $formattedDocx
     $docSizeOut = Join-Path $sizeOut $pad
     New-Item -ItemType Directory -Force -Path $docSizeOut | Out-Null
     $compareArgs = @(
@@ -401,9 +514,26 @@ if ($SkipMtef) {
 }
 
 New-Item -ItemType Directory -Force -Path $mtefOut | Out-Null
+New-Item -ItemType Directory -Force -Path $exactMtefOut | Out-Null
 if (-not (Test-Path -LiteralPath $DocxToLatexDir)) {
     throw "missing docxtolatex dir: $DocxToLatexDir"
 }
+$classpathFile = Join-Path $exactMtefOut "runtime-classpath.txt"
+Push-Location $repoRoot
+try {
+    Invoke-Checked $mvn @(
+        "-q",
+        "-DskipTests",
+        "compile",
+        "dependency:build-classpath",
+        "-Dmdep.outputFile=$classpathFile"
+    ) -Quiet
+} finally {
+    Pop-Location
+}
+$runtimeClasspath = (Join-Path $repoRoot "target\classes") + [IO.Path]::PathSeparator +
+    (Get-Content -LiteralPath $classpathFile -Raw -Encoding UTF8).Trim()
+$exactItems = @()
 Push-Location $DocxToLatexDir
 try {
     for ($i = $Start; $i -le $End; $i++) {
@@ -418,11 +548,31 @@ try {
             }
         }
         if (-not (Test-Path -LiteralPath $reportPath)) { throw "missing report json: $reportPath" }
+        $generatedDocx = Find-GeneratedDocx $docxOut $pad
+        $exactReportPath = Join-Path $exactMtefOut "$pad-exact-mtef.json"
+        Invoke-Checked "java" @(
+            "-cp",
+            $runtimeClasspath,
+            "com.lz.paperword.core.mtef.MathTypeDocxComparatorCli",
+            $sourceDocx,
+            $generatedDocx,
+            $exactReportPath
+        ) -Quiet
+        $exactReport = Get-Content -LiteralPath $exactReportPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        $exactItems += [pscustomobject]@{
+            doc = $i
+            expectedObjects = [int]$exactReport.standardObjectCount
+            generatedObjects = [int]$exactReport.generatedObjectCount
+            validGeneratedOle = [int]$exactReport.validGeneratedOleCount
+            normalizedStructureEqual = [int]$exactReport.normalizedStructureEqualCount
+            rawMtefEqual = [int]$exactReport.rawMtefEqualCount
+            report = $exactReportPath
+        }
         Invoke-Checked "go" @(
             "run",
             $compareMtefScript,
             $sourceDocx,
-            (Find-GeneratedDocx $docxOut $pad),
+            $generatedDocx,
             (Join-Path $mtefOut "$i"),
             $reportPath,
             (Join-Path $requestOut "full-$pad.request.json")
@@ -443,6 +593,23 @@ try {
     Pop-Location
 }
 
+$exactExpected = ($exactItems | Measure-Object -Property expectedObjects -Sum).Sum
+$exactGenerated = ($exactItems | Measure-Object -Property generatedObjects -Sum).Sum
+$exactValid = ($exactItems | Measure-Object -Property validGeneratedOle -Sum).Sum
+$exactEqual = ($exactItems | Measure-Object -Property normalizedStructureEqual -Sum).Sum
+$exactRawEqual = ($exactItems | Measure-Object -Property rawMtefEqual -Sum).Sum
+$exactSummary = [ordered]@{
+    expectedObjects = [int]$exactExpected
+    generatedObjects = [int]$exactGenerated
+    validGeneratedOle = [int]$exactValid
+    normalizedStructureEqual = [int]$exactEqual
+    rawMtefEqual = [int]$exactRawEqual
+    passed = $exactExpected -eq $exactGenerated -and $exactGenerated -eq $exactValid -and $exactGenerated -eq $exactEqual
+    items = $exactItems
+}
+$exactSummaryPath = Join-Path $exactMtefOut "exact-mtef-summary.json"
+$exactSummary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $exactSummaryPath -Encoding UTF8
+
 Invoke-Checked "python" @(
     (Join-Path $repoRoot "scripts\summarize_xsc_acceptance.py"),
     $Stamp,
@@ -453,5 +620,10 @@ Invoke-Checked "python" @(
     "--end",
     "$End",
     "--analysis-dir",
-    $AnalysisDir
+    $AnalysisDir,
+    "--exact-mtef-summary",
+    $exactSummaryPath
 )
+if (-not $exactSummary.passed) {
+    throw "exact normalized MTEF gate failed: expected=$exactExpected generated=$exactGenerated validOle=$exactValid exact=$exactEqual report=$exactSummaryPath"
+}

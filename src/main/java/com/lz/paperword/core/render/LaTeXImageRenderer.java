@@ -122,7 +122,7 @@ public class LaTeXImageRenderer {
     private static final double MATHJAX_DEFAULT_MAX_WIDTH_PT = 400.0d;
     private static final int MATHJAX_DEFAULT_DPI = 900;
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v258-mathtype-fit-spacing";
+    private static final String CACHE_VERSION = "v271-native-mathjax-layout";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(
@@ -545,9 +545,15 @@ public class LaTeXImageRenderer {
                 double depthPt = hasTargetMetrics ? targetDepthPt(latex, heightPt) : -1d;
                 if (!hasTargetMetrics) {
                     PreviewMetrics calibrated = calibratePreviewMetrics(latex, widthPt, heightPt, depthPt);
-                    widthPt = Math.min(calibrated.widthPt(), genericVectorWidthCapPt(latex));
-                    heightPt = calibrated.heightPt();
-                    depthPt = calibrated.depthPt();
+                    double maxWidthPt = genericVectorWidthCapPt(latex);
+                    double scale = Math.min(1.0d, maxWidthPt / Math.max(calibrated.widthPt(), 1.0d));
+                    widthPt = calibrated.widthPt() * scale;
+                    heightPt = calibrated.heightPt() * scale;
+                    depthPt = calibrated.depthPt() * scale;
+                    if (scale < 1.0d && isLongLinearFormula(latex)) {
+                        widthPt = maxWidthPt;
+                        heightPt = Math.rint(heightPt * 2.0d) / 2.0d;
+                    }
                 }
                 PreviewImage emfPreview = renderEmfPreviewViaJLatexMath(latex, size, widthPt, heightPt, depthPt);
                 if (emfPreview != null) {
@@ -578,6 +584,16 @@ public class LaTeXImageRenderer {
             widthPt = targetWidthPt;
             heightPt = targetHeightPt;
             depthPt = targetDepthPt(latex, heightPt);
+        } else {
+            double maxWidthPt = genericVectorWidthCapPt(latex);
+            double scale = Math.min(1.0d, maxWidthPt / Math.max(widthPt, 1.0d));
+            widthPt *= scale;
+            heightPt *= scale;
+            depthPt *= scale;
+            if (scale < 1.0d && isLongLinearFormula(latex)) {
+                widthPt = maxWidthPt;
+                heightPt = Math.rint(heightPt * 2.0d) / 2.0d;
+            }
         }
         int renderWidthPx = Math.max((int) Math.ceil(widthPt / 72.0d * mathJaxDpi()), 4);
         int renderHeightPx = Math.max((int) Math.ceil(heightPt / 72.0d * mathJaxDpi()), 4);
@@ -599,11 +615,62 @@ public class LaTeXImageRenderer {
         if (image == null) {
             throw new IOException("Batik produced unreadable MathJax PNG");
         }
+        image = addSafetyBorderIfInkTouchesEdge(image, 2);
         byte[] wmfData = bufferedImageToPlaceableWmf(image, widthPt, heightPt);
         int widthPx = Math.max((int) Math.round(widthPt * PX_PER_PT), 4);
         int heightPx = Math.max((int) Math.round(heightPt * PX_PER_PT), 4);
         return new PreviewImage(wmfData, widthPx, heightPx, "wmf", "image/x-wmf", false,
             depthPt, widthPt, heightPt);
+    }
+
+    private BufferedImage addSafetyBorderIfInkTouchesEdge(BufferedImage source, int borderPx) {
+        if (source == null || borderPx <= 0 || !inkTouchesRasterEdge(source)) {
+            return source;
+        }
+        BufferedImage padded = new BufferedImage(
+            source.getWidth() + borderPx * 2,
+            source.getHeight() + borderPx * 2,
+            BufferedImage.TYPE_INT_ARGB
+        );
+        Graphics2D graphics = padded.createGraphics();
+        try {
+            graphics.setColor(Color.WHITE);
+            graphics.fillRect(0, 0, padded.getWidth(), padded.getHeight());
+            graphics.drawImage(source, borderPx, borderPx, null);
+        } finally {
+            graphics.dispose();
+        }
+        return padded;
+    }
+
+    private boolean inkTouchesRasterEdge(BufferedImage image) {
+        int width = image.getWidth();
+        int height = image.getHeight();
+        if (width <= 0 || height <= 0) {
+            return false;
+        }
+        for (int x = 0; x < width; x++) {
+            if (isInkPixel(image.getRGB(x, 0)) || isInkPixel(image.getRGB(x, height - 1))) {
+                return true;
+            }
+        }
+        for (int y = 1; y < height - 1; y++) {
+            if (isInkPixel(image.getRGB(0, y)) || isInkPixel(image.getRGB(width - 1, y))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isInkPixel(int argb) {
+        int alpha = (argb >>> 24) & 0xFF;
+        if (alpha == 0) {
+            return false;
+        }
+        int red = (argb >>> 16) & 0xFF;
+        int green = (argb >>> 8) & 0xFF;
+        int blue = argb & 0xFF;
+        return Math.min(red, Math.min(green, blue)) < 245;
     }
 
     private double calibrateMathJaxDepthPt(String latex, double heightPt, double depthPt) {
@@ -824,6 +891,9 @@ public class LaTeXImageRenderer {
     }
 
     private double genericVectorWidthCapPt(String latex) {
+        if (isLongLinearFormula(latex)) {
+            return 200.0d;
+        }
         if (latex == null || !latex.contains("\\begin{array}")) {
             return 430.0d;
         }
@@ -834,6 +904,17 @@ public class LaTeXImageRenderer {
             return 420.0d;
         }
         return 300.0d;
+    }
+
+    private boolean isLongLinearFormula(String latex) {
+        if (latex == null || latex.isBlank()) {
+            return false;
+        }
+        boolean structured = latex.contains("\\frac") || latex.contains("\\sqrt")
+            || latex.contains("\\begin") || latex.indexOf('^') >= 0 || latex.indexOf('_') >= 0;
+        String atoms = latex.replaceAll("\\\\[A-Za-z]+", "x")
+            .replaceAll("[{}\\s]", "");
+        return !structured && atoms.codePointCount(0, atoms.length()) >= 20;
     }
 
     private double estimateVectorHeightPt(String latex) {
@@ -1215,7 +1296,7 @@ public class LaTeXImageRenderer {
     }
 
     private static boolean mathJaxMathTypeFit() {
-        return Boolean.parseBoolean(System.getProperty(MATHJAX_MATHTYPE_FIT_PROP, "true"));
+        return Boolean.parseBoolean(System.getProperty(MATHJAX_MATHTYPE_FIT_PROP, "false"));
     }
 
     private static double mathJaxMathTypeFitFontPt() {
@@ -1807,9 +1888,13 @@ public class LaTeXImageRenderer {
         if (latex == null || latex.isBlank()) {
             return latex;
         }
+        String renderLatex = escapeRawUnicodeSymbolsForMathJax(latex);
         String normalized = com.lz.paperword.core.latex.LaTeXParser.preNormalizeLatex(
-            latex.replaceAll("\\\\kern\\s*[-+]?\\d*\\.?\\d+[a-zA-Z]+", ""),
+            renderLatex.replaceAll("\\\\kern\\s*[-+]?\\d*\\.?\\d+[a-zA-Z]+", ""),
             !mathJaxMathTypeFit());
+        normalized = normalizeLegacyBbbPreview(normalized);
+        normalized = separateNestedRadicalDegreesForMathJax(normalized);
+        normalized = normalizeGreekCapitalAliasesForPreview(normalized);
         normalized = simplifyFlatDelimiters(normalized);
         String compositeLongDivision = replaceEmbeddedLongDivisionHeader(normalized);
         if (compositeLongDivision != null) {
@@ -1825,6 +1910,102 @@ public class LaTeXImageRenderer {
         return Pattern.compile("\\\\enclose\\{longdiv\\}\\{([^{}]+)}")
             .matcher(normalized)
             .replaceAll("\\\\big)\\\\overline{$1}");
+    }
+
+    private String normalizeLegacyBbbPreview(String latex) {
+        return latex.replaceAll("\\\\(?:Bbb|mathbb)\\s+x(?![A-Za-z])", "x")
+            .replaceAll("\\\\(?:Bbb|mathbb)\\s+([A-Za-z])", "\\\\mathbb{$1}");
+    }
+
+    private String separateNestedRadicalDegreesForMathJax(String latex) {
+        StringBuilder normalized = new StringBuilder(latex.length() + 8);
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int sqrt = latex.indexOf("\\sqrt[", cursor);
+            if (sqrt < 0) {
+                normalized.append(latex, cursor, latex.length());
+                break;
+            }
+            normalized.append(latex, cursor, sqrt);
+            int degreeStart = sqrt + 6;
+            int bracketDepth = 1;
+            boolean nestedBracket = false;
+            int end = degreeStart;
+            for (; end < latex.length(); end++) {
+                char ch = latex.charAt(end);
+                if (ch == '[') {
+                    bracketDepth++;
+                    nestedBracket = true;
+                } else if (ch == ']') {
+                    bracketDepth--;
+                    if (bracketDepth == 0) {
+                        break;
+                    }
+                }
+            }
+            if (end >= latex.length()) {
+                normalized.append(latex, sqrt, latex.length());
+                break;
+            }
+            String degree = latex.substring(degreeStart, end);
+            int radicandStart = skipWhitespace(latex, end + 1);
+            int radicandEnd = radicandStart < latex.length() && latex.charAt(radicandStart) == '{'
+                ? matchingBrace(latex, radicandStart)
+                : -1;
+            if (nestedBracket && radicandEnd > radicandStart) {
+                String radicand = latex.substring(radicandStart + 1, radicandEnd);
+                normalized.append("{}^{").append(degree).append("}\\!\\sqrt{")
+                    .append(radicand).append('}');
+                cursor = radicandEnd + 1;
+            } else {
+                normalized.append(latex, sqrt, end + 1);
+                cursor = end + 1;
+            }
+        }
+        return normalized.toString();
+    }
+
+    /**
+     * MathJax's SVG font tables do not expose every raw Unicode symbol to the
+     * geometry fitter.  Preserve the code point while spelling symbols through
+     * MathJax's supported Unicode command; letters (including CJK text) stay raw.
+     */
+    private String escapeRawUnicodeSymbolsForMathJax(String latex) {
+        StringBuilder escaped = new StringBuilder(latex.length());
+        latex.codePoints().forEach(codePoint -> {
+            int type = Character.getType(codePoint);
+            if (codePoint > Character.MAX_VALUE || (codePoint > 0x7F && (type == Character.CURRENCY_SYMBOL
+                || type == Character.MATH_SYMBOL
+                || type == Character.MODIFIER_SYMBOL
+                || type == Character.OTHER_SYMBOL))) {
+                escaped.append("\\unicode{x")
+                    .append(Integer.toHexString(codePoint).toUpperCase(Locale.ROOT))
+                    .append('}');
+            } else {
+                escaped.appendCodePoint(codePoint);
+            }
+        });
+        return escaped.toString();
+    }
+
+    private String normalizeGreekCapitalAliasesForPreview(String latex) {
+        Map<String, String> aliases = Map.ofEntries(
+            Map.entry("Alpha", "A"), Map.entry("Beta", "B"),
+            Map.entry("Epsilon", "E"), Map.entry("Zeta", "Z"),
+            Map.entry("Eta", "H"), Map.entry("Iota", "I"),
+            Map.entry("Kappa", "K"), Map.entry("Mu", "M"),
+            Map.entry("Nu", "N"), Map.entry("Omicron", "O"),
+            Map.entry("Rho", "P"), Map.entry("Tau", "T"),
+            Map.entry("Chi", "X")
+        );
+        String normalized = latex;
+        for (Map.Entry<String, String> alias : aliases.entrySet()) {
+            normalized = normalized.replaceAll(
+                "\\\\" + alias.getKey() + "(?![A-Za-z])",
+                "\\\\mathrm{" + alias.getValue() + "}"
+            );
+        }
+        return normalized;
     }
 
     private String replaceEmbeddedLongDivisionHeader(String latex) {

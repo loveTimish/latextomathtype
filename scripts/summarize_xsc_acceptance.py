@@ -598,6 +598,8 @@ def summarize_size(stamp: str, size_dir: Path | None = None, start: int = 1, end
     if size_dir is None:
         size_dir = ROOT / "analysis" / "pair-metrics-latex" / f"{stamp}-target-direct"
     paired = target = tw = th = nonwmf = 0
+    exact_wmf_w = exact_wmf_h = exact_shape_w = exact_shape_h = 0
+    exact_dxa = exact_dya = baseline_compared = baseline_exact = 0
     missing = []
     for doc_index in range(start, end + 1):
         summary_path = size_dir / f"{doc_index}_summary.json"
@@ -635,12 +637,28 @@ def summarize_size(stamp: str, size_dir: Path | None = None, start: int = 1, end
         nonwmf += summary["non_wmf_generated"]
         tw += int((summary.get("target_wmf_width_ratio") or {}).get("within_1pct") or 0)
         th += int((summary.get("target_wmf_height_ratio") or {}).get("within_1pct") or 0)
+        exact_wmf_w += int((summary.get("wmf_width_ratio") or {}).get("exact") or 0)
+        exact_wmf_h += int((summary.get("wmf_height_ratio") or {}).get("exact") or 0)
+        exact_shape_w += int((summary.get("shape_width_ratio") or {}).get("exact") or 0)
+        exact_shape_h += int((summary.get("shape_height_ratio") or {}).get("exact") or 0)
+        exact_dxa += int((summary.get("dxa_orig_ratio") or {}).get("exact") or 0)
+        exact_dya += int((summary.get("dya_orig_ratio") or {}).get("exact") or 0)
+        baseline_compared += int(summary.get("position_compared_objects") or 0)
+        baseline_exact += int(summary.get("position_exact_objects") or 0)
     return {
         "pairedObjects": paired,
         "targetMetricObjects": target,
         "targetWidthWithin1pct": tw,
         "targetHeightWithin1pct": th,
         "nonWmfGenerated": nonwmf,
+        "wmfWidthExact": exact_wmf_w,
+        "wmfHeightExact": exact_wmf_h,
+        "shapeWidthExact": exact_shape_w,
+        "shapeHeightExact": exact_shape_h,
+        "dxaOrigExact": exact_dxa,
+        "dyaOrigExact": exact_dya,
+        "baselineCompared": baseline_compared,
+        "baselineExact": baseline_exact,
         "missingReports": missing,
     }
 
@@ -760,13 +778,18 @@ def main() -> None:
     parser.add_argument("--start", type=int, default=1)
     parser.add_argument("--end", type=int, default=10)
     parser.add_argument("--analysis-dir", type=Path, default=None)
+    parser.add_argument("--exact-mtef-summary", type=Path, default=None)
     args = parser.parse_args()
     analysis_dir = args.analysis_dir or (ROOT / "analysis")
+    exact_mtef = None
+    if args.exact_mtef_summary:
+        exact_mtef = json.loads(args.exact_mtef_summary.read_text(encoding="utf-8-sig"))
     out = {
         "stamp": args.stamp,
         "range": {"start": args.start, "end": args.end},
         "size": summarize_size(args.stamp, args.size_dir, args.start, args.end),
         "mtef": summarize_mtef(args.stamp, args.mtef_dir, args.start, args.end),
+        "exactMtef": exact_mtef,
     }
     out_dir = analysis_dir / "acceptance-summary"
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -39,6 +39,19 @@ def parse_wmf_phys(data: bytes) -> tuple[float, float] | None:
     return ((right - left) / inch * 72.0, (bottom - top) / inch * 72.0)
 
 
+def parse_vml_dimension_pt(style: str, property_name: str) -> float | None:
+    match = re.search(
+        rf"(?:^|;)\s*{re.escape(property_name)}:\s*([\d.]+)\s*(pt|in|cm|mm|px)(?:;|$)",
+        style,
+        re.I,
+    )
+    if not match:
+        return None
+    value = float(match.group(1))
+    unit = match.group(2).lower()
+    return value * {"pt": 1.0, "in": 72.0, "cm": 72.0 / 2.54, "mm": 72.0 / 25.4, "px": 0.75}[unit]
+
+
 def rel_map(zip_file: zipfile.ZipFile, rels_name: str) -> dict[str, str]:
     if rels_name not in zip_file.namelist():
         return {}
@@ -70,10 +83,8 @@ def extract_formula_objects(docx_path: Path) -> list[dict]:
             style = re.search(r"<v:shape\b[^>]*\sstyle=\"([^\"]*)\"", body)
             shape_w = shape_h = None
             if style:
-                width = re.search(r"width:([\d.]+)pt", style.group(1))
-                height = re.search(r"height:([\d.]+)pt", style.group(1))
-                shape_w = float(width.group(1)) if width else None
-                shape_h = float(height.group(1)) if height else None
+                shape_w = parse_vml_dimension_pt(style.group(1), "width")
+                shape_h = parse_vml_dimension_pt(style.group(1), "height")
             image_rid = re.search(r'<v:imagedata [^>]*r:id="([^"]+)"', body)
             image_target = rels.get(image_rid.group(1), "") if image_rid else ""
             image_ext = image_target.rsplit(".", 1)[-1].lower() if "." in image_target else ""
@@ -330,6 +341,7 @@ def summarize(values: list[float]) -> dict:
         "p90": ordered[min(len(ordered) - 1, 9 * len(ordered) // 10)],
         "max_abs_error_pct": max(abs(v - 1.0) * 100.0 for v in ordered),
         "within_1pct": sum(abs(v - 1.0) <= 0.01 for v in ordered),
+        "exact": sum(v == 1.0 for v in ordered),
     }
 
 
@@ -559,6 +571,8 @@ def compare_pair(source: Path, generated: Path, out_dir: Path,
         "wmf_height_ratio_plausible": summarize([r["wmf_h_pt_ratio"] for r in plausible_rows(rows) if r["wmf_h_pt_ratio"] is not None]),
         "shape_width_ratio": summarize([r["shape_w_pt_ratio"] for r in rows if r["shape_w_pt_ratio"] is not None]),
         "shape_height_ratio": summarize([r["shape_h_pt_ratio"] for r in rows if r["shape_h_pt_ratio"] is not None]),
+        "dxa_orig_ratio": summarize([r["dxa_pt_ratio"] for r in rows if r["dxa_pt_ratio"] is not None]),
+        "dya_orig_ratio": summarize([r["dya_pt_ratio"] for r in rows if r["dya_pt_ratio"] is not None]),
         "target_metric_objects": sum(1 for item in request_math if item.get("metrics")),
         "target_wmf_width_ratio": summarize([r["target_wmf_w_pt_ratio"] for r in target_rows if r["target_wmf_w_pt_ratio"] is not None]),
         "target_wmf_height_ratio": summarize([r["target_wmf_h_pt_ratio"] for r in target_rows if r["target_wmf_h_pt_ratio"] is not None]),
@@ -577,6 +591,10 @@ def compare_pair(source: Path, generated: Path, out_dir: Path,
         "position_diff_halfpt_median": st.median([r["position_diff_halfpt"] for r in rows if r["position_diff_halfpt"] is not None])
         if any(r["position_diff_halfpt"] is not None for r in rows)
         else None,
+        "position_compared_objects": len(rows),
+        "position_exact_objects": sum(
+            r["source_position_halfpt"] == r["generated_position_halfpt"] for r in rows
+        ),
         "detail_csv": str(detail),
     }
     return summary

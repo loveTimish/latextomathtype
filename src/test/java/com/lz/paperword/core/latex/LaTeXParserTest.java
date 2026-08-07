@@ -12,6 +12,145 @@ class LaTeXParserTest {
     private final LaTeXParser parser = new LaTeXParser();
 
     @Test
+    void preNormalizeRemovesOuterDollarMathDelimiters() {
+        assertEquals("\\sqrt{1+x^2}", LaTeXParser.preNormalizeLatex("$\\sqrt{1+x^2}$"));
+        assertEquals("\\sqrt{1+x^2}", LaTeXParser.preNormalizeLatex("$$\\sqrt{1+x^2}$$"));
+    }
+
+    @Test
+    void detailedParseReportsConsumedCommandsAndSupportedIr() {
+        LaTeXParser.DetailedParseResult result = parser.parseDetailed("\\frac{\\alpha}{x}");
+
+        assertTrue(result.isSupported());
+        assertEquals(List.of("\\frac", "\\alpha"), result.consumedCommands());
+        assertTrue(result.diagnostics().isEmpty());
+        assertNotNull(result.mathIR());
+    }
+
+    @Test
+    void detailedParseReportsUnknownCommands() {
+        LaTeXParser.DetailedParseResult result = parser.parseDetailed("\\definitelyUnsupported{x}");
+
+        assertFalse(result.isSupported());
+        assertTrue(result.diagnostics().stream().anyMatch(diagnostic ->
+            "UNSUPPORTED_COMMAND".equals(diagnostic.code())
+                && "\\definitelyUnsupported".equals(diagnostic.command())));
+    }
+
+    @Test
+    void detailedParsePreservesLegacyStyleAsSemanticScope() {
+        LaTeXParser.DetailedParseResult result = parser.parseDetailed("{\\bf x}");
+
+        assertTrue(result.isSupported());
+        assertTrue(result.diagnostics().isEmpty());
+        assertEquals("bold", result.mathIR().child(0).child(0).getMetadata("fontVariant"));
+    }
+
+    @Test
+    void stripsOnlyStandaloneAlignmentMarkers() {
+        LaTeXParser.DetailedParseResult standalone =
+            parser.parseDetailed("&=20.08\\times (200.9-200.7)");
+        LaTeXParser.DetailedParseResult array =
+            parser.parseDetailed("\\begin{array}{rl}x&=1\\\\y&=2\\end{array}");
+        LaTeXParser.DetailedParseResult escaped = parser.parseDetailed("A\\&B");
+
+        assertEquals("=20.08\\times (200.9-200.7)", standalone.normalizedLatex());
+        assertTrue(standalone.isSupported());
+        assertEquals("\\begin{array}{rl}x&=1\\\\y&=2\\end{array}", array.normalizedLatex());
+        assertEquals("A\\&B", escaped.normalizedLatex());
+    }
+
+    @Test
+    void parsesRaiseboxAsVerticalShiftStyle() {
+        LaTeXParser.DetailedParseResult result = parser.parseDetailed("\\raisebox{-3pt}{2}");
+
+        assertTrue(result.isSupported());
+        assertEquals("vertical-shift", result.mathIR().child(0).getMetadata("styleKind"));
+        assertEquals("-3.0", result.mathIR().child(0).getMetadata("verticalShiftPt"));
+        assertEquals("2", result.mathIR().child(0).child(0).child(0).getValue());
+    }
+
+    @Test
+    void repairsDanglingDelimiterAndLooseInternalMetricsPrefix() {
+        List<ContentSegment> segments = parser.parseText(
+            "before$$\\pwmetrics 40.600,13.000 0.5 \\times 1$after");
+
+        ContentSegment formula = segments.stream().filter(ContentSegment::isMath).findFirst().orElseThrow();
+        assertEquals("0.5 \\times 1", formula.rawText());
+        assertNotNull(formula.metrics());
+        assertEquals(40.6d, formula.metrics().wmfWidthPt(), 0.001d);
+        assertEquals(13.0d, formula.metrics().wmfHeightPt(), 0.001d);
+    }
+
+    @Test
+    void hoistsArrayAlignmentMarkerOutOfFontStyleGroup() {
+        LaTeXParser.DetailedParseResult result = parser.parseDetailed(
+            "\\begin{array}{l}21x\\mathbf{&=}140\\\\20x\\mathbf{&=}65\\end{array}");
+
+        assertTrue(result.isSupported());
+        assertEquals(
+            "\\begin{array}{l}21x&\\mathbf{=}140\\\\20x&\\mathbf{=}65\\end{array}",
+            result.normalizedLatex());
+        LaTeXNode array = result.ast().getChildren().get(0);
+        assertEquals(2, array.getChildren().size());
+        assertEquals(2, array.getChildren().get(0).getChildren().size());
+        assertEquals(2, array.getChildren().get(1).getChildren().size());
+    }
+
+    @Test
+    void repairsNestedMathInsideTextColorAndKeepsScopedRgb() {
+        List<ContentSegment> segments = parser.parseText(
+            "发现规律$\\pwmetrics{40.600,13.000}\\textcolor{maroon}{$\\div$"
+                + "\\pwmetrics{17.400,13.000}16=}$\\frac 5 256 $");
+
+        List<ContentSegment> formulas = segments.stream().filter(ContentSegment::isMath).toList();
+        assertEquals(2, formulas.size());
+        assertEquals("\\textcolor{maroon}{\\div16=}", formulas.get(0).rawText());
+        assertEquals(40.6d, formulas.get(0).metrics().wmfWidthPt(), 0.001d);
+        LaTeXParser.DetailedParseResult colored = parser.parseDetailed(formulas.get(0).rawText());
+        assertTrue(colored.isSupported());
+        assertEquals("rgb", colored.mathIR().child(0).getMetadata("colorModel"));
+        assertEquals("0.502,0,0", colored.mathIR().child(0).getMetadata("colorValue"));
+        assertEquals("\\frac 5 256", formulas.get(1).rawText());
+    }
+
+    @Test
+    void removesLooseNonContentIncludeGraphicsFromVisibleText() {
+        List<ContentSegment> segments = parser.parseText(
+            "题图 \\includegraphics[width=1\\textwidth] embeddings/oleObject475.bin 后文");
+
+        assertEquals(1, segments.size());
+        assertFalse(segments.get(0).isMath());
+        assertEquals("题图  后文", segments.get(0).rawText());
+    }
+
+    @Test
+    void removesPlainTextTableLayoutWhilePreservingCellsAndFollowingFormula() {
+        List<ContentSegment> segments = parser.parseText(
+            "\\begin table \\begin tabularx \\textwidth |p \\dimexpr 0.5\\linewidth | & 纯循环小数 & 混循环小数 "
+                + "\\end tabularx \\end table % D2T: Empty equation removed!$x=1$");
+
+        assertTrue(segments.stream().noneMatch(segment -> segment.rawText().contains("\\begin")));
+        assertTrue(segments.stream().noneMatch(segment -> segment.rawText().contains("\\end")));
+        assertTrue(segments.stream().anyMatch(segment -> !segment.isMath()
+            && segment.rawText().contains("纯循环小数") && segment.rawText().contains("混循环小数")));
+        assertTrue(segments.stream().anyMatch(segment -> segment.isMath() && "x=1".equals(segment.rawText())));
+    }
+
+    @Test
+    void removesPlainTextTablePreambleWhenFirstCellIsNotEmpty() {
+        List<ContentSegment> segments = parser.parseText(
+            "\\begin table \\begin tabularx \\textwidth |p \\dimexpr 0.5\\linewidth-2\\arrayrulewidth | "
+                + "景区 & 千岛湖 \\end tabularx \\end table 填空\\_\\_");
+
+        String visible = segments.stream().map(ContentSegment::rawText).reduce("", String::concat);
+        assertFalse(visible.contains("\\begin"));
+        assertFalse(visible.contains("arrayrulewidth"));
+        assertTrue(visible.contains("景区") && visible.contains("千岛湖"));
+        assertTrue(visible.contains("填空__"));
+    }
+
+    @Test
     void testParseSimpleHtml() {
         List<ContentSegment> segments = parser.parseHtml("<p>已知 $x=3$，求 $y$ 的值</p>");
         // segments: "已知 ", "x=3", "，求 ", "y", " 的值"
@@ -296,6 +435,22 @@ class LaTeXParserTest {
     }
 
     @Test
+    void trailingArrayRowBreakDoesNotCreateAnImplicitExtraRow() {
+        LaTeXNode ast = parser.parseLaTeX("\\begin{array}{l}\\\\\\\\xy\\\\2\\\\\\\\\\end{array}");
+        LaTeXNode array = ast.getChildren().get(0);
+
+        assertEquals(5, array.getChildren().size());
+    }
+
+    @Test
+    void unbracedTextCommandIgnoresItsDelimiterWhitespace() {
+        LaTeXNode ast = parser.parseLaTeX("\\text x");
+        LaTeXNode text = ast.getChildren().get(0);
+
+        assertEquals("x", text.getChildren().get(0).getValue());
+    }
+
+    @Test
     void testParseMatrixEnvironmentPromotesToArray() {
         LaTeXNode ast = parser.parseLaTeX("\\begin{matrix}1&2\\\\3&4\\end{matrix}");
         assertNotNull(ast);
@@ -509,6 +664,18 @@ class LaTeXParserTest {
         assertEquals(LaTeXNode.Type.ARRAY, array.getType());
         assertEquals("true", array.getChildren().get(0).getChildren().get(0).getMetadata("explicitEmptyCell"));
         assertEquals("true", array.getChildren().get(1).getChildren().get(1).getMetadata("explicitEmptyCell"));
+    }
+
+    @Test
+    void parseTextDoesNotTreatMathArrayAsPlainTextTable() {
+        List<ContentSegment> segments = parser.parseText(
+            "$\\begin{array}{cc} {} & \\frac { 1 } { 4 } \\end{array}$");
+
+        assertEquals(1, segments.size());
+        LaTeXNode array = segments.get(0).ast().getChildren().get(0);
+        assertEquals(2, array.getChildren().get(0).getChildren().size());
+        assertEquals("true",
+            array.getChildren().get(0).getChildren().get(0).getMetadata("explicitEmptyCell"));
     }
 
     private String flatten(LaTeXNode node) {
