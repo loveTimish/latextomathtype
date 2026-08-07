@@ -51,7 +51,8 @@ const DEFAULT_SPACE_BY_C = { D7: 0.85, "22C5": 0.85, "2212": 0.55, "2B": 0.9, "3
 const DEFAULT_GLYPH_SCALE_BY_C = { "2212": 0.6 };
 
 // ---------------------------------------------------------------------------
-// Minimal XML parse/serialize for MathJax SVG (well-formed, no mixed text).
+// Minimal XML parse/serialize for MathJax SVG. Text nodes are preserved on
+// their owning <text> element so Unicode glyphs survive fit-mode rewrites.
 // ---------------------------------------------------------------------------
 
 function parseAttrs(src) {
@@ -65,11 +66,17 @@ function parseAttrs(src) {
 }
 
 function parseXml(svg) {
-  const root = { tag: null, attrs: {}, children: [], parent: null };
+  const root = { tag: null, attrs: {}, children: [], parent: null, text: "" };
   let current = root;
   const tagRe = /<(\/?)([\w:.-]+)((?:"[^"]*"|[^>"'])*?)(\/?)>/g;
   let m;
+  let cursor = 0;
   while ((m = tagRe.exec(svg)) !== null) {
+    const rawText = svg.slice(cursor, m.index);
+    if (current.tag === "text" && rawText.length > 0) {
+      current.text += rawText;
+    }
+    cursor = tagRe.lastIndex;
     const closing = m[1] === "/";
     const name = m[2];
     const attrSrc = m[3] || "";
@@ -83,7 +90,7 @@ function parseXml(svg) {
       }
       continue;
     }
-    const el = { tag: name, attrs: parseAttrs(attrSrc), children: [], parent: current };
+    const el = { tag: name, attrs: parseAttrs(attrSrc), children: [], parent: current, text: "" };
     current.children.push(el);
     if (!selfClose) {
       current = el;
@@ -102,11 +109,14 @@ const SELF_CLOSING = new Set(["path", "rect", "circle", "ellipse", "line", "use"
 
 function serialize(el, out) {
   const attrs = serializeAttrs(el.attrs);
-  if (SELF_CLOSING.has(el.tag) || el.children.length === 0) {
+  if (SELF_CLOSING.has(el.tag) || (el.children.length === 0 && !el.text)) {
     out.push(`<${el.tag}${attrs}/>`);
     return;
   }
   out.push(`<${el.tag}${attrs}>`);
+  if (el.text) {
+    out.push(el.text);
+  }
   for (const child of el.children) {
     serialize(child, out);
   }

@@ -83,6 +83,36 @@ class LaTeXParserTest {
     }
 
     @Test
+    void keepsEscapedDollarSignsInsideInlineFormula() {
+        List<ContentSegment> segments = parser.parseText(
+            "before$\\text{\\$\\$}\\;\\backslash\\text{sqrt2 \\$\\$}$after");
+
+        List<ContentSegment> formulas = segments.stream().filter(ContentSegment::isMath).toList();
+        assertEquals(1, formulas.size());
+        assertEquals("\\text{\\$\\$}\\;\\backslash\\text{sqrt2 \\$\\$}", formulas.get(0).rawText());
+    }
+
+    @Test
+    void doesNotTreatArrayLineSpacingAsDisplayMathDelimiter() {
+        String latex = "\\sum\\nolimits_{\\begin{array}{c}a\\\\[0.1em]b\\\\[0.1em]c\\end{array}}";
+        List<ContentSegment> segments = parser.parseText("$" + latex + "$");
+
+        List<ContentSegment> formulas = segments.stream().filter(ContentSegment::isMath).toList();
+        assertEquals(1, formulas.size());
+        assertEquals(latex, formulas.get(0).rawText());
+    }
+
+    @Test
+    void keepsNestedMathDelimitersInsideTextGroup() {
+        String latex = "\\mbox{\\large$T$}_0^2";
+        List<ContentSegment> segments = parser.parseText("$" + latex + "$");
+
+        List<ContentSegment> formulas = segments.stream().filter(ContentSegment::isMath).toList();
+        assertEquals(1, formulas.size());
+        assertEquals(latex, formulas.get(0).rawText());
+    }
+
+    @Test
     void hoistsArrayAlignmentMarkerOutOfFontStyleGroup() {
         LaTeXParser.DetailedParseResult result = parser.parseDetailed(
             "\\begin{array}{l}21x\\mathbf{&=}140\\\\20x\\mathbf{&=}65\\end{array}");

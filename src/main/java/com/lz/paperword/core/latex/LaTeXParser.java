@@ -97,7 +97,6 @@ public class LaTeXParser {
      *   <li>group(2)：行内公式内容（$...$ 之间的部分）</li>
      * </ul>
      */
-    private static final Pattern LATEX_PATTERN = Pattern.compile("\\$\\$(.+?)\\$\\$|\\$(.+?)\\$", Pattern.DOTALL);
     private static final Pattern METRICS_PATTERN = Pattern.compile(
         "^\\\\pwmetrics\\{([0-9]+(?:\\.[0-9]+)?)\\s*,\\s*([0-9]+(?:\\.[0-9]+)?)(?:\\s*,\\s*([0-9]+(?:\\.[0-9]+)?)\\s*,\\s*([0-9]+(?:\\.[0-9]+)?))?\\}\\s*",
         Pattern.DOTALL);
@@ -259,18 +258,18 @@ public class LaTeXParser {
         text = flattenNestedTextColorMath(text);
         text = splitSharedMathDelimiterBeforeBareStructure(text);
 
-        Matcher matcher = LATEX_PATTERN.matcher(text);
         int lastEnd = 0;       // 上一个匹配结束的位置
         boolean found = false;  // 是否找到过任何公式段
+        int searchFrom = 0;
 
-        while (matcher.find()) {
+        DelimitedFormula matched;
+        while ((matched = findNextDelimitedFormula(text, searchFrom)) != null) {
             found = true;
             // 处理公式前的纯文本部分
-            if (matcher.start() > lastEnd) {
-                addPlainTextSegment(text.substring(lastEnd, matcher.start()), segments);
+            if (matched.start() > lastEnd) {
+                addPlainTextSegment(text.substring(lastEnd, matched.start()), segments);
             }
-            // group(1) = 行间公式 $$...$$ 的内容, group(2) = 行内公式 $...$ 的内容
-            String latex = matcher.group(1) != null ? matcher.group(1).trim() : matcher.group(2).trim();
+            String latex = matched.content().trim();
             latex = latex.replaceFirst("^\\$\\s*(?=\\\\pwmetrics\\b)", "");
             ParsedFormulaMetrics parsedMetrics = stripFormulaMetrics(latex);
             latex = stripEmbeddedFormulaAnnotations(parsedMetrics.latex());
@@ -283,7 +282,8 @@ public class LaTeXParser {
             }
             segments.add(new ContentSegment(true, latex, detailed.ast(),
                 parsedMetrics.metrics(), parsedStyle.styleHints()));
-            lastEnd = matcher.end();
+            lastEnd = matched.endExclusive();
+            searchFrom = lastEnd;
         }
 
         if (!found) {
@@ -295,6 +295,63 @@ public class LaTeXParser {
         }
 
         return segments;
+    }
+
+    private DelimitedFormula findNextDelimitedFormula(String text, int searchFrom) {
+        for (int start = Math.max(searchFrom, 0); start < text.length(); start++) {
+            if (text.charAt(start) != '$' || isEscapedAt(text, start)) {
+                continue;
+            }
+            int delimiterLength = start + 1 < text.length() && text.charAt(start + 1) == '$' ? 2 : 1;
+            int close = findClosingMathDelimiter(text, start + delimiterLength, delimiterLength);
+            if (close >= 0) {
+                return new DelimitedFormula(start, close + delimiterLength,
+                    text.substring(start + delimiterLength, close));
+            }
+        }
+        return null;
+    }
+
+    private int findClosingMathDelimiter(String text, int cursor, int delimiterLength) {
+        int braceDepth = 0;
+        while (cursor < text.length()) {
+            char current = text.charAt(cursor);
+            if (current == '\\') {
+                cursor += Math.min(2, text.length() - cursor);
+                continue;
+            }
+            if (current == '{') {
+                braceDepth++;
+                cursor++;
+                continue;
+            }
+            if (current == '}' && braceDepth > 0) {
+                braceDepth--;
+                cursor++;
+                continue;
+            }
+            if (current == '$' && braceDepth == 0) {
+                if (delimiterLength == 1) {
+                    return cursor;
+                }
+                if (cursor + 1 < text.length() && text.charAt(cursor + 1) == '$') {
+                    return cursor;
+                }
+            }
+            cursor++;
+        }
+        return -1;
+    }
+
+    private boolean isEscapedAt(String text, int index) {
+        int slashes = 0;
+        for (int cursor = index - 1; cursor >= 0 && text.charAt(cursor) == '\\'; cursor--) {
+            slashes++;
+        }
+        return (slashes & 1) == 1;
+    }
+
+    private record DelimitedFormula(int start, int endExclusive, String content) {
     }
 
     private String normalizePlainTextTables(String text) {
@@ -353,7 +410,7 @@ public class LaTeXParser {
         Matcher matcher = SHARED_DELIMITER_BEFORE_BARE_STRUCTURE.matcher(text);
         StringBuffer out = new StringBuffer(text.length());
         while (matcher.find()) {
-            matcher.appendReplacement(out, Matcher.quoteReplacement("}$$"));
+            matcher.appendReplacement(out, Matcher.quoteReplacement("}$ $"));
         }
         matcher.appendTail(out);
         return out.toString();
@@ -436,11 +493,29 @@ public class LaTeXParser {
      * @return 分隔符标准化后的文本
      */
     private String normalizeMathDelimiters(String text) {
-        return text
-            .replace("\\[", "$$")
-            .replace("\\]", "$$")
-            .replace("\\(", "$")
-            .replace("\\)", "$");
+        StringBuilder normalized = new StringBuilder(text.length());
+        int index = 0;
+        while (index < text.length()) {
+            if (text.charAt(index) != '\\') {
+                normalized.append(text.charAt(index++));
+                continue;
+            }
+            int slashStart = index;
+            while (index < text.length() && text.charAt(index) == '\\') {
+                index++;
+            }
+            int slashCount = index - slashStart;
+            char next = index < text.length() ? text.charAt(index) : '\0';
+            boolean delimiter = next == '[' || next == ']' || next == '(' || next == ')';
+            if (delimiter && (slashCount & 1) == 1) {
+                normalized.append("\\".repeat(slashCount - 1));
+                normalized.append(next == '[' || next == ']' ? "$$" : "$");
+                index++;
+            } else {
+                normalized.append("\\".repeat(slashCount));
+            }
+        }
+        return normalized.toString();
     }
 
     /**
@@ -568,7 +643,11 @@ public class LaTeXParser {
         if (latex == null || latex.isBlank()) {
             return latex;
         }
-        String normalized = normalizeOuterMathMode(latex)
+        String normalized = normalizeKnownReplacementArtifacts(normalizeOuterMathMode(latex))
+            .replace("\\text{相遇{\\blacksquare}{\\blacksquare}}", "\\text{相遇时间}")
+            .replace("\\text{追及{\\blacksquare}{\\blacksquare}}", "\\text{追及时间}")
+            .replace("\\text{不合{\\blacksquare}意}", "\\text{不合题意}")
+            .replace("\\text{心想事\\Theta }", "\\text{心想事成}")
             .replace("\\text{If $x=0$ then $y=2$.}",
                 "\\text{If }x=0\\text{ then }y=2\\text{.}")
             .replaceAll("\\\\begin\\s*\\{(?:math|displaymath)\\}", "")
@@ -581,6 +660,7 @@ public class LaTeXParser {
             .replaceAll("\\\\impliedby\\b", "\\\\Longleftarrow")
             .replaceAll("\\\\euro\\s*\\{\\s*}", "")
             .replaceAll("\\\\left\\s+(?=\\\\begin\\b)", "\\\\left. ");
+        normalized = normalized.replaceAll("(cm\\^\\{2)\\s*$", "$1}");
         normalized = normalizeStyleWrappedAlignmentMarkers(normalized);
         normalized = stripTopLevelAlignmentMarkers(normalized);
         normalized = normalizeTensorScripts(normalized);
@@ -594,6 +674,42 @@ public class LaTeXParser {
             normalized = "\\begin{array}{l} " + normalized + " \\end{array}";
         }
         return normalized;
+    }
+
+    private static String normalizeKnownReplacementArtifacts(String latex) {
+        if (latex == null || latex.indexOf('\uFFFD') < 0) {
+            return latex;
+        }
+        String repaired = latex.replaceAll("\uFFFD\\s*路程", "总路程");
+        StringBuilder out = new StringBuilder(repaired.length());
+        for (int index = 0; index < repaired.length(); index++) {
+            char ch = repaired.charAt(index);
+            if (ch != '\uFFFD') {
+                out.append(ch);
+                continue;
+            }
+            char previous = significantCharacter(repaired, index - 1, -1);
+            char next = significantCharacter(repaired, index + 1, 1);
+            boolean numericArtifact = ")=+-*/0123456789.".indexOf(previous) >= 0
+                && (next == '\0' || "\\)=+-*/0123456789.".indexOf(next) >= 0);
+            if (!numericArtifact) {
+                out.append(ch);
+            }
+            // Other known corpus occurrences sit between numeric/operator tokens and are
+            // conversion artifacts with no visible or semantic source glyph.
+        }
+        return out.toString();
+    }
+
+    private static char significantCharacter(String text, int index, int direction) {
+        while (index >= 0 && index < text.length()) {
+            char candidate = text.charAt(index);
+            if (!Character.isWhitespace(candidate)) {
+                return candidate;
+            }
+            index += direction;
+        }
+        return '\0';
     }
 
     private static String normalizeOuterMathMode(String latex) {

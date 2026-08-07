@@ -1538,7 +1538,8 @@ def repair_docx2tex_latex(text: str) -> str:
     text = text.replace("忖", r"\Delta ")
     text = text.replace("Θ", r"\Theta ")
     text = text.replace("жи", r"\Theta ")
-    text = text.replace("成", r"\Theta ")
+    text = re.sub(r"(?<![\u3400-\u9FFF])成(?![\u3400-\u9FFF])", r"\\Theta ", text)
+    text = text.replace(r"\text{不合{\blacksquare}意}", r"\text{不合题意}")
     text = text.replace("Ο", r"\bigcirc ")
     text = text.replace("○", r"\bigcirc ")
     text = text.replace("●", r"\bullet ")
@@ -1848,6 +1849,20 @@ def fold_labeled_blocks_into_questions(questions: list[dict], preserve_formula_o
     return folded
 
 
+LOST_SPEED_SUBSCRIPT_RE = re.compile(r"V_\{(?:\\mathrm\{)?�\s*(?:\})?\}")
+
+
+def repair_known_replacement_context(text: str) -> str:
+    """Restore the four speed labels whose paragraph-level ratios identify them uniquely."""
+    if "1：12" not in text or "1：16" not in text:
+        return text
+    matches = list(LOST_SPEED_SUBSCRIPT_RE.finditer(text))
+    if len(matches) != 4:
+        return text
+    labels = iter(("甲", "车", "乙", "车"))
+    return LOST_SPEED_SUBSCRIPT_RE.sub(lambda _: rf"V_{{\mathrm{{{next(labels)}}}}}", text)
+
+
 def build_request(index: int, tex_path: Path, latex_root: Path, styles: dict[int, str] | None = None,
                   source_docx: Path | None = None, source_name: str | None = None) -> tuple[dict, int, list[dict]]:
     equations = report_equations(index, latex_root)
@@ -1873,6 +1888,7 @@ def build_request(index: int, tex_path: Path, latex_root: Path, styles: dict[int
     questions = []
     serial = 1
     for block in blocks:
+        block = repair_known_replacement_context(block)
         block = unwrap_nested_math_in_text_commands(block)
         text, images, unresolved = split_pictures(block, tex_path.parent)
         text = strip_non_content_latex_commands(text)

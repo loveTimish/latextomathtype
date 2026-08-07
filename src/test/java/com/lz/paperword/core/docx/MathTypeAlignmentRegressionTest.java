@@ -28,7 +28,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class MathTypeAlignmentRegressionTest {
@@ -114,24 +113,29 @@ class MathTypeAlignmentRegressionTest {
     }
 
     @Test
-    void shouldUseEmfPreviewWhenMatureBackendIsEnabled() throws IOException {
-        // FreeHEP writes the EMF header via Toolkit.getScreenSize(); once a
-        // headless toolkit is cached (e.g. a Spring test context forced
-        // java.awt.headless), EMF export cannot work and the renderer falls
-        // back to WMF by design. Skip the strict EMF assertion in that case.
-        assumeFalse(isHeadlessToolkit(), "EMF export requires a display-capable AWT toolkit");
-        byte[] docx = withEmfPreviewEnabled(() -> buildDocxWithFormula("\\sqrt{a^{2}+b^{2}}"));
-        Map<String, String> entries = unzipTextEntries(docx);
-        String documentXml = entries.get("word/document.xml");
-        String relsXml = entries.get("word/_rels/document.xml.rels");
+    void shouldIgnoreRemovedEmfSwitchAndKeepStrictVectorWmf() throws IOException {
+        String previous = System.getProperty("paperword.ole.preview.emf");
+        System.setProperty("paperword.ole.preview.emf", "true");
+        try {
+            byte[] docx = buildDocxWithFormula("\\sqrt{a^{2}+b^{2}}");
+            Map<String, String> entries = unzipTextEntries(docx);
+            String documentXml = entries.get("word/document.xml");
+            String relsXml = entries.get("word/_rels/document.xml.rels");
 
-        assertNotNull(documentXml);
-        assertNotNull(relsXml);
-        assertTrue(documentXml.contains("<o:OLEObject"), "EMF preview must keep editable MathType OLE");
-        assertEquals("media/image_eq1.emf",
-            extractRelationshipTarget(relsXml, extractFirstImageRelId(documentXml)));
-        ObjectMetrics metrics = extractFirstObjectMetrics(docx);
-        assertEquals("emf", metrics.previewExtension);
+            assertNotNull(documentXml);
+            assertNotNull(relsXml);
+            assertTrue(documentXml.contains("<o:OLEObject"), "vector preview must keep editable MathType OLE");
+            assertEquals("media/image_eq1.wmf",
+                extractRelationshipTarget(relsXml, extractFirstImageRelId(documentXml)));
+            ObjectMetrics metrics = extractFirstObjectMetrics(docx);
+            assertEquals("wmf", metrics.previewExtension);
+        } finally {
+            if (previous == null) {
+                System.clearProperty("paperword.ole.preview.emf");
+            } else {
+                System.setProperty("paperword.ole.preview.emf", previous);
+            }
+        }
     }
 
     @Test
@@ -307,29 +311,6 @@ class MathTypeAlignmentRegressionTest {
         section.setQuestions(List.of(question));
         request.setSections(List.of(section));
         return builder.build(request);
-    }
-
-    private byte[] withEmfPreviewEnabled(ThrowingDocxSupplier supplier) throws IOException {
-        String previous = System.getProperty("paperword.ole.preview.emf");
-        System.setProperty("paperword.ole.preview.emf", "true");
-        try {
-            return supplier.get();
-        } finally {
-            if (previous == null) {
-                System.clearProperty("paperword.ole.preview.emf");
-            } else {
-                System.setProperty("paperword.ole.preview.emf", previous);
-            }
-        }
-    }
-
-    @FunctionalInterface
-    private interface ThrowingDocxSupplier {
-        byte[] get() throws IOException;
-    }
-
-    private static boolean isHeadlessToolkit() {
-        return java.awt.Toolkit.getDefaultToolkit().getClass().getSimpleName().equals("HeadlessToolkit");
     }
 
     private ObjectMetrics extractFirstObjectMetrics(byte[] docxBytes) throws IOException {

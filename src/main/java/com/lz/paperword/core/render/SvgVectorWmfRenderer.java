@@ -12,20 +12,30 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.Shape;
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Area;
+import java.awt.geom.PathIterator;
+import java.awt.geom.Rectangle2D;
+import java.awt.image.BufferedImage;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 把 MathJax(fit) 输出的 SVG 直接转换为<b>真矢量</b> placeable WMF。
  *
- * <p>严格子集：只支持 {@code svg/g/path/rect/defs} 元素、
- * {@code translate/scale/matrix} 变换、{@code M/L/H/V/Q/T/Z} 路径命令；
- * 遇到任何未知元素、命令或绘制属性立即抛出 {@link SvgVectorWmfException}，
- * 由调用方回退到位图路径，绝不静默丢图。
- *
- * <p>纯字节写出，不依赖 AWT，天然 headless 安全。
+ * <p>Batik 负责完整解释 SVG、CSS、嵌套 viewport、裁剪和文本布局，记录型
+ * {@code Graphics2D} 把所有绘制操作归一为填充轮廓。本类只把轮廓编码为 WMF，
+ * 不允许图片记录或目标端字体依赖。
  *
  * <p>关键 WMF 约定（spike 验证，GDI+ 与 Word 均可加载）：</p>
  * <ul>
@@ -39,7 +49,7 @@ import java.util.Locale;
  */
 public final class SvgVectorWmfRenderer {
 
-    /** 渲染不被支持的 SVG 特性时抛出，调用方据此回退位图。 */
+    /** 渲染不被支持的 SVG 特性时抛出；OLE 主链路不得回退位图。 */
     public static final class SvgVectorWmfException extends Exception {
         public SvgVectorWmfException(String message) {
             super(message);
@@ -54,9 +64,9 @@ public final class SvgVectorWmfRenderer {
     private static final int REC_SET_MAP_MODE = 0x0103;
     private static final int REC_SET_POLY_FILL_MODE = 0x0106;
     private static final int REC_SELECT_OBJECT = 0x012D;
-    private static final int REC_SET_WINDOW_EXT = 0x020B;
-    private static final int REC_SET_WINDOW_ORG = 0x020C;
-    private static final int REC_DELETE_OBJECT = 0x02F0;
+    private static final int REC_SET_WINDOW_ORG = 0x020B;
+    private static final int REC_SET_WINDOW_EXT = 0x020C;
+    private static final int REC_DELETE_OBJECT = 0x01F0;
     private static final int REC_CREATE_PEN_INDIRECT = 0x02FA;
     private static final int REC_CREATE_BRUSH_INDIRECT = 0x02FC;
     private static final int REC_POLY_POLYGON = 0x0538;
@@ -75,15 +85,78 @@ public final class SvgVectorWmfRenderer {
      */
     public static byte[] render(byte[] svgBytes, double widthPt, double heightPt)
         throws SvgVectorWmfException {
+        return renderDetailed(svgBytes, widthPt, heightPt).bytes();
+    }
+
+    /** 渲染并返回可用于验收报告的结构摘要。 */
+    public static VectorWmfResult renderDetailed(byte[] svgBytes, double widthPt, double heightPt)
+        throws SvgVectorWmfException {
         if (svgBytes == null || svgBytes.length == 0) {
             throw new SvgVectorWmfException("empty SVG input");
         }
         if (widthPt <= 0d || heightPt <= 0d) {
             throw new SvgVectorWmfException("non-positive target size: " + widthPt + "x" + heightPt);
         }
-        Element root = parseSvg(svgBytes);
-        double[] viewBox = parseViewBox(root);
+        BatikVectorSceneBuilder.VectorScene scene;
+        try {
+            scene = BatikVectorSceneBuilder.build(svgBytes);
+        } catch (BatikVectorSceneBuilder.VectorSceneException e) {
+            throw new SvgVectorWmfException(e.getMessage());
+        }
 
+        SceneLayout layout = layout(scene, widthPt, heightPt);
+        int unitsPerInch = layout.unitsPerInch();
+        int wUnits = layout.widthUnits();
+        int hUnits = layout.heightUnits();
+        AffineTransform toWmf = layout.toWmf();
+        List<PaintedPolygon> polygons = new ArrayList<>();
+        Set<Integer> colors = new LinkedHashSet<>();
+        for (BatikVectorSceneBuilder.PaintedShape painted : scene.shapes()) {
+            List<List<double[]>> contours = flattenShape(painted.shape(), toWmf);
+            if (!contours.isEmpty()) {
+                int rgb = painted.color().getRGB() & 0xFFFFFF;
+                colors.add(rgb);
+                polygons.add(new PaintedPolygon(contours, painted.color()));
+            }
+        }
+
+        try {
+            EmittedWmf emitted = emitPaintedWmf(polygons, wUnits, hUnits, unitsPerInch);
+            return new VectorWmfResult(emitted.bytes(), polygons.size(), Set.copyOf(colors),
+                scene.outlinedCodePoints(),
+                new WmfRecordSummary(emitted.polyPolygonRecords(), 0, 0, emitted.maxRecordWords()),
+                List.of());
+        } catch (IOException e) {
+            throw new SvgVectorWmfException("WMF emit failed: " + e.getMessage());
+        }
+    }
+
+    static BufferedImage rasterizeBatikReference(byte[] svgBytes, double widthPt, double heightPt,
+                                                   int widthPx, int heightPx)
+        throws SvgVectorWmfException {
+        BatikVectorSceneBuilder.VectorScene scene;
+        try {
+            scene = BatikVectorSceneBuilder.build(svgBytes);
+        } catch (BatikVectorSceneBuilder.VectorSceneException e) {
+            throw new SvgVectorWmfException(e.getMessage());
+        }
+        SceneLayout layout = layout(scene, widthPt, heightPt);
+        BufferedImage image = new BufferedImage(widthPx, heightPx, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        AffineTransform toPixels = AffineTransform.getScaleInstance(
+            widthPx / (double) layout.widthUnits(), heightPx / (double) layout.heightUnits());
+        toPixels.concatenate(layout.toWmf());
+        for (BatikVectorSceneBuilder.PaintedShape painted : scene.shapes()) {
+            graphics.setColor(painted.color());
+            graphics.fill(toPixels.createTransformedShape(painted.shape()));
+        }
+        graphics.dispose();
+        return image;
+    }
+
+    private static SceneLayout layout(BatikVectorSceneBuilder.VectorScene scene,
+                                      double widthPt, double heightPt) {
         double maxDimPt = Math.max(widthPt, heightPt);
         int unitsPerInch = PREFERRED_UNITS_PER_INCH;
         if (maxDimPt / 72.0d * unitsPerInch > INT16_SAFE) {
@@ -91,22 +164,97 @@ public final class SvgVectorWmfRenderer {
         }
         int wUnits = Math.max(1, (int) Math.round(widthPt / 72.0d * unitsPerInch));
         int hUnits = Math.max(1, (int) Math.round(heightPt / 72.0d * unitsPerInch));
-
-        double sxu = wUnits / viewBox[2];
-        double syu = hUnits / viewBox[3];
-        Affine rootTransform = new Affine(sxu, 0d, 0d, syu, -viewBox[0] * sxu, -viewBox[1] * syu);
-
-        List<List<List<double[]>>> groups = new ArrayList<>();
-        Affine svgTransform = rootTransform.multiply(parseTransform(root.getAttribute("transform")));
-        walk(root, svgTransform, groups);
-        if (groups.isEmpty()) {
-            throw new SvgVectorWmfException("SVG produced no drawable polygons");
+        Rectangle2D inkBounds = null;
+        for (BatikVectorSceneBuilder.PaintedShape painted : scene.shapes()) {
+            Rectangle2D bounds = painted.shape().getBounds2D();
+            if (!bounds.isEmpty()) {
+                inkBounds = inkBounds == null ? (Rectangle2D) bounds.clone() : inkBounds.createUnion(bounds);
+            }
         }
+        double safePx = 2d;
+        double leftPad = inkBounds != null && inkBounds.getMinX() <= 0.01d ? safePx : 0d;
+        double rightPad = inkBounds != null && inkBounds.getMaxX() >= scene.viewportWidth() - 0.01d ? safePx : 0d;
+        double topPad = inkBounds != null && inkBounds.getMinY() <= 0.01d ? safePx : 0d;
+        double bottomPad = inkBounds != null && inkBounds.getMaxY() >= scene.viewportHeight() - 0.01d ? safePx : 0d;
+        double scaleX = wUnits / (scene.viewportWidth() + leftPad + rightPad);
+        double scaleY = hUnits / (scene.viewportHeight() + topPad + bottomPad);
+        AffineTransform toWmf = new AffineTransform(
+            scaleX, 0d, 0d, scaleY, leftPad * scaleX, topPad * scaleY);
+        return new SceneLayout(wUnits, hUnits, unitsPerInch, toWmf);
+    }
 
-        try {
-            return emitWmf(groups, wUnits, hUnits, unitsPerInch);
-        } catch (IOException e) {
-            throw new SvgVectorWmfException("WMF emit failed: " + e.getMessage());
+    public record VectorWmfResult(byte[] bytes, int shapeCount, Set<Integer> colors,
+                                  Set<Integer> outlinedCodePoints, WmfRecordSummary recordSummary,
+                                  List<String> diagnostics) {
+        public VectorWmfResult {
+            bytes = bytes.clone();
+            colors = Set.copyOf(colors);
+            outlinedCodePoints = Set.copyOf(outlinedCodePoints);
+            diagnostics = List.copyOf(diagnostics);
+        }
+    }
+
+    public record WmfRecordSummary(int polyPolygonRecords, int bitmapRecords, int textRecords,
+                                   int maxRecordWords) {
+    }
+
+    private record PaintedPolygon(List<List<double[]>> contours, Color color) {
+    }
+
+    private record EmittedWmf(byte[] bytes, int polyPolygonRecords, int maxRecordWords) {
+    }
+
+    private record SceneLayout(int widthUnits, int heightUnits, int unitsPerInch,
+                               AffineTransform toWmf) {
+    }
+
+    private static List<List<double[]>> flattenShape(Shape shape, AffineTransform toWmf)
+        throws SvgVectorWmfException {
+        Area normalized = new Area(shape);
+        PathIterator iterator = normalized.getPathIterator(toWmf, 0.5d);
+        List<List<double[]>> contours = new ArrayList<>();
+        List<double[]> current = null;
+        double[] start = null;
+        double[] coords = new double[6];
+        while (!iterator.isDone()) {
+            int segment = iterator.currentSegment(coords);
+            switch (segment) {
+                case PathIterator.SEG_MOVETO -> {
+                    addClosedContour(contours, current, start);
+                    current = new ArrayList<>();
+                    start = new double[]{coords[0], coords[1]};
+                    current.add(start);
+                }
+                case PathIterator.SEG_LINETO -> {
+                    if (current == null) {
+                        throw new SvgVectorWmfException("flattened shape line starts without MOVETO");
+                    }
+                    current.add(new double[]{coords[0], coords[1]});
+                }
+                case PathIterator.SEG_CLOSE -> {
+                    addClosedContour(contours, current, start);
+                    current = null;
+                    start = null;
+                }
+                default -> throw new SvgVectorWmfException("shape flattening left a curve segment: " + segment);
+            }
+            iterator.next();
+        }
+        addClosedContour(contours, current, start);
+        return contours;
+    }
+
+    private static void addClosedContour(List<List<double[]>> contours, List<double[]> contour,
+                                         double[] start) {
+        if (contour == null || contour.size() < 3 || start == null) {
+            return;
+        }
+        double[] last = contour.get(contour.size() - 1);
+        if (Math.abs(last[0] - start[0]) > 1e-9 || Math.abs(last[1] - start[1]) > 1e-9) {
+            contour.add(new double[]{start[0], start[1]});
+        }
+        if (contour.size() >= 4) {
+            contours.add(contour);
         }
     }
 
@@ -596,19 +744,154 @@ public final class SvgVectorWmfRenderer {
 
     // ---------------------------------------------------------------- WMF 输出
 
+    private static EmittedWmf emitPaintedWmf(List<PaintedPolygon> polygons, int wUnits, int hUnits,
+                                             int unitsPerInch)
+        throws IOException, SvgVectorWmfException {
+        ByteArrayOutputStream records = new ByteArrayOutputStream(64 * 1024);
+        int maxRecordWords = 0;
+        maxRecordWords = Math.max(maxRecordWords,
+            writeRecord(records, REC_SET_MAP_MODE, payload(out -> writeWord(out, 8))));
+        maxRecordWords = Math.max(maxRecordWords,
+            writeRecord(records, REC_SET_WINDOW_ORG, payload(out -> {
+                writeShort(out, 0);
+                writeShort(out, 0);
+            })));
+        maxRecordWords = Math.max(maxRecordWords,
+            writeRecord(records, REC_SET_WINDOW_EXT, payload(out -> {
+                writeShort(out, hUnits);
+                writeShort(out, wUnits);
+            })));
+        maxRecordWords = Math.max(maxRecordWords,
+            writeRecord(records, REC_SET_POLY_FILL_MODE, payload(out -> writeWord(out, 2))));
+
+        Map<Integer, Integer> brushHandles = new LinkedHashMap<>();
+        for (PaintedPolygon polygon : polygons) {
+            int rgb = polygon.color().getRGB() & 0xFFFFFF;
+            brushHandles.computeIfAbsent(rgb, ignored -> brushHandles.size() + 1);
+        }
+        if (brushHandles.size() > 0x7FFE) {
+            throw new SvgVectorWmfException("too many simultaneous WMF brushes: " + brushHandles.size());
+        }
+
+        int numObjects = 0;
+        if (!polygons.isEmpty()) {
+            maxRecordWords = Math.max(maxRecordWords,
+                writeRecord(records, REC_CREATE_PEN_INDIRECT, payload(out -> {
+                    writeWord(out, 5); // PS_NULL
+                    writeShort(out, 0);
+                    writeShort(out, 0);
+                    writeDWord(out, 0);
+                })));
+            for (int rgb : brushHandles.keySet()) {
+                maxRecordWords = Math.max(maxRecordWords,
+                    writeRecord(records, REC_CREATE_BRUSH_INDIRECT, payload(out -> {
+                        writeWord(out, 0); // BS_SOLID
+                        writeDWord(out, colorRef(rgb));
+                        writeWord(out, 0);
+                    })));
+            }
+            numObjects = brushHandles.size() + 1;
+            maxRecordWords = Math.max(maxRecordWords,
+                writeRecord(records, REC_SELECT_OBJECT, payload(out -> writeWord(out, 0))));
+        }
+
+        int selectedBrush = -1;
+        int polyPolygonRecords = 0;
+        for (PaintedPolygon polygon : polygons) {
+            int handle = brushHandles.get(polygon.color().getRGB() & 0xFFFFFF);
+            if (handle != selectedBrush) {
+                int selected = handle;
+                maxRecordWords = Math.max(maxRecordWords,
+                    writeRecord(records, REC_SELECT_OBJECT, payload(out -> writeWord(out, selected))));
+                selectedBrush = handle;
+            }
+            byte[] params = polyPolygonPayload(polygon.contours());
+            maxRecordWords = Math.max(maxRecordWords,
+                writeRecord(records, REC_POLY_POLYGON, params));
+            polyPolygonRecords++;
+        }
+
+        if (!polygons.isEmpty()) {
+            maxRecordWords = Math.max(maxRecordWords,
+                writeRecord(records, REC_SELECT_OBJECT, payload(out -> writeWord(out, 0x8005))));
+            maxRecordWords = Math.max(maxRecordWords,
+                writeRecord(records, REC_SELECT_OBJECT, payload(out -> writeWord(out, 0x8008))));
+            for (int handle = numObjects - 1; handle >= 0; handle--) {
+                int deleted = handle;
+                maxRecordWords = Math.max(maxRecordWords,
+                    writeRecord(records, REC_DELETE_OBJECT, payload(out -> writeWord(out, deleted))));
+            }
+        }
+        maxRecordWords = Math.max(maxRecordWords, writeRecord(records, REC_EOF, new byte[0]));
+
+        byte[] recordBytes = records.toByteArray();
+        int fileSizeWords = recordBytes.length / 2 + 9;
+        ByteArrayOutputStream output = new ByteArrayOutputStream(40 + recordBytes.length);
+        writePlaceableHeader(output, wUnits, hUnits, unitsPerInch);
+        writeWord(output, 1);
+        writeWord(output, 9);
+        writeWord(output, 0x0300);
+        writeDWord(output, fileSizeWords);
+        writeWord(output, numObjects);
+        writeDWord(output, maxRecordWords);
+        writeWord(output, 0);
+        output.write(recordBytes);
+        return new EmittedWmf(output.toByteArray(), polyPolygonRecords, maxRecordWords);
+    }
+
+    private static byte[] polyPolygonPayload(List<List<double[]>> contours)
+        throws IOException, SvgVectorWmfException {
+        if (contours.isEmpty() || contours.size() > 0x7FFF) {
+            throw new SvgVectorWmfException("invalid polygon contour count: " + contours.size());
+        }
+        ByteArrayOutputStream params = new ByteArrayOutputStream();
+        writeWord(params, contours.size());
+        for (List<double[]> contour : contours) {
+            if (contour.size() < 3 || contour.size() > 0x7FFF) {
+                throw new SvgVectorWmfException("invalid contour point count: " + contour.size());
+            }
+            writeWord(params, contour.size());
+        }
+        for (List<double[]> contour : contours) {
+            for (double[] point : contour) {
+                writeShort(params, exactInt16(point[0], "x"));
+                writeShort(params, exactInt16(point[1], "y"));
+            }
+        }
+        return params.toByteArray();
+    }
+
+    private static int colorRef(int rgb) {
+        int red = (rgb >>> 16) & 0xFF;
+        int green = (rgb >>> 8) & 0xFF;
+        int blue = rgb & 0xFF;
+        return red | (green << 8) | (blue << 16);
+    }
+
+    private static int exactInt16(double value, String axis) throws SvgVectorWmfException {
+        if (!Double.isFinite(value)) {
+            throw new SvgVectorWmfException("non-finite WMF " + axis + " coordinate: " + value);
+        }
+        long rounded = Math.round(value);
+        if (rounded < Short.MIN_VALUE || rounded > Short.MAX_VALUE) {
+            throw new SvgVectorWmfException("WMF " + axis + " coordinate exceeds int16: " + value);
+        }
+        return (int) rounded;
+    }
+
     private static byte[] emitWmf(List<List<List<double[]>>> groups, int wUnits, int hUnits,
                                   int unitsPerInch) throws IOException, SvgVectorWmfException {
         ByteArrayOutputStream records = new ByteArrayOutputStream(64 * 1024);
         int maxRecordWords = 0;
 
         maxRecordWords = Math.max(maxRecordWords, writeRecord(records, REC_SET_MAP_MODE, payload(out -> writeWord(out, 8))));
-        maxRecordWords = Math.max(maxRecordWords, writeRecord(records, REC_SET_WINDOW_EXT, payload(out -> {
+        maxRecordWords = Math.max(maxRecordWords, writeRecord(records, REC_SET_WINDOW_ORG, payload(out -> {
             writeWord(out, 0);
             writeWord(out, 0);
         })));
         final int w = wUnits;
         final int h = hUnits;
-        maxRecordWords = Math.max(maxRecordWords, writeRecord(records, REC_SET_WINDOW_ORG, payload(out -> {
+        maxRecordWords = Math.max(maxRecordWords, writeRecord(records, REC_SET_WINDOW_EXT, payload(out -> {
             writeWord(out, h); // 参数顺序 (y, x)
             writeWord(out, w);
         })));
@@ -644,8 +927,8 @@ public final class SvgVectorWmfRenderer {
             }
             for (List<double[]> contour : group) {
                 for (double[] p : contour) {
-                    writeShort(params, clamp16(p[0]));
-                    writeShort(params, clamp16(p[1]));
+                    writeShort(params, exactInt16(p[0], "x"));
+                    writeShort(params, exactInt16(p[1], "y"));
                 }
             }
             byte[] payload = params.toByteArray();
@@ -674,16 +957,6 @@ public final class SvgVectorWmfRenderer {
         writeWord(out, 0);          // numParams
         out.write(recordBytes);
         return out.toByteArray();
-    }
-
-    private static int clamp16(double v) {
-        if (v > 32767d) {
-            return 32767;
-        }
-        if (v < -32768d) {
-            return -32768;
-        }
-        return (int) Math.round(v);
     }
 
     private static void writePlaceableHeader(ByteArrayOutputStream out, int right, int bottom,

@@ -7,7 +7,7 @@ Export exam data and LaTeX formulas to Word `.docx` with editable MathType OLE e
 This is not a formula screenshot generator. The service writes MathType-compatible OLE objects, generates Word-visible previews, and validates the result with OLE inspection, Word/MathType spot checks, and `docx2tex` round trips.
 
 ```text
-PaperExportRequest -> LaTeX parser -> Math IR -> MTEF v5 -> OLE2 -> WMF preview -> DOCX
+PaperExportRequest -> LaTeX parser -> Math IR -> MTEF v5 -> OLE2 -> pure-vector WMF preview -> DOCX
 ```
 
 ## Highlights
@@ -15,17 +15,27 @@ PaperExportRequest -> LaTeX parser -> Math IR -> MTEF v5 -> OLE2 -> WMF preview 
 - Java 21 / Spring Boot service for Word paper export.
 - `POST /api/export/word` returns a `.docx` with editable MathType formulas.
 - Pure Java MTEF/OLE writer; the server path does not require desktop MathType.
-- Formula body, WMF preview, and Word display box are handled as separate layers.
+- Formula body, pure `POLYPOLYGON` WMF preview, and Word display box are handled as separate layers.
 - Linux runtime is supported; final GUI editability checks use Windows + Word + MathType.
 
 ## Quick Start
 
-Install the MathJax preview dependency:
+For local development, install the locked MathJax dependency:
 
 ```powershell
 npm install
 npm run mathjax:smoke
 ```
+
+Release deployments use the offline sidecar and do not run npm or access the network at runtime:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-vector-sidecar.ps1 -Platform all
+```
+
+Extract `vector-sidecar-windows-x64.zip` or `vector-sidecar-linux-x64.tar.gz` beside the application
+JAR so that the directory is named `vector-sidecar`. The runtime validates Node `v24.9.0`, MathJax
+`3.2.2`, and the worker bundle hash before accepting any render result.
 
 Build, test, and run:
 
@@ -63,7 +73,7 @@ The project deliberately keeps three concerns separate:
 | Layer | Controls |
 | --- | --- |
 | MTEF/OLE body | MathType editability and formula semantics |
-| WMF preview | What Word paints before the OLE object is opened |
+| Pure-vector WMF preview | What Word paints before the OLE object is opened; bitmap and text records are forbidden |
 | Word display box | Visible width, height, and baseline on the page |
 
 That boundary is the main reason layout tuning happens in the Word object shell instead of by forcing point-size records into the MTEF body.

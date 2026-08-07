@@ -13,13 +13,8 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 class LaTeXImageRendererTest {
-
-    private static boolean isHeadlessToolkit() {
-        return java.awt.Toolkit.getDefaultToolkit().getClass().getSimpleName().equals("HeadlessToolkit");
-    }
 
     @Test
     void shouldParseSvgPtDimensions() {
@@ -139,6 +134,24 @@ class LaTeXImageRendererTest {
     }
 
     @Test
+    void shouldRepairOnlyKnownDocx2texReplacementArtifacts() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
+        method.setAccessible(true);
+
+        assertEquals("总路程=速度和", method.invoke(new LaTeXImageRenderer(), "� 路程=速度和"));
+        assertEquals("(75+60)\\times20=2700",
+            method.invoke(new LaTeXImageRenderer(), "(75+60)�\\times20=�2700"));
+        assertEquals("V_{\\unicode{xFFFD}}", method.invoke(new LaTeXImageRenderer(), "V_{�}"));
+        assertEquals("\\text{相遇时间}+\\text{追及时间}", method.invoke(new LaTeXImageRenderer(),
+            "\\text{相遇{\\blacksquare}{\\blacksquare}}+\\text{追及{\\blacksquare}{\\blacksquare}}"));
+        assertEquals("2=64（cm^{2}", method.invoke(new LaTeXImageRenderer(), "2=64（cm^{2"));
+        assertEquals("\\text{心想事成}", method.invoke(new LaTeXImageRenderer(), "\\text{心想事\\Theta }"));
+        assertEquals("\\text{不合题意}",
+            method.invoke(new LaTeXImageRenderer(), "\\text{不合{\\blacksquare}意}"));
+        assertEquals("x+\\blacksquare", method.invoke(new LaTeXImageRenderer(), "x+\\blacksquare"));
+    }
+
+    @Test
     void shouldRenderEuroArrayAsEditableOlePreview() {
         LaTeXImageRenderer.PreviewImage preview = new LaTeXImageRenderer().renderForOlePreview(
             "\\begin{array}{r}2.30€\\\\55.60€\\\\1001.00€\\end{array}");
@@ -170,29 +183,43 @@ class LaTeXImageRendererTest {
     }
 
     @Test
-    void cacheKeyIncludesWmfRenderProperties() throws Exception {
+    void cacheKeyIncludesCurrentVectorRenderProperties() throws Exception {
         Method method = LaTeXImageRenderer.class.getDeclaredMethod("cacheKey", String.class, String.class, float.class);
         method.setAccessible(true);
         LaTeXImageRenderer renderer = new LaTeXImageRenderer();
-        String oldScale = System.getProperty("paperword.wmf.textWidth.scale");
+        String oldPadding = System.getProperty("paperword.mathjax.paddingPt");
         try {
-            System.setProperty("paperword.wmf.textWidth.scale", "1.00");
+            System.setProperty("paperword.mathjax.paddingPt", "2.30");
             String defaultKey = (String) method.invoke(renderer, "ole-target-10.00x10.00", "x+1", 12f);
-            System.setProperty("paperword.wmf.textWidth.scale", "1.25");
+            System.setProperty("paperword.mathjax.paddingPt", "3.25");
             String tunedKey = (String) method.invoke(renderer, "ole-target-10.00x10.00", "x+1", 12f);
 
-            assertFalse(defaultKey.equals(tunedKey), "WMF render tuning must invalidate preview cache keys");
+            assertFalse(defaultKey.equals(tunedKey), "MathJax vector geometry must invalidate preview cache keys");
         } finally {
-            restoreProperty("paperword.wmf.textWidth.scale", oldScale);
+            restoreProperty("paperword.mathjax.paddingPt", oldPadding);
         }
     }
 
     @Test
-    void shouldRenderOlePreviewAsEmfWhenMatureBackendIsEnabled() {
-        // FreeHEP writes the EMF header via Toolkit.getScreenSize(); a cached
-        // headless toolkit (e.g. forced by a Spring test context) makes EMF
-        // export impossible and the renderer falls back to WMF by design.
-        assumeFalse(isHeadlessToolkit(), "EMF export requires a display-capable AWT toolkit");
+    void legacyBitmapVectorToggleCannotChangeStrictVectorCacheIdentity() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("cacheKey", String.class, String.class, float.class);
+        method.setAccessible(true);
+        LaTeXImageRenderer renderer = new LaTeXImageRenderer();
+        String oldVector = System.getProperty("paperword.ole.preview.vectorWmf");
+        try {
+            System.setProperty("paperword.ole.preview.vectorWmf", "false");
+            String bitmap = (String) method.invoke(renderer, "ole", "x+1", 12f);
+            System.setProperty("paperword.ole.preview.vectorWmf", "true");
+            String vector = (String) method.invoke(renderer, "ole", "x+1", 12f);
+
+            assertEquals(bitmap, vector);
+        } finally {
+            restoreProperty("paperword.ole.preview.vectorWmf", oldVector);
+        }
+    }
+
+    @Test
+    void legacyEmfToggleCannotBypassStrictVectorWmfBackend() {
         String oldEmf = System.getProperty("paperword.ole.preview.emf");
         try {
             System.setProperty("paperword.ole.preview.emf", "true");
@@ -200,9 +227,11 @@ class LaTeXImageRendererTest {
             LaTeXImageRenderer.PreviewImage preview =
                 new LaTeXImageRenderer().renderForOlePreview("\\sqrt{a^{2}+b^{2}}", 56.0d, 21.0d);
 
-            assertEquals("emf", preview.extension());
-            assertEquals("image/x-emf", preview.contentType());
+            assertEquals("wmf", preview.extension());
+            assertEquals("image/x-wmf", preview.contentType());
             assertTrue(preview.data().length > 0);
+            assertFalse(SvgVectorWmfRenderer.containsBitmapRecord(preview.data()));
+            assertTrue(WmfPreviewInspector.inspect(preview.data()).pureVector());
             assertEquals(56.0d, preview.widthPt(), 0.01d);
             assertEquals(21.0d, preview.heightPt(), 0.01d);
         } finally {

@@ -22,10 +22,12 @@ RECORD_NAMES = {
     0x0106: "SetBkMode",
     0x012D: "SelectObject",
     0x012E: "SetTextAlign",
+    0x01F0: "DeleteObject",
     0x0209: "SetTextColor",
     0x020B: "SetWindowOrg",
     0x020C: "SetWindowExt",
     0x02FA: "CreatePen",
+    0x02FC: "CreateBrush",
     0x02FB: "CreateFont",
     0x0325: "Polyline",
     0x041B: "Rectangle",
@@ -41,6 +43,11 @@ RECORD_NAMES = {
 }
 
 BITMAP_RECORDS = {0x0922, 0x0940, 0x0B23, 0x0B41, 0x0D33, 0x0F43}
+TEXT_RECORDS = {0x0521, 0x0A32}
+PURE_VECTOR_RECORDS = {
+    0x0000, 0x0103, 0x0106, 0x012D, 0x01F0, 0x020B, 0x020C,
+    0x02FA, 0x02FC, 0x0324, 0x0538,
+}
 LEAK_PATTERNS = [
     r"\\(?:alpha|beta|gamma|delta|theta|lambda|mu|pi|sigma|omega|frac|sqrt|begin|end|left|right|times|div|cdot|textcolor|pwmetrics|pwstyle|overset|underset|array|cases|matrix|mathrm|mathbf|mathit|overline|underline|overrightarrow|overarc|angle|triangle|because|therefore)\b",
     r"\b(?:pwmetrics|pwstyle|begin\{(?:array|equation|cases|matrix)|end\{(?:array|equation|cases|matrix)|textcolor)\b",

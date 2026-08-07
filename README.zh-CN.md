@@ -7,7 +7,7 @@
 这不是公式截图生成器。服务会写入 MathType 兼容 OLE 对象，生成 Word 可见预览，并通过 OLE 检查、Word/MathType 抽查和 `docx2tex` 回切验证结果。
 
 ```text
-PaperExportRequest -> LaTeX 解析 -> Math IR -> MTEF v5 -> OLE2 -> WMF 预览 -> DOCX
+PaperExportRequest -> LaTeX 解析 -> Math IR -> MTEF v5 -> OLE2 -> 纯矢量 WMF 预览 -> DOCX
 ```
 
 ## 亮点
@@ -15,17 +15,27 @@ PaperExportRequest -> LaTeX 解析 -> Math IR -> MTEF v5 -> OLE2 -> WMF 预览 -
 - Java 21 / Spring Boot 的 Word 试卷导出服务。
 - `POST /api/export/word` 返回带可编辑 MathType 公式的 `.docx`。
 - 纯 Java MTEF/OLE 写入路径；服务端不依赖桌面 MathType。
-- 公式本体、WMF 预览和 Word 显示框分层处理。
+- 公式本体、纯 `POLYPOLYGON` WMF 预览和 Word 显示框分层处理。
 - 支持 Linux 运行；最终 GUI 可编辑性抽查使用 Windows + Word + MathType。
 
 ## 快速开始
 
-安装 MathJax 预览依赖：
+本地开发时安装锁定的 MathJax 依赖：
 
 ```powershell
 npm install
 npm run mathjax:smoke
 ```
+
+发行部署使用离线 sidecar，运行时不会执行 npm 或访问网络：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-vector-sidecar.ps1 -Platform all
+```
+
+把 `vector-sidecar-windows-x64.zip` 或 `vector-sidecar-linux-x64.tar.gz` 解压到应用 JAR
+旁边，并确保目录名为 `vector-sidecar`。运行时会校验 Node `v24.9.0`、MathJax
+`3.2.2` 和 worker bundle 哈希。
 
 构建、测试并启动服务：
 
@@ -63,7 +73,7 @@ Invoke-WebRequest `
 | 层次 | 控制内容 |
 | --- | --- |
 | MTEF/OLE 本体 | MathType 可编辑性和公式语义 |
-| WMF 预览 | OLE 对象打开前 Word 绘制的内容 |
+| 纯矢量 WMF 预览 | OLE 对象打开前 Word 绘制的内容；禁止位图和文本记录 |
 | Word 显示框 | 页面中的可见宽度、高度和基线 |
 
 因此，版式调校主要发生在 Word 对象外壳，而不是把固定点数字号强塞进 MTEF 本体。

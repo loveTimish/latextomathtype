@@ -13,10 +13,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SvgVectorWmfRendererTest {
 
     private static final String SIMPLE_SVG =
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24pt\" height=\"12pt\" viewBox=\"0 -1000 2000 1000\">"
-            + "<g stroke=\"#000000\" fill=\"#000000\" stroke-width=\"0\" transform=\"scale(1,-1)\">"
-            + "<path d=\"M10 -10L100 -10L100 -100L10 -100Z\"/>"
-            + "<rect x=\"200\" y=\"-50\" width=\"300\" height=\"20\"/>"
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24pt\" height=\"12pt\" viewBox=\"0 0 2000 1000\">"
+            + "<g stroke=\"#000000\" fill=\"#000000\" stroke-width=\"0\" transform=\"scale(1,1)\">"
+            + "<path d=\"M10 10L100 10L100 100L10 100Z\"/>"
+            + "<rect x=\"200\" y=\"50\" width=\"300\" height=\"20\"/>"
             + "</g></svg>";
 
     /** 带孔洞的字形（外轮廓 + 内轮廓）与二次曲线、T 反射。 */
@@ -37,7 +37,7 @@ class SvgVectorWmfRendererTest {
         assertEquals((byte) 0xC6, wmf[2]);
         assertEquals((byte) 0x9A, wmf[3]);
         assertFalse(SvgVectorWmfRenderer.containsBitmapRecord(wmf), "矢量 WMF 不应含位图记录");
-        assertTrue(countRecords(wmf, 0x0538) >= 2, "path + rect 应各产生一条 POLYPOLYGON");
+        assertTrue(countRecords(wmf, 0x0538) >= 1, "Batik 应把 path + rect 输出为矢量轮廓");
         assertEquals(1, countRecords(wmf, 0x0000), "应恰好一条 EOF");
         assertEquals(1, countRecords(wmf, 0x0106), "应设置 WINDING 填充模式");
         assertEquals(1, countRecords(wmf, 0x02FC), "应创建画刷（stock 画刷不可靠）");
@@ -56,39 +56,98 @@ class SvgVectorWmfRendererTest {
     }
 
     @Test
-    void shouldRejectUnknownElement() {
+    void shouldRenderEllipseThroughBatik() throws Exception {
         String svg = SIMPLE_SVG.replace("</g>", "<ellipse cx=\"1\" cy=\"2\" rx=\"3\" ry=\"4\"/></g>");
-        assertThrows(SvgVectorWmfRenderer.SvgVectorWmfException.class,
-            () -> SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 24d, 12d));
+        byte[] wmf = SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 24d, 12d);
+        assertFalse(SvgVectorWmfRenderer.containsBitmapRecord(wmf));
+        assertTrue(countRecords(wmf, 0x0538) >= 1);
     }
 
     @Test
-    void shouldRejectCubicPathCommand() {
-        String svg = SIMPLE_SVG.replace("M10 -10L100 -10L100 -100L10 -100Z",
-            "M10 -10C100 -10 100 -100 10 -100Z");
-        assertThrows(SvgVectorWmfRenderer.SvgVectorWmfException.class,
-            () -> SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 24d, 12d));
+    void shouldRenderCubicPathCommand() throws Exception {
+        String svg = SIMPLE_SVG.replace("M10 10L100 10L100 100L10 100Z",
+            "M10 10C100 10 100 100 10 100Z");
+        byte[] wmf = SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 24d, 12d);
+        assertFalse(SvgVectorWmfRenderer.containsBitmapRecord(wmf));
     }
 
     @Test
-    void shouldRejectRotateTransform() {
-        String svg = SIMPLE_SVG.replace("scale(1,-1)", "rotate(45)");
-        assertThrows(SvgVectorWmfRenderer.SvgVectorWmfException.class,
-            () -> SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 24d, 12d));
+    void shouldRenderRotateTransform() throws Exception {
+        String svg = SIMPLE_SVG.replace("scale(1,1)", "rotate(45)");
+        byte[] wmf = SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 24d, 12d);
+        assertFalse(SvgVectorWmfRenderer.containsBitmapRecord(wmf));
     }
 
     @Test
-    void shouldRejectStrokeOnPath() {
-        String svg = SIMPLE_SVG.replace("<path d=", "<path stroke=\"#ff0000\" d=");
-        assertThrows(SvgVectorWmfRenderer.SvgVectorWmfException.class,
-            () -> SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 24d, 12d));
+    void shouldExpandStrokeAndKeepColor() throws Exception {
+        String svg = SIMPLE_SVG.replace("<path d=", "<path stroke=\"#ff0000\" stroke-width=\"10\" d=");
+        SvgVectorWmfRenderer.VectorWmfResult result = SvgVectorWmfRenderer.renderDetailed(
+            svg.getBytes(StandardCharsets.UTF_8), 24d, 12d);
+        assertTrue(result.colors().contains(0xFF0000));
+        assertFalse(SvgVectorWmfRenderer.containsBitmapRecord(result.bytes()));
     }
 
     @Test
-    void shouldRejectMissingViewBox() {
-        String svg = SIMPLE_SVG.replace(" viewBox=\"0 -1000 2000 1000\"", "");
+    void shouldRenderSvgWithPhysicalViewportAndNoViewBox() throws Exception {
+        String svg = SIMPLE_SVG.replace(" viewBox=\"0 0 2000 1000\"", "");
+        byte[] wmf = SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 24d, 12d);
+        assertFalse(SvgVectorWmfRenderer.containsBitmapRecord(wmf));
+    }
+
+    @Test
+    void shouldRenderNestedSvgLinesPolygonsAndUnicodeTextAsOutlines() throws Exception {
+        String svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"40pt\" height=\"20pt\" "
+            + "viewBox=\"0 0 400 200\"><g fill=\"#007f00\" stroke=\"#0000ff\">"
+            + "<svg x=\"10\" y=\"10\" width=\"180\" height=\"80\" viewBox=\"0 0 180 80\">"
+            + "<polygon points=\"0,80 90,0 180,80\"/></svg>"
+            + "<line x1=\"10\" y1=\"120\" x2=\"390\" y2=\"120\" stroke-width=\"6\" "
+            + "stroke-dasharray=\"20 10\"/><text x=\"20\" y=\"180\" font-size=\"40\">§€中文К𝛼</text>"
+            + "</g></svg>";
+        SvgVectorWmfRenderer.VectorWmfResult result = SvgVectorWmfRenderer.renderDetailed(
+            svg.getBytes(StandardCharsets.UTF_8), 40d, 20d);
+        assertFalse(SvgVectorWmfRenderer.containsBitmapRecord(result.bytes()));
+        assertTrue(result.colors().contains(0x007F00));
+        assertTrue(result.colors().contains(0x0000FF));
+        assertTrue(result.shapeCount() >= 3);
+        assertTrue(result.outlinedCodePoints().contains((int) '§'));
+        assertTrue(result.outlinedCodePoints().contains((int) '€'));
+        assertTrue(result.outlinedCodePoints().contains((int) '中'));
+        assertTrue(result.outlinedCodePoints().contains((int) 'К'));
+        assertTrue(result.outlinedCodePoints().contains(0x1D6FC));
+    }
+
+    @Test
+    void shouldRejectCodePointMissingFromFixedFontSet() {
+        String svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10pt\" height=\"10pt\" "
+            + "viewBox=\"0 0 10 10\"><text x=\"0\" y=\"8\">&#x10FFFF;</text></svg>";
+        SvgVectorWmfRenderer.SvgVectorWmfException error = assertThrows(
+            SvgVectorWmfRenderer.SvgVectorWmfException.class,
+            () -> SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 10d, 10d));
+        assertTrue(error.getMessage().contains("MISSING_GLYPH"));
+    }
+
+    @Test
+    void shouldRejectEmbeddedRasterImage() {
+        String svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" "
+            + "width=\"10pt\" height=\"10pt\" viewBox=\"0 0 10 10\">"
+            + "<image width=\"10\" height=\"10\" xlink:href=\"data:image/png;base64,"
+            + "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZpSIAAAAASUVORK5CYII=\"/>"
+            + "</svg>";
         assertThrows(SvgVectorWmfRenderer.SvgVectorWmfException.class,
-            () -> SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 24d, 12d));
+            () -> SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 10d, 10d));
+    }
+
+    @Test
+    void shouldEmitValidEmptyVectorWmfForLegalEmptyScene() throws Exception {
+        String svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10pt\" height=\"5pt\" "
+            + "viewBox=\"0 0 10 5\"><g fill=\"none\"/></svg>";
+        byte[] wmf = SvgVectorWmfRenderer.render(svg.getBytes(StandardCharsets.UTF_8), 10d, 5d);
+        WmfPreviewInspector.Inspection inspection = WmfPreviewInspector.inspect(wmf);
+
+        assertTrue(inspection.valid(), inspection.error());
+        assertTrue(inspection.pureVector());
+        assertEquals(0, inspection.drawingRecordCount());
+        assertEquals(0, inspection.foregroundPixels());
     }
 
     @Test

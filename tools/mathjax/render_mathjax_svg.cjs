@@ -2,17 +2,26 @@
 "use strict";
 
 const readline = require("readline");
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const { mathjax } = require("mathjax-full/js/mathjax.js");
 const { TeX } = require("mathjax-full/js/input/tex.js");
 const { SVG } = require("mathjax-full/js/output/svg.js");
 const { liteAdaptor } = require("mathjax-full/js/adaptors/liteAdaptor.js");
 const { RegisterHTMLHandler } = require("mathjax-full/js/handlers/html.js");
 const { AllPackages } = require("mathjax-full/js/input/tex/AllPackages.js");
+const MATHJAX_VERSION = require("mathjax-full/package.json").version;
 
 const adaptor = liteAdaptor();
 RegisterHTMLHandler(adaptor);
 
 const { fitMathType, stackFittedLines } = require("./mathtype_fit.cjs");
+const BUNDLE_HASH = crypto.createHash("sha256")
+  .update(fs.readFileSync(__filename)).update("\0")
+  .update(fs.readFileSync(path.join(__dirname, "mathtype_fit.cjs"))).update("\0")
+  .update(fs.readFileSync(path.join(__dirname, "..", "..", "package-lock.json")))
+  .digest("hex");
 
 /** Fit-mode padding (pt), tuned against GT MathType v:shape boxes. */
 const FIT_PAD_TOP_PT = 3.23;
@@ -33,6 +42,10 @@ function convertToSvg(latex) {
   if (/data-mml-node=["']merror["']/.test(rendered)
       || /data-mml-node=["']mtext["'][^>]*(?:fill|stroke)=["']red["']/.test(rendered)) {
     throw new Error(`MathJax produced an error glyph for: ${latex}`);
+  }
+  if (/[\uFFFD\u25A1]/u.test(rendered)
+      || (/<text\b[^>]*>\?<\/text>/u.test(rendered) && !latex.includes("?"))) {
+    throw new Error(`MathJax produced a missing-glyph placeholder for: ${latex}`);
   }
   return rendered;
 }
@@ -117,6 +130,12 @@ const tex = new TeX({
     whitestar: "\\star",
     blackstar: "\\star",
     whitediamond: "\\diamond",
+    bracevert: "\\vert",
+    Circle: "\\bigcirc",
+    CIRCLE: "\\unicode{x25CF}",
+    Sun: "\\unicode{x2609}",
+    Diamondblack: "\\unicode{x25C6}",
+    bigstar: "\\unicode{x2605}",
     underbracechar: "\\underbrace{\\hphantom{0}}",
     upslopeellipsis: "\\begin{smallmatrix}&&\\cdot\\\\&\\cdot&\\\\\\cdot&&\\end{smallmatrix}",
     leftbarharpoon: "\\leftharpoonup\\!|",
@@ -242,6 +261,10 @@ function renderLatex(request) {
 
   return {
     ok: true,
+    engine: "mathjax-svg",
+    mathJaxVersion: MATHJAX_VERSION,
+    nodeVersion: process.version,
+    bundleHash: BUNDLE_HASH,
     svgBase64: Buffer.from(svg, "utf8").toString("base64"),
     widthPt,
     heightPt,

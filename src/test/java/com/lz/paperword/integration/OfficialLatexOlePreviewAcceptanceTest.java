@@ -68,7 +68,7 @@ class OfficialLatexOlePreviewAcceptanceTest {
 
                 LaTeXImageRenderer.PreviewImage preview = renderer.renderForOlePreview(latex);
                 WmfPreviewInspector.Inspection inspection = WmfPreviewInspector.inspect(preview.data());
-                if (inspection.rasterWidth() >= 0) {
+                if (inspection.bitmapRecordCount() > 0) {
                     bitmapWmfCount++;
                 } else {
                     vectorWmfCount++;
@@ -117,7 +117,7 @@ class OfficialLatexOlePreviewAcceptanceTest {
         report.put("nonOverlappedWmfCount", nonOverlappedWmfCount);
         report.put("bitmapWmfCount", bitmapWmfCount);
         report.put("vectorWmfCount", vectorWmfCount);
-        report.put("previewPayload", vectorWmfCount == 0 ? "WMF_STRETCHDIB_BITMAP" : "MIXED_OR_VECTOR_WMF");
+        report.put("previewPayload", bitmapWmfCount == 0 ? "WMF_POLYPOLYGON_VECTOR" : "MIXED_OR_BITMAP_WMF");
         report.put("passedCount", examples.size() - failures.size());
         report.put("failureCount", failures.size());
         report.put("failures", failures);
@@ -125,8 +125,8 @@ class OfficialLatexOlePreviewAcceptanceTest {
         mapper.writeValue(REPORT.toFile(), report);
 
         assertEquals(238, examples.size());
-        assertEquals(238, bitmapWmfCount, "Current branch intentionally ships DIB-backed WMF previews");
-        assertEquals(0, vectorWmfCount, "True-vector WMF is developed on a separate branch");
+        assertEquals(0, bitmapWmfCount, "Strict vector branch must not emit DIB-backed WMF previews");
+        assertEquals(238, vectorWmfCount, "Every official example must emit a pure vector WMF");
         assertEquals(0, failures.size(), () -> failures.size() + " OLE/WMF failures; inspect " + REPORT.toAbsolutePath());
     }
 

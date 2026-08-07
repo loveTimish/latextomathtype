@@ -53,7 +53,7 @@ class OfficialLatexVisualAuditArtifactTest {
             item.put("widthPt", preview.widthPt());
             item.put("heightPt", preview.heightPt());
             item.put("wmfBytes", preview.data().length);
-            item.put("payload", "WMF_STRETCHDIB_BITMAP");
+            item.put("payload", "WMF_POLYPOLYGON_VECTOR");
             items.add(item);
         }
 
@@ -62,7 +62,7 @@ class OfficialLatexVisualAuditArtifactTest {
         manifest.put("source", CORPUS.toString().replace('\\', '/'));
         manifest.put("officialEntryCount", corpus.path("entryCount").asInt());
         manifest.put("uniqueExampleCount", examples.size());
-        manifest.put("previewPayload", "WMF_STRETCHDIB_BITMAP");
+        manifest.put("previewPayload", "WMF_POLYPOLYGON_VECTOR");
         manifest.put("items", items);
         mapper.writeValue(OUTPUT.resolve("manifest.json").toFile(), manifest);
         assertEquals(238, items.size());

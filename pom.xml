@@ -81,13 +81,6 @@
             <version>1.18</version>
         </dependency>
 
-        <!-- FreeHEP EMF export for vector OLE preview -->
-        <dependency>
-            <groupId>org.freehep</groupId>
-            <artifactId>freehep-graphicsio-emf</artifactId>
-            <version>2.4</version>
-        </dependency>
-
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
