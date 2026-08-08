@@ -93,7 +93,7 @@ Main reference round trip:
 
 This checks the regenerated reference DOCX through OLE inspection, Word/MathType probes where available, `docx2tex` coverage, and formula display-box comparison.
 
-Full xsc corpus acceptance is documented in [docs/xsc-latex-assets.md](docs/xsc-latex-assets.md). The latest recorded run covered all `551` reconstructed source documents and `93,319` trace-matched formula objects: all `93,319` passed OLE validation, MTEF parsing/balance/normalized-structure matching, and strict EMF+ Dual validation, with `0` failed documents and `0` failed formulas. The report also records `37` explicit recoveries of source `U+FFFD` replacement characters; none were rendered silently.
+Full xsc corpus acceptance is documented in [docs/xsc-latex-assets.md](docs/xsc-latex-assets.md). The latest recorded run covered all `551` reconstructed source documents and exactly `93,319` trace-matched formula objects: all `93,319` passed OLE validation, MTEF parsing/balance/normalized-structure matching, and strict EMF+ Dual validation, with `0` failed documents and `0` failed formulas. A versioned location-specific catalog applies `52` extraction repairs: `46` formula repairs (`37` containing source `U+FFFD` and `9` known placeholder substitutions) plus `6` plain-text repairs. Uncataloged `U+FFFD` input fails instead of being rendered silently.
 
 ## Linux And Docker
 
