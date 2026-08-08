@@ -107,7 +107,7 @@ public class LaTeXImageRenderer {
     private static final String EXPECTED_NODE_VERSION = "v24.9.0";
     private static final String EXPECTED_MATHJAX_VERSION = "3.2.2";
     private static final String EXPECTED_MATHJAX_BUNDLE_HASH =
-        "c2b620e67102608a19c6c9729960cfa96fd14c9fe1b125b23def61dd544faf37";
+        "d40faed500decb5f9718d87396194e424faa736f01fd8be78e7813230292c50e";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(

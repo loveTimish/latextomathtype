@@ -15,8 +15,10 @@ try {
         (Join-Path $repoRoot "tools\mathjax\mathtype_fit.cjs"),
         (Join-Path $repoRoot "package-lock.json")
     )
+    # Match the worker hash regardless of the checkout's LF/CRLF materialization.
     for ($index = 0; $index -lt $bundleInputs.Count; $index++) {
-        $bundleHasher.AppendData([IO.File]::ReadAllBytes($bundleInputs[$index]))
+        $source = [IO.File]::ReadAllText($bundleInputs[$index]).Replace("`r`n", "`n").Replace("`r", "`n")
+        $bundleHasher.AppendData([Text.Encoding]::UTF8.GetBytes($source))
         if ($index -lt $bundleInputs.Count - 1) {
             $bundleHasher.AppendData([byte[]]@(0))
         }

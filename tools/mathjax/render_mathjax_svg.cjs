@@ -17,10 +17,15 @@ const adaptor = liteAdaptor();
 RegisterHTMLHandler(adaptor);
 
 const { fitMathType, stackFittedLines } = require("./mathtype_fit.cjs");
+// Git may materialize these pinned text files with LF or CRLF on Windows.
+function normalizedBundleSource(filePath) {
+  return fs.readFileSync(filePath, "utf8").replace(/\r\n?/g, "\n");
+}
+
 const BUNDLE_HASH = crypto.createHash("sha256")
-  .update(fs.readFileSync(__filename)).update("\0")
-  .update(fs.readFileSync(path.join(__dirname, "mathtype_fit.cjs"))).update("\0")
-  .update(fs.readFileSync(path.join(__dirname, "..", "..", "package-lock.json")))
+  .update(normalizedBundleSource(__filename)).update("\0")
+  .update(normalizedBundleSource(path.join(__dirname, "mathtype_fit.cjs"))).update("\0")
+  .update(normalizedBundleSource(path.join(__dirname, "..", "..", "package-lock.json")))
   .digest("hex");
 
 /** Fit-mode padding (pt), tuned against GT MathType v:shape boxes. */
