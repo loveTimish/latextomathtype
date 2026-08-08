@@ -3,10 +3,8 @@ package com.lz.paperword.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.lz.paperword.core.render.LaTeXImageRenderer;
-import com.lz.paperword.core.render.WmfPreviewInspector;
+import com.lz.paperword.core.render.SvgVectorEmfPlusRenderer;
 import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -19,29 +17,13 @@ import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-class ThreeLevelVectorWmfAcceptanceTest {
+class ThreeLevelVectorEmfPlusAcceptanceTest {
 
     private static final Path REPORT = Path.of(
-        "target/vector-acceptance/three-level-vector-wmf.json");
-    private String previousPreviewFormat;
-
-    @BeforeEach
-    void selectClassicWmfBackend() {
-        previousPreviewFormat = System.getProperty("paperword.ole.previewFormat");
-        System.setProperty("paperword.ole.previewFormat", "wmf");
-    }
-
-    @AfterEach
-    void restorePreviewBackend() {
-        if (previousPreviewFormat == null) {
-            System.clearProperty("paperword.ole.previewFormat");
-        } else {
-            System.setProperty("paperword.ole.previewFormat", previousPreviewFormat);
-        }
-    }
+        "target/vector-acceptance/three-level-vector-emfplus.json");
 
     @Test
-    void everyThreeLevelCombinationProducesReadablePureVectorWmf() throws Exception {
+    void everyThreeLevelCombinationProducesStrictEmfPlusDual() throws Exception {
         Assumptions.assumeTrue(Boolean.getBoolean("paperword.acceptance.threeLevelVector"),
             "Enable with -Dpaperword.acceptance.threeLevelVector=true");
         List<StructureFamily> families = List.of(
@@ -67,8 +49,7 @@ class ThreeLevelVectorWmfAcceptanceTest {
         LaTeXImageRenderer renderer = new LaTeXImageRenderer();
         List<Failure> failures = new ArrayList<>();
         int generated = 0;
-        int validOlePreview = 0;
-        int pureVector = 0;
+        int strictDual = 0;
         for (StructureFamily outer : families) {
             for (StructureFamily middle : families) {
                 for (StructureFamily inner : families) {
@@ -77,14 +58,14 @@ class ThreeLevelVectorWmfAcceptanceTest {
                         String formula = outer.wrap().apply(middle.wrap().apply(inner.wrap().apply(leaf.getValue())));
                         try {
                             LaTeXImageRenderer.PreviewImage preview = renderer.renderForOlePreview(formula);
-                            validOlePreview++;
-                            WmfPreviewInspector.Inspection inspection = WmfPreviewInspector.inspect(preview.data());
-                            if (inspection.pureVector() && inspection.foregroundPixels() > 0
-                                    && !inspection.inkTouchesEdge() && inspection.physicalWidth() > 0
-                                    && inspection.physicalHeight() > 0) {
-                                pureVector++;
+                            if ("emf".equals(preview.extension())
+                                    && "image/x-emf".equals(preview.contentType())
+                                    && preview.widthPt() > 0d && preview.heightPt() > 0d
+                                    && SvgVectorEmfPlusRenderer.isValidDualVector(preview.data())) {
+                                strictDual++;
                             } else {
-                                failures.add(new Failure(formula, "INVALID_VECTOR_WMF", inspection.toString()));
+                                failures.add(new Failure(formula, "INVALID_EMFPLUS_DUAL",
+                                    preview.extension() + "/" + preview.contentType()));
                             }
                         } catch (RuntimeException exception) {
                             failures.add(new Failure(formula, "EXCEPTION", exception.toString()));
@@ -98,15 +79,15 @@ class ThreeLevelVectorWmfAcceptanceTest {
         Map<String, Object> report = new LinkedHashMap<>();
         report.put("schemaVersion", 1);
         report.put("generatedCombinationCount", generated);
-        report.put("validOlePreviewCount", validOlePreview);
-        report.put("pureVectorWmfCount", pureVector);
+        report.put("strictEmfPlusDualCount", strictDual);
         report.put("failureCount", failures.size());
         report.put("failures", failures);
         new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT).writeValue(REPORT.toFile(), report);
 
         assertEquals(6_000, generated);
+        assertEquals(6_000, strictDual);
         assertEquals(0, failures.size(), () ->
-            failures.size() + " vector combination failures; inspect " + REPORT.toAbsolutePath());
+            failures.size() + " EMF+ combination failures; inspect " + REPORT.toAbsolutePath());
     }
 
     private static StructureFamily family(String name, Function<String, String> wrap) {

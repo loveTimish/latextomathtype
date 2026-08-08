@@ -47,9 +47,10 @@ import java.util.regex.Pattern;
  * LaTeX 公式图片渲染器。
  *
  * <p>OLE 预览图使用 MathJax 排版 SVG，再由 Batik 展开为字形轮廓并编码为
- * 纯 {@code POLYPOLYGON} placeable WMF。普通图片模式仍保留原生 TeX/JLaTeXMath 通道。</p>
+ * 抗锯齿 EMF+ Dual；经典 EMF 矢量记录作为旧播放器回退。普通图片模式仍保留
+ * 原生 TeX/JLaTeXMath 通道。</p>
  *
- * <p>OLE 预览图使用严格 MathJax/WMF 链路，失败即失败，不再静默回退为纯文本占位。</p>
+ * <p>OLE 预览使用严格的轮廓矢量链路，失败即失败，不再静默回退为位图或纯文本占位。</p>
  */
 public class LaTeXImageRenderer {
 
@@ -96,11 +97,13 @@ public class LaTeXImageRenderer {
     private static final String MATHJAX_PADDING_PT_PROP = "paperword.mathjax.paddingPt";
     /** 系统属性：MathJax WMF 预览最大宽度，单位 pt。 */
     private static final String MATHJAX_MAX_WIDTH_PT_PROP = "paperword.mathjax.maxWidthPt";
+    /** 开发调试开关；默认 EMF+ Dual，可显式设为 wmf 对照经典 GDI 显示。 */
+    private static final String OLE_PREVIEW_FORMAT_PROP = "paperword.ole.previewFormat";
     private static final double MATHJAX_DEFAULT_EX_RATIO = 0.431d;
     private static final double MATHJAX_DEFAULT_PADDING_PT = 2.3d;
     private static final double MATHJAX_DEFAULT_MAX_WIDTH_PT = 400.0d;
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v302-batik-vector-wmf-ink";
+    private static final String CACHE_VERSION = "v309-emfplus-limit-under";
     private static final String EXPECTED_NODE_VERSION = "v24.9.0";
     private static final String EXPECTED_MATHJAX_VERSION = "3.2.2";
     private static final String EXPECTED_MATHJAX_BUNDLE_HASH =
@@ -182,13 +185,14 @@ public class LaTeXImageRenderer {
     /**
      * 为 OLE 对象生成预览图。
      *
-     * <p>严格走原生 TeX/WMF 渲染，失败后直接中止嵌入，避免悄悄退回 PNG 或占位图。</p>
+     * <p>严格走 MathJax/Batik 真矢量渲染，失败后直接中止嵌入，避免悄悄退回 PNG 或占位图。</p>
      *
      * @param latex LaTeX 公式源码
      * @return 预览图数据；失败返回 null
      */
     public PreviewImage renderForOlePreview(String latex) {
-        String cacheKey = cacheKey("ole", latex, OLE_PREVIEW_SIZE);
+        String previewFormat = olePreviewFormat();
+        String cacheKey = cacheKey("ole-" + previewFormat, latex, OLE_PREVIEW_SIZE);
         PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
         if (cached != null && isRequestedPreviewFormat(cached)) {
             return cached;
@@ -198,7 +202,9 @@ public class LaTeXImageRenderer {
             PREVIEW_CACHE.put(cacheKey, cached);
             return cached;
         }
-        PreviewImage preview = renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE);
+        PreviewImage preview = "emf".equals(previewFormat)
+            ? renderEmfPreviewViaMathJax(latex, null, null)
+            : renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE);
         if (preview != null) {
             if (isRequestedPreviewFormat(preview)) {
                 PREVIEW_CACHE.put(cacheKey, preview);
@@ -206,14 +212,16 @@ public class LaTeXImageRenderer {
             }
             return preview;
         }
-        throw new IllegalStateException("Native TeX/WMF OLE preview rendering failed: " + latex);
+        throw new IllegalStateException("Strict vector OLE preview rendering failed: " + latex);
     }
 
     public PreviewImage renderForOlePreview(String latex, Double targetWidthPt, Double targetHeightPt) {
         if (targetWidthPt == null || targetHeightPt == null || targetWidthPt <= 0d || targetHeightPt <= 0d) {
             return renderForOlePreview(latex);
         }
-        String cacheKey = cacheKey("ole-target-" + String.format(Locale.ROOT, "%.2fx%.2f", targetWidthPt, targetHeightPt),
+        String previewFormat = olePreviewFormat();
+        String cacheKey = cacheKey("ole-" + previewFormat + "-target-"
+                + String.format(Locale.ROOT, "%.2fx%.2f", targetWidthPt, targetHeightPt),
             latex, OLE_PREVIEW_SIZE);
         PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
         if (cached != null && isRequestedPreviewFormat(cached)) {
@@ -224,7 +232,9 @@ public class LaTeXImageRenderer {
             PREVIEW_CACHE.put(cacheKey, cached);
             return cached;
         }
-        PreviewImage preview = renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE, targetWidthPt, targetHeightPt);
+        PreviewImage preview = "emf".equals(previewFormat)
+            ? renderEmfPreviewViaMathJax(latex, targetWidthPt, targetHeightPt)
+            : renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE, targetWidthPt, targetHeightPt);
         if (preview != null) {
             if (isRequestedPreviewFormat(preview)) {
                 PREVIEW_CACHE.put(cacheKey, preview);
@@ -232,19 +242,31 @@ public class LaTeXImageRenderer {
             }
             return preview;
         }
-        throw new IllegalStateException("Native TeX/WMF target preview rendering failed: " + latex);
+        throw new IllegalStateException("Strict target vector preview rendering failed: " + latex);
     }
 
     /**
      * 校验预览产物是否满足当前请求的格式。
      *
-     * <p>请求 EMF 而产物是回退的 WMF 时（EMF 后端一次性失败所致），
-     * 缓存会把临时故障固化为永久行为：历史污染条目按未命中处理，
-     * 新的回退产物也不再写入缓存。</p>
+     * <p>缓存产物必须与当前选择的后端完全一致；旧 WMF 或非 EMF+ 记录不能
+     * 冒充默认高质量预览。</p>
      */
     private boolean isRequestedPreviewFormat(PreviewImage preview) {
-        return preview != null && "wmf".equals(preview.extension())
-            && !SvgVectorWmfRenderer.containsBitmapRecord(preview.data());
+        if (preview == null) {
+            return false;
+        }
+        if ("emf".equals(olePreviewFormat())) {
+            return "emf".equals(preview.extension())
+                && "image/x-emf".equals(preview.contentType())
+                && SvgVectorEmfPlusRenderer.isValidDualVector(preview.data());
+        }
+        return "wmf".equals(preview.extension()) && !SvgVectorWmfRenderer.containsBitmapRecord(preview.data());
+    }
+
+    private String olePreviewFormat() {
+        return "wmf".equalsIgnoreCase(System.getProperty(OLE_PREVIEW_FORMAT_PROP, "emf"))
+            ? "wmf"
+            : "emf";
     }
 
     /**
@@ -323,7 +345,10 @@ public class LaTeXImageRenderer {
             + "|xelatex=" + System.getProperty(XELATEX_CMD_PROP, "")
             + "|dvisvgm=" + System.getProperty(DVISVGM_CMD_PROP, "")
             + "|timeout=" + System.getProperty(RENDER_TIMEOUT_PROP, String.valueOf(DEFAULT_TIMEOUT_SECONDS))
-            + "|oleVectorBackend=batik-polypolygon-v1"
+            + "|oleVectorBackend=" + ("emf".equals(olePreviewFormat())
+                ? "batik-emfplus-dual-v2"
+                : "batik-polypolygon-v1")
+            + "|emfOpticalCompensationPt=" + SvgVectorEmfPlusRenderer.opticalCompensationPt()
             + "|vectorFontSet=" + BundledVectorFonts.FONT_SET_ID
             + "|mathjaxNode=" + System.getProperty(MATHJAX_NODE_CMD_PROP, "node")
             + "|mathjaxScript=" + System.getProperty(MATHJAX_SCRIPT_PROP, "tools/mathjax/render_mathjax_svg.cjs")
@@ -553,6 +578,37 @@ public class LaTeXImageRenderer {
         int heightPx = Math.max((int) Math.round(heightPt * PX_PER_PT), 4);
         return new PreviewImage(vector.bytes(), widthPx, heightPx, "wmf", "image/x-wmf", false,
             depthPt, widthPt, heightPt);
+    }
+
+    private PreviewImage renderEmfPreviewViaMathJax(String latex, Double targetWidthPt, Double targetHeightPt) {
+        try {
+            String localRenderLatex = normalizeLatexForLocalRender(latex);
+            MathJaxSvgResult svg = renderSvgViaMathJax(localRenderLatex);
+            double widthPt = svg.widthPt();
+            double heightPt = svg.heightPt();
+            double depthPt = mathJaxMathTypeFit()
+                ? svg.depthPt()
+                : calibrateMathJaxDepthPt(latex, heightPt, svg.depthPt());
+            if (targetWidthPt != null && targetHeightPt != null
+                    && targetWidthPt > 0d && targetHeightPt > 0d) {
+                widthPt = targetWidthPt;
+                heightPt = targetHeightPt;
+                depthPt = targetDepthPt(latex, heightPt);
+            } else {
+                double scale = Math.min(1.0d,
+                    genericVectorWidthCapPt(latex) / Math.max(widthPt, 1.0d));
+                widthPt *= scale;
+                heightPt *= scale;
+                depthPt *= scale;
+            }
+            byte[] emf = SvgVectorEmfPlusRenderer.render(svg.svgBytes(), widthPt, heightPt);
+            int widthPx = Math.max((int) Math.round(widthPt * PX_PER_PT), 4);
+            int heightPx = Math.max((int) Math.round(heightPt * PX_PER_PT), 4);
+            return new PreviewImage(emf, widthPx, heightPx, "emf", "image/x-emf", false,
+                depthPt, widthPt, heightPt);
+        } catch (Exception e) {
+            throw new IllegalStateException("Strict vector EMF preview failed for LaTeX: " + latex, e);
+        }
     }
 
     private BufferedImage addSafetyBorderIfInkTouchesEdge(BufferedImage source, int borderPx) {
@@ -1552,6 +1608,9 @@ public class LaTeXImageRenderer {
         int depth = 0;
         for (int i = open; i < text.length(); i++) {
             char ch = text.charAt(i);
+            if ((ch == '{' || ch == '}') && isEscapedDelimiter(text, i)) {
+                continue;
+            }
             if (ch == '{') {
                 depth++;
             } else if (ch == '}') {
@@ -1662,11 +1721,18 @@ public class LaTeXImageRenderer {
         String normalized = com.lz.paperword.core.latex.LaTeXParser.preNormalizeLatex(
             latex.replaceAll("\\\\kern\\s*[-+]?\\d*\\.?\\d+[a-zA-Z]+", ""),
             !mathJaxMathTypeFit());
+        if (normalized.indexOf('\uFFFD') >= 0) {
+            throw new IllegalArgumentException(
+                "SOURCE_REPLACEMENT_CHARACTER: vector preview cannot recover U+FFFD in " + latex);
+        }
+        normalized = normalizeRaiseBoxForMathJax(normalized);
+        normalized = normalized.replaceAll("\\\\spot(?!\\p{L})", "\\\\cdot");
         normalized = escapeRawUnicodeSymbolsForMathJax(normalized);
         normalized = normalizeLegacyBbbPreview(normalized);
         normalized = separateNestedRadicalDegreesForMathJax(normalized);
         normalized = normalizeGreekCapitalAliasesForPreview(normalized);
         normalized = simplifyFlatDelimiters(normalized);
+        normalized = normalizeLimitPlacementForMathJax(normalized);
         String compositeLongDivision = replaceEmbeddedLongDivisionHeader(normalized);
         if (compositeLongDivision != null) {
             return compositeLongDivision;
@@ -1681,6 +1747,110 @@ public class LaTeXImageRenderer {
         return Pattern.compile("\\\\enclose\\{longdiv\\}\\{([^{}]+)}")
             .matcher(normalized)
             .replaceAll("\\\\big)\\\\overline{$1}");
+    }
+
+    /**
+     * MathType stores a plain {@code \lim_{...}} in an under-limit template even
+     * when the equation is embedded inline. MathJax's inline TeX style otherwise
+     * moves that argument to the right as a normal subscript, so make the preview
+     * follow the editable OLE structure unless the source explicitly says
+     * {@code \nolimits}.
+     */
+    private String normalizeLimitPlacementForMathJax(String latex) {
+        Pattern implicitLimit = Pattern.compile(
+            "\\\\lim(?![A-Za-z])"
+                + "(?!\\s*\\\\(?:limits|nolimits)(?![A-Za-z]))"
+                + "(?=\\s*[_^])");
+        return implicitLimit.matcher(latex)
+            .replaceAll(Matcher.quoteReplacement("\\lim\\limits"));
+    }
+
+    /** MathJax implements TeX's {@code \raise}, while LaTeX's {@code \raisebox}
+     * is not part of its input package set. */
+    private String normalizeRaiseBoxForMathJax(String latex) {
+        if (latex == null || !latex.contains("\\raisebox")) {
+            return latex;
+        }
+        StringBuilder normalized = new StringBuilder(latex.length());
+        int cursor = 0;
+        while (cursor < latex.length()) {
+            int command = latex.indexOf("\\raisebox", cursor);
+            if (command < 0) {
+                normalized.append(latex, cursor, latex.length());
+                break;
+            }
+            normalized.append(latex, cursor, command);
+            int afterCommand = command + "\\raisebox".length();
+            if (afterCommand < latex.length() && Character.isLetter(latex.charAt(afterCommand))) {
+                normalized.append("\\raisebox");
+                cursor = afterCommand;
+                continue;
+            }
+            int dimensionStart = skipWhitespace(latex, afterCommand);
+            if (dimensionStart >= latex.length() || latex.charAt(dimensionStart) != '{') {
+                normalized.append("\\raisebox");
+                cursor = afterCommand;
+                continue;
+            }
+            int dimensionEnd = matchingBrace(latex, dimensionStart);
+            if (dimensionEnd < 0) {
+                normalized.append(latex, command, latex.length());
+                break;
+            }
+            int contentStart = skipWhitespace(latex, dimensionEnd + 1);
+            if (contentStart < latex.length() && latex.charAt(contentStart) == '[') {
+                throw new IllegalArgumentException(
+                    "Cannot preserve \\raisebox optional height/depth in MathJax vector preview: "
+                        + latex.substring(command));
+            }
+            if (contentStart >= latex.length() || latex.charAt(contentStart) != '{') {
+                normalized.append(latex, command, contentStart);
+                cursor = contentStart;
+                continue;
+            }
+            int contentEnd = matchingBrace(latex, contentStart);
+            if (contentEnd < 0) {
+                normalized.append(latex, command, latex.length());
+                break;
+            }
+            String dimension = latex.substring(dimensionStart + 1, dimensionEnd).trim();
+            String content = latex.substring(contentStart + 1, contentEnd);
+            normalized.append("\\raise{").append(dimension).append("}{")
+                .append(normalizeRaiseBoxForMathJax(stripNestedMathDelimiters(content))).append('}');
+            cursor = contentEnd + 1;
+        }
+        return normalized.toString();
+    }
+
+    private String stripNestedMathDelimiters(String content) {
+        int unescapedDollars = 0;
+        for (int index = 0; index < content.length(); index++) {
+            if (content.charAt(index) == '$' && !isEscapedDelimiter(content, index)) {
+                unescapedDollars++;
+            }
+        }
+        if ((unescapedDollars & 1) != 0) {
+            throw new IllegalArgumentException("Unbalanced $ delimiter inside \\raisebox content: " + content);
+        }
+        if (unescapedDollars == 0) {
+            return content;
+        }
+        StringBuilder stripped = new StringBuilder(content.length() - unescapedDollars);
+        for (int index = 0; index < content.length(); index++) {
+            char ch = content.charAt(index);
+            if (ch != '$' || isEscapedDelimiter(content, index)) {
+                stripped.append(ch);
+            }
+        }
+        return stripped.toString();
+    }
+
+    private static boolean isEscapedDelimiter(String text, int index) {
+        int slashes = 0;
+        for (int cursor = index - 1; cursor >= 0 && text.charAt(cursor) == '\\'; cursor--) {
+            slashes++;
+        }
+        return (slashes & 1) == 1;
     }
 
     private String normalizeLegacyBbbPreview(String latex) {

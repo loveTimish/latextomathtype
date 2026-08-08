@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.lz.paperword.core.render.LaTeXImageRenderer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -23,6 +25,22 @@ class OfficialLatexVisualAuditArtifactTest {
 
     private static final Path CORPUS = Path.of("docs/reference/mathtype/latex-coverage-corpus.json");
     private static final Path OUTPUT = Path.of("target/official-latex-coverage/visual-audit");
+    private String previousPreviewFormat;
+
+    @BeforeEach
+    void selectClassicWmfBackend() {
+        previousPreviewFormat = System.getProperty("paperword.ole.previewFormat");
+        System.setProperty("paperword.ole.previewFormat", "wmf");
+    }
+
+    @AfterEach
+    void restorePreviewBackend() {
+        if (previousPreviewFormat == null) {
+            System.clearProperty("paperword.ole.previewFormat");
+        } else {
+            System.setProperty("paperword.ole.previewFormat", previousPreviewFormat);
+        }
+    }
 
     @Test
     void exportOfficialWmfPreviewsForVisualAudit() throws Exception {

@@ -89,10 +89,28 @@ public class MathTypeEmbedder {
             if (preview == null || preview.data() == null || preview.data().length == 0) {
                 throw new IllegalStateException("OLE preview rendering returned no image data");
             }
-            PreviewBox previewBox = targetMetrics != null
-                ? new PreviewBox(preview.widthPx(), preview.heightPx())
-                : constrainPreviewBox(rawLatex, preview.widthPx(), preview.heightPx(),
+            PreviewBox previewBox;
+            if (targetMetrics != null) {
+                previewBox = new PreviewBox(preview.widthPx(), preview.heightPx());
+            } else {
+                previewBox = constrainPreviewBox(rawLatex, preview.widthPx(), preview.heightPx(),
                     displayScale, maxWidthPt);
+                if (previewBox.widthPx() != preview.widthPx()
+                        || previewBox.heightPx() != preview.heightPx()) {
+                    double displayFactor = Math.min(
+                        previewBox.widthPx() / (double) preview.widthPx(),
+                        previewBox.heightPx() / (double) preview.heightPx());
+                    double sourceWidthPt = preview.widthPt() > 0d
+                        ? preview.widthPt()
+                        : preview.widthPx() * PT_PER_PX;
+                    double sourceHeightPt = preview.heightPt() > 0d
+                        ? preview.heightPt()
+                        : preview.heightPx() * PT_PER_PX;
+                    preview = imageRenderer.renderForOlePreview(rawLatex,
+                        sourceWidthPt * displayFactor, sourceHeightPt * displayFactor);
+                    previewBox = new PreviewBox(preview.widthPx(), preview.heightPx());
+                }
+            }
 
             OPCPackage pkg = paragraph.getDocument().getPackage();
             int idx = oleCounter.getAndIncrement();

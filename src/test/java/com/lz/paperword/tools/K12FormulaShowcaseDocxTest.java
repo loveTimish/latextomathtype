@@ -45,6 +45,8 @@ class K12FormulaShowcaseDocxTest {
         paper.setName("K12 常见公式与竖式样例");
         paper.setScore(100);
         paper.setSuggestTime(60);
+        paper.setCompactLayout(true);
+        paper.setHideQuestionTypeMetadata(true);
         request.setPaper(paper);
 
         SectionDTO section = new SectionDTO();
@@ -126,7 +128,7 @@ class K12FormulaShowcaseDocxTest {
                 并集：$A\\cup B$<br/>
                 补集：$U-A$<br/>
                 基本不等式：$a+b\\ge 2\\sqrt{ab}$<br/>
-                绝对值不等式：$|x-a|<r$<br/>
+                绝对值不等式：$|x-a|\\lt r$<br/>
                 充分必要条件：$p\\Leftrightarrow q$
                 """),
             createQuestion(8, 5, """

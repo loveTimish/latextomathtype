@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.junit.jupiter.api.Assumptions;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import javax.imageio.ImageIO;
@@ -27,6 +29,22 @@ class OfficialVectorVisualComparisonTest {
     private static final Path CORPUS = Path.of("docs/reference/mathtype/latex-coverage-corpus.json");
     private static final Path OUTPUT = Path.of("target/vector-acceptance/official-visual");
     private static final int[] DPIS = {144, 300, 600};
+    private String previousPreviewFormat;
+
+    @BeforeEach
+    void selectClassicWmfBackend() {
+        previousPreviewFormat = System.getProperty("paperword.ole.previewFormat");
+        System.setProperty("paperword.ole.previewFormat", "wmf");
+    }
+
+    @AfterEach
+    void restorePreviewBackend() {
+        if (previousPreviewFormat == null) {
+            System.clearProperty("paperword.ole.previewFormat");
+        } else {
+            System.setProperty("paperword.ole.previewFormat", previousPreviewFormat);
+        }
+    }
 
     @Test
     void compareBatikSvgAndIndependentWmfRasterAtMultipleDpi() throws Exception {
@@ -89,7 +107,7 @@ class OfficialVectorVisualComparisonTest {
             failures.size() + " vector visual failures; inspect " + OUTPUT.resolve("report.json").toAbsolutePath());
     }
 
-    private static BufferedImage pair(BufferedImage left, BufferedImage right) {
+    static BufferedImage pair(BufferedImage left, BufferedImage right) {
         int gap = 8;
         BufferedImage pair = new BufferedImage(left.getWidth() + gap + right.getWidth(),
             Math.max(left.getHeight(), right.getHeight()), BufferedImage.TYPE_INT_ARGB);
@@ -104,7 +122,7 @@ class OfficialVectorVisualComparisonTest {
         return pair;
     }
 
-    private static Comparison compare(BufferedImage reference, BufferedImage actual) {
+    static Comparison compare(BufferedImage reference, BufferedImage actual) {
         int width = reference.getWidth();
         int height = reference.getHeight();
         if (width != actual.getWidth() || height != actual.getHeight()) {
@@ -240,6 +258,6 @@ class OfficialVectorVisualComparisonTest {
 
     private record VisualFailure(int index, String latex, int dpi, Comparison comparison) {}
 
-    private record Comparison(double ssim, double iou, int missingMajorComponents,
-                              double colorMae, String error) {}
+    record Comparison(double ssim, double iou, int missingMajorComponents,
+                      double colorMae, String error) {}
 }

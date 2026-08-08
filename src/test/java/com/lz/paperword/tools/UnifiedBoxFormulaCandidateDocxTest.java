@@ -105,7 +105,7 @@ class UnifiedBoxFormulaCandidateDocxTest {
     }
 
     private void assertFormulaEmbeddingsAreValid(Path docx, int expectedFormulaCount) throws IOException {
-        int wmfCount = 0;
+        int vectorPreviewCount = 0;
         int equationDsmt4Count = 0;
         int oleCount = 0;
         try (ZipFile zip = new ZipFile(docx.toFile())) {
@@ -120,8 +120,8 @@ class UnifiedBoxFormulaCandidateDocxTest {
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
                 String name = entry.getName();
-                if (name.startsWith("word/media/") && name.endsWith(".wmf")) {
-                    wmfCount++;
+                if (name.startsWith("word/media/") && name.endsWith(".emf")) {
+                    vectorPreviewCount++;
                 } else if (name.startsWith("word/embeddings/") && name.endsWith(".bin")) {
                     oleCount++;
                     byte[] ole = zip.getInputStream(entry).readAllBytes();
@@ -131,7 +131,8 @@ class UnifiedBoxFormulaCandidateDocxTest {
                 }
             }
         }
-        assertEquals(expectedFormulaCount, wmfCount, "each formula should have a WMF preview");
+        assertEquals(expectedFormulaCount, vectorPreviewCount,
+            "each formula should have an EMF+ Dual vector preview");
         assertEquals(expectedFormulaCount, oleCount, "each formula should have an OLE embedding");
         assertEquals(expectedFormulaCount, equationDsmt4Count, "each OLE should be MathType Equation.DSMT4");
     }

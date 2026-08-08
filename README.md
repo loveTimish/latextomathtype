@@ -78,6 +78,10 @@ The project deliberately keeps three concerns separate:
 
 That boundary is the main reason layout tuning happens in the Word object shell instead of by forcing point-size records into the MTEF body.
 
+## Known Limitation
+
+- Complete long-division layout is not implemented. `\longdiv[quotient]{divisor}{dividend}` currently emits only the quotient/divisor/dividend header; automatic subtraction steps, digit carry-down, and remainder placement are outside the supported surface. Use ordinary division or a quotient-remainder identity in production input until dedicated acceptance is complete.
+
 ## Validation
 
 Main reference round trip:

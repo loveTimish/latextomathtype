@@ -19,6 +19,7 @@ import java.io.OutputStream;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,9 +28,24 @@ class HumanReadableVectorWmfWordAcceptanceTest {
 
     private static final Path CORPUS = Path.of(
         "analysis/formula-golden-corpus/formula-golden-corpus-report-latest.json");
-    private static final Path OUTPUT = Path.of(
-        "target/vector-acceptance/vector-wmf-human-review.docx");
-    private static final double DISPLAY_SCALE = 1.55d;
+    private static final Path OUTPUT = Path.of(System.getProperty(
+        "paperword.acceptance.humanWord.output",
+        "target/vector-acceptance/vector-emfplus-dual-quality-review.docx"));
+    /** 15pt review size: readable at 125% without the heavy 18.6pt appearance of the old 1.55x draft. */
+    private static final double DISPLAY_SCALE = 1.25d;
+    private static final Map<String, String> REVIEW_LATEX_OVERRIDES = Map.of(
+        "k12-array-01",
+        "\\left\\{\\begin{array}{c}x+y=1\\\\x-y=2\\end{array}\\right."
+    );
+
+    @Test
+    void reviewEquationSystemUsesAnExplicitLeftBrace() {
+        String latex = REVIEW_LATEX_OVERRIDES.get("k12-array-01");
+
+        assertTrue(latex.startsWith("\\left\\{"));
+        assertTrue(latex.endsWith("\\right."));
+        assertTrue(new LaTeXParser().parseDetailed(latex).isSupported());
+    }
 
     @Test
     void generateHumanReadableVectorQualityDocument() throws Exception {
@@ -53,7 +69,8 @@ class HumanReadableVectorWmfWordAcceptanceTest {
 
                 JsonNode item = cases.get(index);
                 String id = item.path("id").asText();
-                String latex = item.path("latex").asText();
+                String latex = REVIEW_LATEX_OVERRIDES.getOrDefault(
+                    id, item.path("latex").asText());
                 LaTeXParser.DetailedParseResult parsed = parser.parseDetailed(latex);
                 assertTrue(parsed.isSupported(), () -> id + ": " + parsed.diagnostics());
 
@@ -101,7 +118,7 @@ class HumanReadableVectorWmfWordAcceptanceTest {
         title.setAlignment(ParagraphAlignment.CENTER);
         title.setSpacingAfter(90);
         XWPFRun titleRun = title.createRun();
-        titleRun.setText("True Vector WMF Formula Quality Review");
+        titleRun.setText("Editable MathType Exact-Outline Vector Quality Review");
         titleRun.setBold(true);
         titleRun.setFontFamily("Arial");
         titleRun.setFontSize(15);
@@ -110,7 +127,7 @@ class HumanReadableVectorWmfWordAcceptanceTest {
         note.setAlignment(ParagraphAlignment.CENTER);
         note.setSpacingAfter(180);
         XWPFRun noteRun = note.createRun();
-        noteRun.setText("28 representative editable MathType OLE formulas - pure POLYPOLYGON WMF previews");
+        noteRun.setText("28 representative editable MathType OLE formulas - exact MathJax outlines in EMF+ Dual");
         noteRun.setFontFamily("Arial");
         noteRun.setFontSize(9);
         noteRun.setColor("666666");

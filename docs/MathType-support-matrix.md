@@ -10,7 +10,7 @@ This file is generated from the current codebase and then manually curated as im
 
 ## Parser coverage signals
 - linear commands: \frac, \sqrt, \sum, \int, \xrightarrow, \xleftarrow, \overbrace, \overarc
-- environments: matrix, pmatrix, bmatrix, cases, aligned, align / align*, split, longdivision
+- environments: matrix, pmatrix, bmatrix, cases, aligned, align / align*, split; `longdivision` is parsed for header compatibility only and is not supported end to end
 
 ## Official MTEF template coverage
 | Template | Selector | Status | Builder path | Writer path |
@@ -41,7 +41,7 @@ This file is generated from the current codebase and then manually curated as im
 | `TM_LIM` | 23 | implemented | `writeLimitHeader` | `writeLimitComplete` |
 | `TM_HBRACE` | 24 | implemented | `writeHBraceHeader` | `writeHorizontalBrace` |
 | `TM_HBRACK` | 25 | implemented | `writeHBrackHeader` | `writeHorizontalBracket` |
-| `TM_LDIV` | 26 | implemented | `writeLongDivisionHeader` | `writeLongDivisionNode` |
+| `TM_LDIV` | 26 | partial (header only) | `writeLongDivisionHeader` | `writeLongDivisionNode` |
 | `TM_SUB` | 27 | implemented | `writeSubscriptHeader` | `writeSubscriptNode / writeLeadingScriptAttachment` |
 | `TM_SUP` | 28 | implemented | `writeSuperscriptHeader` | `writeSuperscriptNode / writeLeadingScriptAttachment` |
 | `TM_SUBSUP` | 29 | implemented | `writeSubSuperscriptHeader` | `writeSupSubAttachment / writeLeadingScriptAttachment` |
@@ -62,4 +62,5 @@ This file is generated from the current codebase and then manually curated as im
 - Left-script / prescript input such as `{}^{a}x`, `{}_{b}x`, `{}_{b}^{a}x` is emitted in **MTEF v5 form** via `TM_SUB` / `TM_SUP` / `TM_SUBSUP` plus `TV_SU_PRECEDES`, rather than the legacy `TM_LSCRIPT(44)` selector.
 - `\xrightarrow` / `\xleftarrow` now follow the official amsmath signature `\xrightarrow[below]{above}` / `\xleftarrow[below]{above}` for the supported single-arrow family.
 - `TM_ARC` currently covers the documented over-arc family (`\arc`, `\overarc`, `\overparen`, `\wideparen`). `\underarc` is intentionally not claimed here because it is not part of amsmath and no official MathType mapping has been confirmed in this repository yet.
+- Long division is not implemented as a complete layout feature. The current `TM_LDIV` path can preserve a quotient/divisor/dividend header, but automatic subtraction rows, digit carry-down, and remainder placement have not passed dedicated end-to-end acceptance.
 - This matrix measures **code-path existence**, not semantic completeness. For example, integrals may be implemented while still missing full variation coverage (double/triple/loop), and some behaviors still rely on Linux-side byte-level validation instead of a fresh official Windows round-trip.

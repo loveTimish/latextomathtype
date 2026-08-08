@@ -12,6 +12,78 @@ class LaTeXParserTest {
     private final LaTeXParser parser = new LaTeXParser();
 
     @Test
+    void recoversLegacyFarEastSpeedRatioLabelsBeforeFormulaSplitting() {
+        String text = "$\\pwmetrics{17.400,16.000}V_{� }$："
+            + "$\\pwmetrics{17.400,16.000}V_{� }$=1：12,"
+            + "$\\pwmetrics{17.400,16.000}V_{� }$："
+            + "$\\pwmetrics{17.400,16.000}V_{� }$=1：16。";
+
+        List<LaTeXParser.ContentSegment> formulas = parser.parseText(text).stream()
+            .filter(LaTeXParser.ContentSegment::isMath)
+            .toList();
+
+        assertEquals(List.of("V_{\\text{甲} }", "V_{\\text{车} }",
+                "V_{\\text{乙} }", "V_{\\text{车} }"),
+            formulas.stream().map(LaTeXParser.ContentSegment::rawText).toList());
+        assertTrue(formulas.stream().allMatch(formula ->
+            parser.parseDetailed(formula.rawText()).isSupported()));
+    }
+
+    @Test
+    void rejectsUnrecoverableSourceReplacementCharacterExplicitly() {
+        LaTeXParser.DetailedParseResult result = parser.parseDetailed("V_{�}");
+        LaTeXParser.DetailedParseResult numeric = parser.parseDetailed("1�+2");
+
+        assertFalse(result.isSupported());
+        assertTrue(result.diagnostics().stream().anyMatch(diagnostic ->
+            "SOURCE_REPLACEMENT_CHARACTER".equals(diagnostic.code())));
+        assertFalse(numeric.isSupported());
+        assertTrue(numeric.normalizedLatex().contains("�"),
+            "unknown source characters must not be deleted during normalization");
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+            () -> parser.parseLaTeX("V_{�}"));
+        assertTrue(failure.getMessage().contains("SOURCE_REPLACEMENT_CHARACTER"));
+    }
+
+    @Test
+    void recoversOnlyContextuallyKnownReplacementTextBeforeDetailedParsing() {
+        List<ContentSegment> segments = parser.parseText("$\\mathrm{� 路程}=\\mathrm{速度和}$");
+
+        ContentSegment formula = segments.stream().filter(ContentSegment::isMath).findFirst().orElseThrow();
+        assertEquals("\\mathrm{总路程}=\\mathrm{速度和}", formula.rawText());
+        assertTrue(parser.parseDetailed(formula.rawText()).isSupported());
+    }
+
+    @Test
+    void recoversOnlyVersionedXscArithmeticReplacementArtifacts() {
+        String text = "$(75+60)� \\times 20=� 2700$; $80-75=� 5$; $8-5� =3$; "
+            + "$24\\div 1� =24$; $1-0.25� =0.75$; $255\\div (45+40)� =3$; "
+            + "$80\\times 3=� 240$; $=(18+9)\\div (18-9)�$; "
+            + "(54-27)�千米; (15+30� )千米";
+
+        List<ContentSegment> segments = parser.parseText(text);
+        assertEquals(List.of(
+                "(75+60) \\times 20=2700",
+                "80-75=5",
+                "8-5=3",
+                "24\\div 1=24",
+                "1-0.25=0.75",
+                "255\\div (45+40)=3",
+                "80\\times 3=240",
+                "=(18+9)\\div (18-9)"),
+            segments.stream().filter(ContentSegment::isMath).map(ContentSegment::rawText).toList());
+        assertTrue(segments.stream().map(ContentSegment::rawText).noneMatch(value -> value.contains("�")));
+        assertTrue(segments.stream().filter(ContentSegment::isMath)
+            .allMatch(formula -> parser.parseDetailed(formula.rawText()).isSupported()));
+        String plain = segments.stream().filter(segment -> !segment.isMath())
+            .map(ContentSegment::rawText).reduce("", String::concat);
+        assertTrue(plain.contains("(54-27)千米"));
+        assertTrue(plain.contains("(15+30)千米"));
+
+        assertThrows(IllegalArgumentException.class, () -> parser.parseText("$1�+2$"));
+    }
+
+    @Test
     void preNormalizeRemovesOuterDollarMathDelimiters() {
         assertEquals("\\sqrt{1+x^2}", LaTeXParser.preNormalizeLatex("$\\sqrt{1+x^2}$"));
         assertEquals("\\sqrt{1+x^2}", LaTeXParser.preNormalizeLatex("$$\\sqrt{1+x^2}$$"));
@@ -62,11 +134,13 @@ class LaTeXParserTest {
 
     @Test
     void parsesRaiseboxAsVerticalShiftStyle() {
-        LaTeXParser.DetailedParseResult result = parser.parseDetailed("\\raisebox{-3pt}{2}");
+        LaTeXParser.DetailedParseResult result = parser.parseDetailed("\\raisebox{-3pt}[8pt][2pt]{2}");
 
         assertTrue(result.isSupported());
         assertEquals("vertical-shift", result.mathIR().child(0).getMetadata("styleKind"));
         assertEquals("-3.0", result.mathIR().child(0).getMetadata("verticalShiftPt"));
+        assertEquals("8pt", result.mathIR().child(0).getMetadata("boxHeight"));
+        assertEquals("2pt", result.mathIR().child(0).getMetadata("boxDepth"));
         assertEquals("2", result.mathIR().child(0).child(0).child(0).getValue());
     }
 
@@ -302,6 +376,29 @@ class LaTeXParserTest {
         assertEquals(1, segments.size());
         assertFalse(segments.get(0).isMath());
         assertEquals("这是纯文本内容", segments.get(0).rawText());
+    }
+
+    @Test
+    void testParseTextRestoresSafeLatexEscapesOnlyInPlainSegments() {
+        List<ContentSegment> segments = parser.parseText(
+            "\\raisebox -3pt 范围1\\textasciitilde 5，填空\\_\\_ $a_b$ 百分比\\%\\raisebox -");
+
+        assertEquals(3, segments.size());
+        assertEquals("范围1~ 5，填空__", segments.get(0).rawText());
+        assertTrue(segments.get(1).isMath());
+        assertEquals("a_b", segments.get(1).rawText());
+        assertEquals("百分比%", segments.get(2).rawText());
+    }
+
+    @Test
+    void testParseTextUnwrapsRaiseboxWithoutDroppingPlainTextOrEscapedDollar() {
+        List<ContentSegment> segments = parser.parseText(
+            "前\\raisebox{-3pt}[8pt][2pt]{完整\\{内容\\}，价格\\$5，"
+                + "\\raisebox{1pt}{嵌套}}后");
+
+        assertEquals(1, segments.size());
+        assertFalse(segments.get(0).isMath());
+        assertEquals("前完整{内容}，价格$5，嵌套后", segments.get(0).rawText());
     }
 
     @Test

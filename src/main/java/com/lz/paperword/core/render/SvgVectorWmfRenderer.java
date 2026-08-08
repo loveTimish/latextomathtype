@@ -64,7 +64,7 @@ public final class SvgVectorWmfRenderer {
      * Word 在双页等低缩放视图中会把很细的填充轮廓采样得发灰。按物理尺寸向
      * 轮廓两侧补少量墨量，既不依赖目标 DPI，也不会改变公式的排版位置。
      */
-    private static final double INK_EXPANSION_PT = 0.12d;
+    private static final double INK_EXPANSION_PT = 0.04d;
 
     private static final int REC_EOF = 0x0000;
     private static final int REC_SET_MAP_MODE = 0x0103;
@@ -221,6 +221,9 @@ public final class SvgVectorWmfRenderer {
 
     private static Shape prepareFinalShape(Shape shape, AffineTransform toWmf, int unitsPerInch) {
         Shape transformed = toWmf.createTransformedShape(shape);
+        if (INK_EXPANSION_PT <= 0d) {
+            return transformed;
+        }
         Area finalArea = new Area(transformed);
         float expansionStroke = (float) (2d * INK_EXPANSION_PT / 72d * unitsPerInch);
         BasicStroke inkStroke = new BasicStroke(
@@ -232,7 +235,7 @@ public final class SvgVectorWmfRenderer {
     private static List<List<double[]>> flattenShape(Shape shape)
         throws SvgVectorWmfException {
         Area normalized = new Area(shape);
-        PathIterator iterator = normalized.getPathIterator(null, 0.5d);
+        PathIterator iterator = normalized.getPathIterator(null, 0.05d);
         List<List<double[]>> contours = new ArrayList<>();
         List<double[]> current = null;
         double[] start = null;

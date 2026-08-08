@@ -3,6 +3,7 @@ package com.lz.paperword.core.render;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -12,6 +13,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LaTeXImageRendererTest {
@@ -65,6 +67,27 @@ class LaTeXImageRendererTest {
     }
 
     @Test
+    void shouldPlaceImplicitLimitArgumentUnderOperatorForMathTypePreview() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod(
+            "normalizeLatexForLocalRender", String.class);
+        method.setAccessible(true);
+        LaTeXImageRenderer renderer = new LaTeXImageRenderer();
+
+        assertEquals("\\lim\\limits_{x\\to0}\\frac{\\sin x}{x}=1",
+            method.invoke(renderer, "\\lim_{x\\to0}\\frac{\\sin x}{x}=1"));
+        assertEquals("\\lim\\limits_{x\\to0}",
+            method.invoke(renderer, "\\lim\\limits_{x\\to0}"));
+        assertEquals("\\lim\\nolimits_{x\\to0}",
+            method.invoke(renderer, "\\lim\\nolimits_{x\\to0}"));
+
+        String svg = new String(renderer.renderMathJaxSvgForAcceptance(
+            "\\lim_{x\\to0}\\frac{\\sin x}{x}=1").svgBytes(), StandardCharsets.UTF_8);
+        assertTrue(svg.contains("data-mml-node=\"munderover\"")
+                || svg.contains("data-mml-node=\"munder\""),
+            "the serialized MathJax scene must keep x->0 below lim");
+    }
+
+    @Test
     void shouldNormalizeLegacyUnbracedBbbToReadableGlyph() throws Exception {
         Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
         method.setAccessible(true);
@@ -85,14 +108,45 @@ class LaTeXImageRendererTest {
     }
 
     @Test
+    void shouldTranslateRaiseBoxToMathJaxRaiseWithoutLosingNestedContent() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
+        method.setAccessible(true);
+
+        String normalized = (String) method.invoke(new LaTeXImageRenderer(),
+            "\\raisebox{-3pt}{${\\times}$6+\\raisebox{1pt}{a\\}b\\{c}}");
+
+        assertEquals("\\raise{-3pt}{{\\times}6+\\raise{1pt}{a\\}b\\{c}}", normalized);
+        LaTeXImageRenderer.PreviewImage preview =
+            new LaTeXImageRenderer().renderForOlePreview("\\raisebox{-3pt}{2}");
+        assertFalse(preview.placeholder());
+        assertTrue(SvgVectorEmfPlusRenderer.isValidDualVector(preview.data()));
+    }
+
+    @Test
+    void shouldRejectRaiseBoxMetricOverridesThatMathJaxCannotPreserve() throws Exception {
+        Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
+        method.setAccessible(true);
+
+        InvocationTargetException failure = assertThrows(InvocationTargetException.class,
+            () -> method.invoke(new LaTeXImageRenderer(), "\\raisebox{-3pt}[8pt][2pt]{x}"));
+
+        assertTrue(failure.getCause() instanceof IllegalArgumentException);
+        assertTrue(failure.getCause().getMessage().contains("optional height/depth"));
+
+        InvocationTargetException unbalanced = assertThrows(InvocationTargetException.class,
+            () -> method.invoke(new LaTeXImageRenderer(), "\\raisebox{-3pt}{$x}"));
+        assertTrue(unbalanced.getCause() instanceof IllegalArgumentException);
+        assertTrue(unbalanced.getCause().getMessage().contains("Unbalanced $ delimiter"));
+    }
+
+    @Test
     void shouldRenderLegacyUnbracedBbbAsReadableDoubleStruckGlyph() {
         LaTeXImageRenderer.PreviewImage preview =
             new LaTeXImageRenderer().renderForOlePreview("\\Bbb x");
 
-        assertEquals("wmf", preview.extension());
-        WmfPreviewInspector.Inspection inspection = WmfPreviewInspector.inspect(preview.data());
-        assertTrue(inspection.valid());
-        assertTrue(inspection.foregroundPixels() > 0);
+        assertEquals("emf", preview.extension());
+        assertEquals("image/x-emf", preview.contentType());
+        assertTrue(SvgVectorEmfPlusRenderer.isValidDualVector(preview.data()));
     }
 
     @Test
@@ -134,18 +188,24 @@ class LaTeXImageRendererTest {
     }
 
     @Test
-    void shouldRepairOnlyKnownDocx2texReplacementArtifacts() throws Exception {
+    void shouldRepairOnlyKnownDocx2texArtifactsAndRejectUnknownReplacementCharacters() throws Exception {
         Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
         method.setAccessible(true);
 
-        assertEquals("总路程=速度和", method.invoke(new LaTeXImageRenderer(), "� 路程=速度和"));
-        assertEquals("(75+60)\\times20=2700",
-            method.invoke(new LaTeXImageRenderer(), "(75+60)�\\times20=�2700"));
-        assertEquals("V_{\\unicode{xFFFD}}", method.invoke(new LaTeXImageRenderer(), "V_{�}"));
+        InvocationTargetException replacementFailure = assertThrows(InvocationTargetException.class,
+            () -> method.invoke(new LaTeXImageRenderer(), "(75+60)�\\times20=�2700"));
+        assertTrue(replacementFailure.getCause() instanceof IllegalArgumentException);
+        assertTrue(replacementFailure.getCause().getMessage().contains("SOURCE_REPLACEMENT_CHARACTER"));
         assertEquals("\\text{相遇时间}+\\text{追及时间}", method.invoke(new LaTeXImageRenderer(),
             "\\text{相遇{\\blacksquare}{\\blacksquare}}+\\text{追及{\\blacksquare}{\\blacksquare}}"));
         assertEquals("2=64（cm^{2}", method.invoke(new LaTeXImageRenderer(), "2=64（cm^{2"));
         assertEquals("\\text{心想事成}", method.invoke(new LaTeXImageRenderer(), "\\text{心想事\\Theta }"));
+        assertEquals("\\text{梦想成真}",
+            method.invoke(new LaTeXImageRenderer(), "\\text{梦想\\Theta 真}"));
+        assertEquals("P_{3}^{1}\\cdot P_{5}^{1}",
+            method.invoke(new LaTeXImageRenderer(), "P_{3}^{1}\\spot P_{5}^{1}"));
+        assertEquals("\\cdot_1+\\cdot2+\\cdot+\\spotlight+\\spot甲",
+            method.invoke(new LaTeXImageRenderer(), "\\spot_1+\\spot2+\\spot+\\spotlight+\\spot甲"));
         assertEquals("\\text{不合题意}",
             method.invoke(new LaTeXImageRenderer(), "\\text{不合{\\blacksquare}意}"));
         assertEquals("x+\\blacksquare", method.invoke(new LaTeXImageRenderer(), "x+\\blacksquare"));
@@ -156,9 +216,10 @@ class LaTeXImageRendererTest {
         LaTeXImageRenderer.PreviewImage preview = new LaTeXImageRenderer().renderForOlePreview(
             "\\begin{array}{r}2.30€\\\\55.60€\\\\1001.00€\\end{array}");
 
-        assertEquals("wmf", preview.extension());
+        assertEquals("emf", preview.extension());
         assertFalse(preview.placeholder());
         assertTrue(preview.data().length > 0);
+        assertTrue(SvgVectorEmfPlusRenderer.isValidDualVector(preview.data()));
     }
 
     @Test
@@ -221,8 +282,10 @@ class LaTeXImageRendererTest {
     @Test
     void legacyEmfToggleCannotBypassStrictVectorWmfBackend() {
         String oldEmf = System.getProperty("paperword.ole.preview.emf");
+        String oldFormat = System.getProperty("paperword.ole.previewFormat");
         try {
             System.setProperty("paperword.ole.preview.emf", "true");
+            System.setProperty("paperword.ole.previewFormat", "wmf");
 
             LaTeXImageRenderer.PreviewImage preview =
                 new LaTeXImageRenderer().renderForOlePreview("\\sqrt{a^{2}+b^{2}}", 56.0d, 21.0d);
@@ -236,6 +299,7 @@ class LaTeXImageRendererTest {
             assertEquals(21.0d, preview.heightPt(), 0.01d);
         } finally {
             restoreProperty("paperword.ole.preview.emf", oldEmf);
+            restoreProperty("paperword.ole.previewFormat", oldFormat);
         }
     }
 
