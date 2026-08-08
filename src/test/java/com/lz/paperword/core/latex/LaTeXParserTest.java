@@ -12,21 +12,15 @@ class LaTeXParserTest {
     private final LaTeXParser parser = new LaTeXParser();
 
     @Test
-    void recoversLegacyFarEastSpeedRatioLabelsBeforeFormulaSplitting() {
+    void rejectsReplacementCharactersBeforeFormulaSplitting() {
         String text = "$\\pwmetrics{17.400,16.000}V_{� }$："
             + "$\\pwmetrics{17.400,16.000}V_{� }$=1：12,"
             + "$\\pwmetrics{17.400,16.000}V_{� }$："
             + "$\\pwmetrics{17.400,16.000}V_{� }$=1：16。";
 
-        List<LaTeXParser.ContentSegment> formulas = parser.parseText(text).stream()
-            .filter(LaTeXParser.ContentSegment::isMath)
-            .toList();
-
-        assertEquals(List.of("V_{\\text{甲} }", "V_{\\text{车} }",
-                "V_{\\text{乙} }", "V_{\\text{车} }"),
-            formulas.stream().map(LaTeXParser.ContentSegment::rawText).toList());
-        assertTrue(formulas.stream().allMatch(formula ->
-            parser.parseDetailed(formula.rawText()).isSupported()));
+        IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+            () -> parser.parseText(text));
+        assertTrue(failure.getMessage().contains("SOURCE_REPLACEMENT_CHARACTER"));
     }
 
     @Test
@@ -46,41 +40,28 @@ class LaTeXParserTest {
     }
 
     @Test
-    void recoversOnlyContextuallyKnownReplacementTextBeforeDetailedParsing() {
-        List<ContentSegment> segments = parser.parseText("$\\mathrm{� 路程}=\\mathrm{速度和}$");
-
-        ContentSegment formula = segments.stream().filter(ContentSegment::isMath).findFirst().orElseThrow();
-        assertEquals("\\mathrm{总路程}=\\mathrm{速度和}", formula.rawText());
-        assertTrue(parser.parseDetailed(formula.rawText()).isSupported());
+    void parseTextRejectsFormerCorpusRepairPatterns() {
+        for (String text : List.of(
+                "$\\mathrm{� 路程}=\\mathrm{速度和}$",
+                "$(75+60)� \\times 20=� 2700$",
+                "$80-75=� 5$",
+                "(54-27)�千米",
+                "plain�text")) {
+            IllegalArgumentException failure = assertThrows(IllegalArgumentException.class,
+                () -> parser.parseText(text), text);
+            assertTrue(failure.getMessage().contains("SOURCE_REPLACEMENT_CHARACTER"), text);
+        }
     }
 
     @Test
-    void recoversOnlyVersionedXscArithmeticReplacementArtifacts() {
-        String text = "$(75+60)� \\times 20=� 2700$; $80-75=� 5$; $8-5� =3$; "
-            + "$24\\div 1� =24$; $1-0.25� =0.75$; $255\\div (45+40)� =3$; "
-            + "$80\\times 3=� 240$; $=(18+9)\\div (18-9)�$; "
-            + "(54-27)�千米; (15+30� )千米";
+    void preNormalizeDoesNotRewriteCorpusSpecificSymbols() {
+        String latex = "\\text{相遇{\\blacksquare}{\\blacksquare}}"
+            + "+\\text{追及{\\blacksquare}{\\blacksquare}}"
+            + "+\\text{不合{\\blacksquare}意}"
+            + "+\\text{心想事\\Theta }"
+            + "+\\text{梦想\\Theta 真}";
 
-        List<ContentSegment> segments = parser.parseText(text);
-        assertEquals(List.of(
-                "(75+60) \\times 20=2700",
-                "80-75=5",
-                "8-5=3",
-                "24\\div 1=24",
-                "1-0.25=0.75",
-                "255\\div (45+40)=3",
-                "80\\times 3=240",
-                "=(18+9)\\div (18-9)"),
-            segments.stream().filter(ContentSegment::isMath).map(ContentSegment::rawText).toList());
-        assertTrue(segments.stream().map(ContentSegment::rawText).noneMatch(value -> value.contains("�")));
-        assertTrue(segments.stream().filter(ContentSegment::isMath)
-            .allMatch(formula -> parser.parseDetailed(formula.rawText()).isSupported()));
-        String plain = segments.stream().filter(segment -> !segment.isMath())
-            .map(ContentSegment::rawText).reduce("", String::concat);
-        assertTrue(plain.contains("(54-27)千米"));
-        assertTrue(plain.contains("(15+30)千米"));
-
-        assertThrows(IllegalArgumentException.class, () -> parser.parseText("$1�+2$"));
+        assertEquals(latex, LaTeXParser.preNormalizeLatex(latex));
     }
 
     @Test
@@ -134,14 +115,26 @@ class LaTeXParserTest {
 
     @Test
     void parsesRaiseboxAsVerticalShiftStyle() {
-        LaTeXParser.DetailedParseResult result = parser.parseDetailed("\\raisebox{-3pt}[8pt][2pt]{2}");
+        LaTeXParser.DetailedParseResult result = parser.parseDetailed("\\raisebox{-3pt}{2}");
 
         assertTrue(result.isSupported());
         assertEquals("vertical-shift", result.mathIR().child(0).getMetadata("styleKind"));
         assertEquals("-3.0", result.mathIR().child(0).getMetadata("verticalShiftPt"));
-        assertEquals("8pt", result.mathIR().child(0).getMetadata("boxHeight"));
-        assertEquals("2pt", result.mathIR().child(0).getMetadata("boxDepth"));
         assertEquals("2", result.mathIR().child(0).child(0).child(0).getValue());
+    }
+
+    @Test
+    void detailedParseRejectsRaiseboxOptionalBoxMetrics() {
+        for (String latex : List.of(
+                "\\raisebox{-3pt}[8pt]{2}",
+                "\\raisebox{-3pt}[8pt][2pt]{2}")) {
+            LaTeXParser.DetailedParseResult result = parser.parseDetailed(latex);
+
+            assertFalse(result.isSupported(), latex);
+            assertTrue(result.diagnostics().stream().anyMatch(diagnostic ->
+                "UNSUPPORTED_RAISEBOX_OPTIONAL_METRICS".equals(diagnostic.code())
+                    && "\\raisebox".equals(diagnostic.command())), latex);
+        }
     }
 
     @Test

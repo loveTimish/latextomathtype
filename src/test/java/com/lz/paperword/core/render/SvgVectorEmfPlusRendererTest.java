@@ -17,6 +17,7 @@ class SvgVectorEmfPlusRendererTest {
 
     private static final int EMR_HEADER = 0x00000001;
     private static final int EMR_POLYBEZIER_TO = 0x00000005;
+    private static final int EMR_SET_WINDOW_EXT = 0x00000009;
     private static final int EMR_SET_VIEWPORT_EXT = 0x0000000B;
     private static final int EMR_EOF = 0x0000000E;
     private static final int EMR_SET_MAP_MODE = 0x00000011;
@@ -99,6 +100,43 @@ class SvgVectorEmfPlusRendererTest {
         assertTrue(emfRecords.stream().anyMatch(record -> record.type() == 0x0000000B));
         assertFalse(emfRecords.stream().anyMatch(record -> isBitmapRecord(record.type())),
             "classic fallback must not contain raster records");
+        assertTrue(SvgVectorEmfPlusRenderer.isValidDualVector(emf));
+    }
+
+    @Test
+    void shouldUseOneExactClassicDeviceScaleForFractionalTargetSizes() throws Exception {
+        byte[] emf = SvgVectorEmfPlusRenderer.render(
+            COLORED_CURVE_SVG.getBytes(StandardCharsets.UTF_8), 17.3d, 7.7d);
+        List<EmfRecord> records = emfRecords(emf);
+        EmfRecord window = firstRecord(records, EMR_SET_WINDOW_EXT);
+        EmfRecord viewport = firstRecord(records, EMR_SET_VIEWPORT_EXT);
+
+        int boundsWidth = Math.addExact(u32(emf, 16), 1);
+        int boundsHeight = Math.addExact(u32(emf, 20), 1);
+        int frameWidth = u32(emf, 32);
+        int frameHeight = u32(emf, 36);
+        int windowWidth = u32(emf, window.offset() + 8);
+        int windowHeight = u32(emf, window.offset() + 12);
+        int viewportWidth = u32(emf, viewport.offset() + 8);
+        int viewportHeight = u32(emf, viewport.offset() + 12);
+
+        assertEquals((int) Math.ceil(17.3d * 2540d / 72d), frameWidth,
+            "rclFrame width must use 0.01 mm units");
+        assertEquals((int) Math.ceil(7.7d * 2540d / 72d), frameHeight,
+            "rclFrame height must use 0.01 mm units");
+        assertEquals(frameWidth, boundsWidth,
+            "rclBounds width must describe the classic device coordinate space");
+        assertEquals(frameHeight, boundsHeight,
+            "rclBounds height must describe the classic device coordinate space");
+        assertEquals(windowWidth, viewportWidth,
+            "classic X mapping must be exactly 1:1");
+        assertEquals(windowHeight, viewportHeight,
+            "classic Y mapping must be exactly 1:1");
+        assertEquals(boundsWidth, viewportWidth);
+        assertEquals(boundsHeight, viewportHeight);
+        assertEquals((long) windowWidth * viewportHeight,
+            (long) windowHeight * viewportWidth,
+            "classic X/Y scale factors must be identical");
         assertTrue(SvgVectorEmfPlusRenderer.isValidDualVector(emf));
     }
 
@@ -221,6 +259,30 @@ class SvgVectorEmfPlusRendererTest {
         assertThrows(SvgVectorWmfRenderer.SvgVectorWmfException.class,
             () -> SvgVectorEmfPlusRenderer.render(
                 COLORED_CURVE_SVG.getBytes(StandardCharsets.UTF_8), 10d, 10d, 0.31d));
+    }
+
+    @Test
+    void shouldRejectNumericAndRecordCapacityOverflowWithExplicitDiagnostics() {
+        SvgVectorWmfRenderer.SvgVectorWmfException targetOverflow = assertThrows(
+            SvgVectorWmfRenderer.SvgVectorWmfException.class,
+            () -> SvgVectorEmfPlusRenderer.render(
+                COLORED_CURVE_SVG.getBytes(StandardCharsets.UTF_8), 75_000_000d, 10d));
+        assertTrue(targetOverflow.getMessage().contains(
+            "classic EMF device width exceeds signed 32-bit range"));
+
+        IllegalArgumentException coordinateOverflow = assertThrows(
+            IllegalArgumentException.class,
+            () -> SvgVectorEmfPlusRenderer.checkedRoundToInt(
+                Float.MAX_VALUE, "classic EMF test coordinate"));
+        assertTrue(coordinateOverflow.getMessage().contains(
+            "classic EMF test coordinate exceeds signed 32-bit range"));
+
+        IllegalArgumentException capacityOverflow = assertThrows(
+            IllegalArgumentException.class,
+            () -> SvgVectorEmfPlusRenderer.checkedRecordCapacity(
+                "test EMF record", Integer.MAX_VALUE));
+        assertTrue(capacityOverflow.getMessage().contains(
+            "test EMF record capacity exceeds supported byte-array range"));
     }
 
     @Test

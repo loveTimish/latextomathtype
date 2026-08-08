@@ -21,9 +21,17 @@ import java.util.List;
  */
 public final class SvgVectorEmfPlusRenderer {
 
-    private static final double LOGICAL_UNITS_PER_PT = 16d;
+    /** Classic EMF uses a 0.01 mm virtual device grid, matching rclFrame exactly. */
+    private static final double CLASSIC_DEVICE_UNITS_PER_PT = 2540d / 72d;
     private static final double EMF_PLUS_UNITS_PER_PT = 96d / 72d;
     private static final int EMF_PLUS_LOGICAL_DPI = 96;
+    private static final int MAX_BYTE_ARRAY_SIZE = Integer.MAX_VALUE - 8;
+    private static final int REFERENCE_DEVICE_WIDTH = 50_800;
+    private static final int REFERENCE_DEVICE_HEIGHT = 28_575;
+    private static final int REFERENCE_DEVICE_WIDTH_MM = 508;
+    private static final int REFERENCE_DEVICE_HEIGHT_MM = 286;
+    private static final int REFERENCE_DEVICE_WIDTH_UM = 508_000;
+    private static final int REFERENCE_DEVICE_HEIGHT_UM = 285_750;
     static final String OPTICAL_COMPENSATION_PT_PROP = "paperword.ole.emfOpticalCompensationPt";
     /** Preserve the MathJax outline by default; compensation remains an opt-in diagnostic. */
     private static final double DEFAULT_OPTICAL_COMPENSATION_PT = 0.0d;
@@ -166,8 +174,7 @@ public final class SvgVectorEmfPlusRenderer {
             List<EncodedPath> paths = encodePaths(scene, geometry, opticalCompensationPt);
 
             byte[] header = classicEmfHeader(
-                geometry.widthUnits(), geometry.heightUnits(), widthPt, heightPt,
-                !paths.isEmpty());
+                geometry.classicDeviceWidth(), geometry.classicDeviceHeight(), !paths.isEmpty());
             byte[] headerComment = emfPlusComment(emfPlusHeader(
                 EMF_PLUS_LOGICAL_DPI, EMF_PLUS_LOGICAL_DPI));
             byte[] antiAliasComment = emfPlusComment(emfPlusRecord(
@@ -178,24 +185,24 @@ public final class SvgVectorEmfPlusRenderer {
                 EMF_PLUS_EOF, 0, new byte[0]));
 
             ByteArrayOutputStream output = new ByteArrayOutputStream(64 * 1024);
-            output.writeBytes(header);
-            output.writeBytes(headerComment);
-            output.writeBytes(emfRecordWithInt(EMR_SET_MAP_MODE, MAP_MODE_ANISOTROPIC));
-            output.writeBytes(emfPointRecord(EMR_SET_WINDOW_EXT,
-                new IntPoint(geometry.widthUnits(), geometry.heightUnits())));
-            output.writeBytes(emfPointRecord(EMR_SET_VIEWPORT_EXT,
-                new IntPoint(geometry.viewportWidth(), geometry.viewportHeight())));
-            output.writeBytes(emfRecordWithInt(EMR_SET_POLY_FILL_MODE, POLY_FILL_ALTERNATE));
+            appendBytes(output, header);
+            appendBytes(output, headerComment);
+            appendBytes(output, emfRecordWithInt(EMR_SET_MAP_MODE, MAP_MODE_ANISOTROPIC));
+            appendBytes(output, emfPointRecord(EMR_SET_WINDOW_EXT,
+                new IntPoint(geometry.classicDeviceWidth(), geometry.classicDeviceHeight())));
+            appendBytes(output, emfPointRecord(EMR_SET_VIEWPORT_EXT,
+                new IntPoint(geometry.classicDeviceWidth(), geometry.classicDeviceHeight())));
+            appendBytes(output, emfRecordWithInt(EMR_SET_POLY_FILL_MODE, POLY_FILL_ALTERNATE));
             for (EncodedPath path : paths) {
                 writeClassicFilledPath(output, path);
             }
-            output.writeBytes(antiAliasComment);
-            output.writeBytes(pixelOffsetComment);
+            appendBytes(output, antiAliasComment);
+            appendBytes(output, pixelOffsetComment);
             for (EncodedPath path : paths) {
-                output.writeBytes(path.comment());
+                appendBytes(output, path.comment());
             }
-            output.writeBytes(plusEofComment);
-            output.writeBytes(classicEofRecord());
+            appendBytes(output, plusEofComment);
+            appendBytes(output, classicEofRecord());
 
             byte[] dualEmf = output.toByteArray();
             putLittleEndianInt(dualEmf, 48, dualEmf.length);
@@ -239,12 +246,15 @@ public final class SvgVectorEmfPlusRenderer {
 
     private static RenderGeometry renderGeometry(BatikVectorSceneBuilder.VectorScene scene,
                                                  double widthPt, double heightPt) {
-        int widthUnits = Math.max(4, (int) Math.ceil(widthPt * LOGICAL_UNITS_PER_PT));
-        int heightUnits = Math.max(4, (int) Math.ceil(heightPt * LOGICAL_UNITS_PER_PT));
+        int classicDeviceWidth = checkedPositiveCeilToInt(
+            widthPt * CLASSIC_DEVICE_UNITS_PER_PT, "classic EMF device width");
+        int classicDeviceHeight = checkedPositiveCeilToInt(
+            heightPt * CLASSIC_DEVICE_UNITS_PER_PT, "classic EMF device height");
         double scale = Math.min(
-            widthUnits / scene.viewportWidth(), heightUnits / scene.viewportHeight());
-        double offsetX = (widthUnits - scene.viewportWidth() * scale) / 2d;
-        double offsetY = (heightUnits - scene.viewportHeight() * scale) / 2d;
+            classicDeviceWidth / scene.viewportWidth(),
+            classicDeviceHeight / scene.viewportHeight());
+        double offsetX = (classicDeviceWidth - scene.viewportWidth() * scale) / 2d;
+        double offsetY = (classicDeviceHeight - scene.viewportHeight() * scale) / 2d;
         AffineTransform classicTransform = new AffineTransform(
             scale, 0d, 0d, scale, offsetX, offsetY);
 
@@ -256,9 +266,9 @@ public final class SvgVectorEmfPlusRenderer {
         double plusOffsetY = (plusHeight - scene.viewportHeight() * plusScale) / 2d;
         AffineTransform plusTransform = new AffineTransform(
             plusScale, 0d, 0d, plusScale, plusOffsetX, plusOffsetY);
-        return new RenderGeometry(widthUnits, heightUnits,
-            Math.max(1, (int) Math.ceil(plusWidth)),
-            Math.max(1, (int) Math.ceil(plusHeight)),
+        return new RenderGeometry(classicDeviceWidth, classicDeviceHeight,
+            checkedPositiveCeilToInt(plusWidth, "EMF+ viewport width"),
+            checkedPositiveCeilToInt(plusHeight, "EMF+ viewport height"),
             classicTransform, plusTransform);
     }
 
@@ -271,11 +281,11 @@ public final class SvgVectorEmfPlusRenderer {
             Shape plusShape = geometry.plusTransform().createTransformedShape(painted.shape());
             if (shouldOpticallyCompensate(plusShape, opticalCompensationPt)) {
                 classicShape = expandFilledShape(classicShape,
-                    opticalCompensationPt * LOGICAL_UNITS_PER_PT,
-                    geometry.widthUnits(), geometry.heightUnits());
+                    opticalCompensationPt * CLASSIC_DEVICE_UNITS_PER_PT,
+                    geometry.classicDeviceWidth(), geometry.classicDeviceHeight());
                 plusShape = expandFilledShape(plusShape,
                     opticalCompensationPt * EMF_PLUS_UNITS_PER_PT,
-                    geometry.viewportWidth(), geometry.viewportHeight());
+                    geometry.plusViewportWidth(), geometry.plusViewportHeight());
             }
             PathData classicPath = toPathData(new Area(classicShape));
             PathData plusPath = toPathData(new Area(plusShape));
@@ -317,15 +327,13 @@ public final class SvgVectorEmfPlusRenderer {
         return expanded;
     }
 
-    private static byte[] classicEmfHeader(int widthUnits, int heightUnits,
-                                           double widthPt, double heightPt,
+    private static byte[] classicEmfHeader(int classicDeviceWidth, int classicDeviceHeight,
                                            boolean hasPaths) {
         LittleEndianWriter header = new LittleEndianWriter(108);
         header.writeInt(EMR_HEADER);
         header.writeInt(108);
-        header.writeRect(0, 0, widthUnits - 1, heightUnits - 1);
-        header.writeRect(0, 0,
-            physicalFrameUnits(widthPt), physicalFrameUnits(heightPt));
+        header.writeRect(0, 0, classicDeviceWidth - 1, classicDeviceHeight - 1);
+        header.writeRect(0, 0, classicDeviceWidth, classicDeviceHeight);
         header.writeInt(ENHMETA_SIGNATURE);
         header.writeInt(0x00010000);
         header.writeInt(0); // nBytes is finalized after all classic and EMF+ records exist.
@@ -335,29 +343,25 @@ public final class SvgVectorEmfPlusRenderer {
         header.writeInt(0); // No description.
         header.writeInt(0);
         header.writeInt(0); // No palette.
-        header.writeInt(1920);
-        header.writeInt(1080);
-        header.writeInt(508);
-        header.writeInt(286);
+        header.writeInt(REFERENCE_DEVICE_WIDTH);
+        header.writeInt(REFERENCE_DEVICE_HEIGHT);
+        header.writeInt(REFERENCE_DEVICE_WIDTH_MM);
+        header.writeInt(REFERENCE_DEVICE_HEIGHT_MM);
         header.writeInt(0); // No pixel format descriptor.
         header.writeInt(0);
         header.writeInt(0); // No OpenGL records.
-        header.writeInt(508_000);
-        header.writeInt(285_750);
+        header.writeInt(REFERENCE_DEVICE_WIDTH_UM);
+        header.writeInt(REFERENCE_DEVICE_HEIGHT_UM);
         if (header.size() != 108) {
             throw new IllegalArgumentException("classic EMF header size mismatch");
         }
         return header.toByteArray();
     }
 
-    private static int physicalFrameUnits(double points) {
-        return Math.max(1, (int) Math.ceil(points * 2540d / 72d));
-    }
-
     private static void writeClassicFilledPath(ByteArrayOutputStream output, EncodedPath encoded) {
-        output.writeBytes(classicCreateBrushRecord(encoded.color()));
-        output.writeBytes(emfRecordWithInt(EMR_SELECT_OBJECT, CLASSIC_BRUSH_HANDLE));
-        output.writeBytes(emfRecord(EMR_BEGIN_PATH));
+        appendBytes(output, classicCreateBrushRecord(encoded.color()));
+        appendBytes(output, emfRecordWithInt(EMR_SELECT_OBJECT, CLASSIC_BRUSH_HANDLE));
+        appendBytes(output, emfRecord(EMR_BEGIN_PATH));
 
         List<PathPoint> points = encoded.path().points();
         IntPoint current = null;
@@ -368,7 +372,7 @@ public final class SvgVectorEmfPlusRenderer {
             boolean close = (point.type() & PATH_POINT_CLOSE_SUBPATH) != 0;
             if (kind == PATH_POINT_START) {
                 current = integerPoint(point);
-                output.writeBytes(emfPointRecord(EMR_MOVE_TO_EX, current));
+                appendBytes(output, emfPointRecord(EMR_MOVE_TO_EX, current));
                 if (close) {
                     throw new IllegalArgumentException("empty classic EMF figure cannot be closed");
                 }
@@ -380,9 +384,9 @@ public final class SvgVectorEmfPlusRenderer {
             }
             if (kind == PATH_POINT_LINE) {
                 current = integerPoint(point);
-                output.writeBytes(emfPointRecord(EMR_LINE_TO, current));
+                appendBytes(output, emfPointRecord(EMR_LINE_TO, current));
                 if (close) {
-                    output.writeBytes(emfRecord(EMR_CLOSE_FIGURE));
+                    appendBytes(output, emfRecord(EMR_CLOSE_FIGURE));
                 }
                 index++;
                 continue;
@@ -403,20 +407,20 @@ public final class SvgVectorEmfPlusRenderer {
                 if (curve.isEmpty() || curve.size() % 3 != 0) {
                     throw new IllegalArgumentException("classic EMF Bezier point count is not divisible by three");
                 }
-                output.writeBytes(classicPolyBezierToRecord(current, curve));
+                appendBytes(output, classicPolyBezierToRecord(current, curve));
                 current = curve.getLast();
                 if (closeCurve) {
-                    output.writeBytes(emfRecord(EMR_CLOSE_FIGURE));
+                    appendBytes(output, emfRecord(EMR_CLOSE_FIGURE));
                 }
                 continue;
             }
             throw new IllegalArgumentException("unsupported classic EMF path point type: " + kind);
         }
 
-        output.writeBytes(emfRecord(EMR_END_PATH));
-        output.writeBytes(classicFillPathRecord(bounds(points)));
-        output.writeBytes(emfRecordWithInt(EMR_SELECT_OBJECT, STOCK_NULL_BRUSH));
-        output.writeBytes(emfRecordWithInt(EMR_DELETE_OBJECT, CLASSIC_BRUSH_HANDLE));
+        appendBytes(output, emfRecord(EMR_END_PATH));
+        appendBytes(output, classicFillPathRecord(bounds(points)));
+        appendBytes(output, emfRecordWithInt(EMR_SELECT_OBJECT, STOCK_NULL_BRUSH));
+        appendBytes(output, emfRecordWithInt(EMR_DELETE_OBJECT, CLASSIC_BRUSH_HANDLE));
     }
 
     private static byte[] classicCreateBrushRecord(Color color) {
@@ -431,11 +435,13 @@ public final class SvgVectorEmfPlusRenderer {
     }
 
     private static byte[] classicPolyBezierToRecord(IntPoint current, List<IntPoint> points) {
-        int size = Math.addExact(28, Math.multiplyExact(points.size(), 8));
+        int size = checkedRecordCapacity(
+            "classic EMR_POLYBEZIER_TO", 28L + (long) points.size() * 8L);
         LittleEndianWriter record = new LittleEndianWriter(size);
         record.writeInt(EMR_POLYBEZIER_TO);
         record.writeInt(size);
-        List<IntPoint> boundsPoints = new ArrayList<>(points.size() + 1);
+        List<IntPoint> boundsPoints = new ArrayList<>(
+            checkedElementCount("classic Bezier bounds", (long) points.size() + 1L));
         boundsPoints.add(current);
         boundsPoints.addAll(points);
         record.writeRect(bounds(boundsPoints));
@@ -490,7 +496,55 @@ public final class SvgVectorEmfPlusRenderer {
     }
 
     private static IntPoint integerPoint(PathPoint point) {
-        return new IntPoint(Math.round(point.x()), Math.round(point.y()));
+        return new IntPoint(
+            checkedRoundToInt(point.x(), "classic EMF x coordinate"),
+            checkedRoundToInt(point.y(), "classic EMF y coordinate"));
+    }
+
+    private static int checkedPositiveCeilToInt(double value, String description) {
+        if (!Double.isFinite(value) || value <= 0d) {
+            throw new IllegalArgumentException(
+                description + " is non-positive, non-finite, or overflowed: " + value);
+        }
+        double rounded = Math.ceil(value);
+        if (rounded > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException(
+                description + " exceeds signed 32-bit range: " + value);
+        }
+        return (int) rounded;
+    }
+
+    static int checkedRoundToInt(float value, String description) {
+        if (!Float.isFinite(value)) {
+            throw new IllegalArgumentException(description + " is non-finite: " + value);
+        }
+        double rounded = Math.floor((double) value + 0.5d);
+        if (rounded < Integer.MIN_VALUE || rounded > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException(
+                description + " exceeds signed 32-bit range: " + value);
+        }
+        return (int) rounded;
+    }
+
+    static int checkedRecordCapacity(String description, long size) {
+        if (size < 0L || size > MAX_BYTE_ARRAY_SIZE) {
+            throw new IllegalArgumentException(
+                description + " capacity exceeds supported byte-array range: " + size);
+        }
+        return (int) size;
+    }
+
+    private static int checkedElementCount(String description, long count) {
+        if (count < 0L || count > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException(
+                description + " element count exceeds signed 32-bit range: " + count);
+        }
+        return (int) count;
+    }
+
+    private static void appendBytes(ByteArrayOutputStream output, byte[] bytes) {
+        checkedRecordCapacity("complete EMF", (long) output.size() + bytes.length);
+        output.writeBytes(bytes);
     }
 
     private static Bounds bounds(List<PathPoint> points) {
@@ -517,26 +571,26 @@ public final class SvgVectorEmfPlusRenderer {
     private static boolean isValidGeneratedHeader(byte[] emf) {
         return littleEndianInt(emf, 8) == 0
             && littleEndianInt(emf, 12) == 0
-            && littleEndianInt(emf, 16) >= 3
-            && littleEndianInt(emf, 20) >= 3
+            && littleEndianInt(emf, 16) >= 0
+            && littleEndianInt(emf, 20) >= 0
             && littleEndianInt(emf, 24) == 0
             && littleEndianInt(emf, 28) == 0
-            && littleEndianInt(emf, 32) > 0
-            && littleEndianInt(emf, 36) > 0
+            && (long) littleEndianInt(emf, 32) == (long) littleEndianInt(emf, 16) + 1L
+            && (long) littleEndianInt(emf, 36) == (long) littleEndianInt(emf, 20) + 1L
             && littleEndianInt(emf, 44) == 0x00010000
             && littleEndianUnsignedShort(emf, 58) == 0
             && littleEndianInt(emf, 60) == 0
             && littleEndianInt(emf, 64) == 0
             && littleEndianInt(emf, 68) == 0
-            && littleEndianInt(emf, 72) > 0
-            && littleEndianInt(emf, 76) > 0
-            && littleEndianInt(emf, 80) > 0
-            && littleEndianInt(emf, 84) > 0
+            && littleEndianInt(emf, 72) == REFERENCE_DEVICE_WIDTH
+            && littleEndianInt(emf, 76) == REFERENCE_DEVICE_HEIGHT
+            && littleEndianInt(emf, 80) == REFERENCE_DEVICE_WIDTH_MM
+            && littleEndianInt(emf, 84) == REFERENCE_DEVICE_HEIGHT_MM
             && littleEndianInt(emf, 88) == 0
             && littleEndianInt(emf, 92) == 0
             && littleEndianInt(emf, 96) == 0
-            && littleEndianInt(emf, 100) > 0
-            && littleEndianInt(emf, 104) > 0;
+            && littleEndianInt(emf, 100) == REFERENCE_DEVICE_WIDTH_UM
+            && littleEndianInt(emf, 104) == REFERENCE_DEVICE_HEIGHT_UM;
     }
 
     private enum ClassicPhase {
@@ -616,8 +670,7 @@ public final class SvgVectorEmfPlusRenderer {
                     expectedWidth, expectedHeight, ClassicPhase.EXPECT_VIEWPORT_EXTENT);
                 case EXPECT_VIEWPORT_EXTENT -> acceptPositiveExtentRecord(
                     emf, offset, type, size, EMR_SET_VIEWPORT_EXT,
-                    Math.max(1, (int) ((expectedWidth + 11L) / 12L)),
-                    Math.max(1, (int) ((expectedHeight + 11L) / 12L)),
+                    expectedWidth, expectedHeight,
                     ClassicPhase.EXPECT_FILL_MODE);
                 case EXPECT_FILL_MODE -> acceptIntRecord(
                     emf, offset, type, size, EMR_SET_POLY_FILL_MODE, POLY_FILL_ALTERNATE,
@@ -1194,11 +1247,14 @@ public final class SvgVectorEmfPlusRenderer {
     }
 
     private static PathPoint point(double x, double y, int type) {
+        if (!Double.isFinite(x) || !Double.isFinite(y)
+                || x < -Float.MAX_VALUE || x > Float.MAX_VALUE
+                || y < -Float.MAX_VALUE || y > Float.MAX_VALUE) {
+            throw new IllegalArgumentException(
+                "path coordinate is outside the finite float range: " + x + "," + y);
+        }
         float floatX = (float) x;
         float floatY = (float) y;
-        if (!Float.isFinite(floatX) || !Float.isFinite(floatY)) {
-            throw new IllegalArgumentException("path coordinate is outside the finite float range");
-        }
         return new PathPoint(floatX, floatY, type);
     }
 
@@ -1213,8 +1269,8 @@ public final class SvgVectorEmfPlusRenderer {
 
     private static byte[] emfPlusPathObject(PathData path) {
         int pointCount = path.points().size();
-        int dataSize = Math.addExact(12, Math.multiplyExact(pointCount, 9));
-        dataSize = align4(dataSize);
+        int dataSize = checkedAlignedRecordCapacity(
+            "EMF+ Path object data", 12L + (long) pointCount * 9L);
         LittleEndianWriter data = new LittleEndianWriter(dataSize);
         data.writeInt(GRAPHICS_VERSION_1_1);
         data.writeInt(pointCount);
@@ -1242,27 +1298,30 @@ public final class SvgVectorEmfPlusRenderer {
         if ((data.length & 3) != 0) {
             throw new IllegalArgumentException("EMF+ record data is not 32-bit aligned");
         }
-        LittleEndianWriter record = new LittleEndianWriter(Math.addExact(12, data.length));
+        int recordSize = checkedRecordCapacity("EMF+ record", 12L + data.length);
+        LittleEndianWriter record = new LittleEndianWriter(recordSize);
         record.writeShort(type);
         record.writeShort(flags);
-        record.writeInt(12 + data.length);
+        record.writeInt(recordSize);
         record.writeInt(data.length);
         record.writeBytes(data);
         return record.toByteArray();
     }
 
     private static byte[] emfPlusComment(byte[]... records) {
-        int recordsSize = 0;
+        long recordsSize = 0L;
         for (byte[] record : records) {
             if ((record.length & 3) != 0) {
                 throw new IllegalArgumentException("embedded EMF+ record is not 32-bit aligned");
             }
-            recordsSize = Math.addExact(recordsSize, record.length);
+            recordsSize += record.length;
+            checkedRecordCapacity("embedded EMF+ records", recordsSize);
         }
-        int dataSize = Math.addExact(4, recordsSize);
-        LittleEndianWriter comment = new LittleEndianWriter(Math.addExact(12, dataSize));
+        int dataSize = checkedRecordCapacity("EMF+ comment data", 4L + recordsSize);
+        int recordSize = checkedRecordCapacity("EMR_GDICOMMENT", 12L + dataSize);
+        LittleEndianWriter comment = new LittleEndianWriter(recordSize);
         comment.writeInt(EMR_GDICOMMENT);
-        comment.writeInt(12 + dataSize);
+        comment.writeInt(recordSize);
         comment.writeInt(dataSize);
         comment.writeInt(EMF_PLUS_SIGNATURE);
         for (byte[] record : records) {
@@ -1341,14 +1400,22 @@ public final class SvgVectorEmfPlusRenderer {
             if (size < 8 || (size & 3) != 0 || size > emf.length - offset) {
                 throw new IllegalArgumentException("invalid EMF record size at " + offset + ": " + size);
             }
-            count = Math.addExact(count, 1);
+            if (count == Integer.MAX_VALUE) {
+                throw new IllegalArgumentException(
+                    "EMF record count exceeds signed 32-bit range");
+            }
+            count++;
             offset += size;
         }
         return count;
     }
 
-    private static int align4(int value) {
-        return Math.addExact(value, 3) & ~3;
+    private static int checkedAlignedRecordCapacity(String description, long value) {
+        if (value < 0L || value > Long.MAX_VALUE - 3L) {
+            throw new IllegalArgumentException(description + " capacity overflow: " + value);
+        }
+        long aligned = (value + 3L) & ~3L;
+        return checkedRecordCapacity(description, aligned);
     }
 
     private static int littleEndianInt(byte[] bytes, int offset) {
@@ -1372,8 +1439,8 @@ public final class SvgVectorEmfPlusRenderer {
     private record ClassicEmfLayout(int headerSize, int eofOffset) {
     }
 
-    private record RenderGeometry(int widthUnits, int heightUnits,
-                                  int viewportWidth, int viewportHeight,
+    private record RenderGeometry(int classicDeviceWidth, int classicDeviceHeight,
+                                  int plusViewportWidth, int plusViewportHeight,
                                   AffineTransform classicTransform,
                                   AffineTransform plusTransform) {
     }
@@ -1400,7 +1467,8 @@ public final class SvgVectorEmfPlusRenderer {
         private final ByteArrayOutputStream output;
 
         LittleEndianWriter(int expectedSize) {
-            output = new ByteArrayOutputStream(expectedSize);
+            output = new ByteArrayOutputStream(
+                checkedRecordCapacity("little-endian record", expectedSize));
         }
 
         void writeByte(int value) {

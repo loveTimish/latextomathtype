@@ -7,7 +7,7 @@ Export exam data and LaTeX formulas to Word `.docx` with editable MathType OLE e
 This is not a formula screenshot generator. The service writes MathType-compatible OLE objects, generates Word-visible previews, and validates the result with OLE inspection, Word/MathType spot checks, and `docx2tex` round trips.
 
 ```text
-PaperExportRequest -> LaTeX parser -> Math IR -> MTEF v5 -> OLE2 -> pure-vector WMF preview -> DOCX
+PaperExportRequest -> LaTeX parser -> Math IR -> MTEF v5 -> OLE2 -> MathJax/Batik EMF+ Dual preview -> DOCX
 ```
 
 ## Highlights
@@ -15,7 +15,8 @@ PaperExportRequest -> LaTeX parser -> Math IR -> MTEF v5 -> OLE2 -> pure-vector 
 - Java 21 / Spring Boot service for Word paper export.
 - `POST /api/export/word` returns a `.docx` with editable MathType formulas.
 - Pure Java MTEF/OLE writer; the server path does not require desktop MathType.
-- Formula body, pure `POLYPOLYGON` WMF preview, and Word display box are handled as separate layers.
+- Formula body, strict vector EMF+ Dual preview, and Word display box are handled as separate layers.
+- The default preview path outlines MathJax SVG through Batik and emits matching EMF+ and classic EMF paths; it contains no bitmap or text records and has no playback-time font dependency.
 - Linux runtime is supported; final GUI editability checks use Windows + Word + MathType.
 
 ## Quick Start
@@ -73,14 +74,14 @@ The project deliberately keeps three concerns separate:
 | Layer | Controls |
 | --- | --- |
 | MTEF/OLE body | MathType editability and formula semantics |
-| Pure-vector WMF preview | What Word paints before the OLE object is opened; bitmap and text records are forbidden |
+| EMF+ Dual vector preview | What Word paints before the OLE object is opened; MathJax/Batik outlines are stored as matching EMF+ and classic EMF paths, with bitmap and text records forbidden |
 | Word display box | Visible width, height, and baseline on the page |
 
 That boundary is the main reason layout tuning happens in the Word object shell instead of by forcing point-size records into the MTEF body.
 
 ## Known Limitation
 
-- Complete long-division layout is not implemented. `\longdiv[quotient]{divisor}{dividend}` currently emits only the quotient/divisor/dividend header; automatic subtraction steps, digit carry-down, and remainder placement are outside the supported surface. Use ordinary division or a quotient-remainder identity in production input until dedicated acceptance is complete.
+- Complete long-division layout is not implemented. `\longdiv[quotient]{divisor}{dividend}` currently preserves only an editable quotient/divisor/dividend header. A following `array` is merely an adjacent caller-supplied structure and is not claimed as validated long-division semantics. Automatic subtraction rows, digit carry-down, underline alignment, and remainder placement remain unsupported; use ordinary division or an explicit quotient-remainder identity in production input.
 
 ## Validation
 
@@ -92,7 +93,7 @@ Main reference round trip:
 
 This checks the regenerated reference DOCX through OLE inspection, Word/MathType probes where available, `docx2tex` coverage, and formula display-box comparison.
 
-Full xsc corpus acceptance is documented in [docs/xsc-latex-assets.md](docs/xsc-latex-assets.md). The latest recorded summary covered `1..155` source files, `39551` paired formula objects, and `0` generated non-WMF previews.
+Full xsc corpus acceptance is documented in [docs/xsc-latex-assets.md](docs/xsc-latex-assets.md). The latest recorded run covered all `551` reconstructed source documents and `93,319` trace-matched formula objects: all `93,319` passed OLE validation, MTEF parsing/balance/normalized-structure matching, and strict EMF+ Dual validation, with `0` failed documents and `0` failed formulas. The report also records `37` explicit recoveries of source `U+FFFD` replacement characters; none were rendered silently.
 
 ## Linux And Docker
 

@@ -188,7 +188,7 @@ class LaTeXImageRendererTest {
     }
 
     @Test
-    void shouldRepairOnlyKnownDocx2texArtifactsAndRejectUnknownReplacementCharacters() throws Exception {
+    void shouldRejectReplacementCharactersWithoutRewritingValidSymbols() throws Exception {
         Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
         method.setAccessible(true);
 
@@ -196,17 +196,19 @@ class LaTeXImageRendererTest {
             () -> method.invoke(new LaTeXImageRenderer(), "(75+60)�\\times20=�2700"));
         assertTrue(replacementFailure.getCause() instanceof IllegalArgumentException);
         assertTrue(replacementFailure.getCause().getMessage().contains("SOURCE_REPLACEMENT_CHARACTER"));
-        assertEquals("\\text{相遇时间}+\\text{追及时间}", method.invoke(new LaTeXImageRenderer(),
-            "\\text{相遇{\\blacksquare}{\\blacksquare}}+\\text{追及{\\blacksquare}{\\blacksquare}}"));
+        assertEquals("\\text{相遇{\\blacksquare}{\\blacksquare}}+\\text{追及{\\blacksquare}{\\blacksquare}}",
+            method.invoke(new LaTeXImageRenderer(),
+                "\\text{相遇{\\blacksquare}{\\blacksquare}}+\\text{追及{\\blacksquare}{\\blacksquare}}"));
         assertEquals("2=64（cm^{2}", method.invoke(new LaTeXImageRenderer(), "2=64（cm^{2"));
-        assertEquals("\\text{心想事成}", method.invoke(new LaTeXImageRenderer(), "\\text{心想事\\Theta }"));
-        assertEquals("\\text{梦想成真}",
+        assertEquals("\\text{心想事\\Theta }",
+            method.invoke(new LaTeXImageRenderer(), "\\text{心想事\\Theta }"));
+        assertEquals("\\text{梦想\\Theta 真}",
             method.invoke(new LaTeXImageRenderer(), "\\text{梦想\\Theta 真}"));
         assertEquals("P_{3}^{1}\\cdot P_{5}^{1}",
             method.invoke(new LaTeXImageRenderer(), "P_{3}^{1}\\spot P_{5}^{1}"));
         assertEquals("\\cdot_1+\\cdot2+\\cdot+\\spotlight+\\spot甲",
             method.invoke(new LaTeXImageRenderer(), "\\spot_1+\\spot2+\\spot+\\spotlight+\\spot甲"));
-        assertEquals("\\text{不合题意}",
+        assertEquals("\\text{不合{\\blacksquare}意}",
             method.invoke(new LaTeXImageRenderer(), "\\text{不合{\\blacksquare}意}"));
         assertEquals("x+\\blacksquare", method.invoke(new LaTeXImageRenderer(), "x+\\blacksquare"));
     }

@@ -124,13 +124,6 @@ public class LaTeXParser {
     private static final Pattern TEXT_TABLE_END = Pattern.compile(
         "\\\\end\\s*\\{?(?:tabularx|tabular|table)}?",
         Pattern.CASE_INSENSITIVE);
-    private static final Pattern LEGACY_SPEED_RATIO_LABELS = Pattern.compile(
-        "V_\\{\\s*\uFFFD\\s*}\\s*\\$\\s*[：:]\\s*\\$"
-            + "[^$]*V_\\{\\s*\uFFFD\\s*}\\s*\\$\\s*=\\s*1\\s*[：:]\\s*12\\s*[,，]\\s*\\$"
-            + "[^$]*V_\\{\\s*\uFFFD\\s*}\\s*\\$\\s*[：:]\\s*\\$"
-            + "[^$]*V_\\{\\s*\uFFFD\\s*}\\s*\\$\\s*=\\s*1\\s*[：:]\\s*16",
-        Pattern.DOTALL);
-
     /**
      * 数学函数命令集合。
      *
@@ -257,9 +250,8 @@ public class LaTeXParser {
      */
     public List<ContentSegment> parseText(String text) {
         List<ContentSegment> segments = new ArrayList<>();
+        rejectReplacementCharacter(text, text);
         text = NON_CONTENT_INCLUDE_GRAPHICS.matcher(text).replaceAll("");
-        text = recoverLegacySpeedRatioLabels(text);
-        text = recoverKnownReplacementArtifactsInText(text);
         text = normalizePlainTextTables(text);
         // 将 \[...\] 和 \(...\) 统一转换为 $$...$$ 和 $...$
         text = normalizeMathDelimiters(text);
@@ -303,69 +295,6 @@ public class LaTeXParser {
         }
 
         return segments;
-    }
-
-    /**
-     * Recovers the four Far East labels whose source MTEF only retained U+FFFD plus a
-     * legacy font code. The visible source Word object establishes the sequence as
-     * V_甲:V_车=1:12 and V_乙:V_车=1:16. Keeping this repair at text level is important:
-     * once the formulas are split, the four identical replacement characters no longer
-     * carry enough context to recover different labels safely.
-     */
-    private String recoverLegacySpeedRatioLabels(String text) {
-        if (text == null || text.indexOf('\uFFFD') < 0) {
-            return text;
-        }
-        Matcher matcher = LEGACY_SPEED_RATIO_LABELS.matcher(text);
-        StringBuffer out = new StringBuffer(text.length());
-        String[] labels = {"\\text{甲}", "\\text{车}", "\\text{乙}", "\\text{车}"};
-        while (matcher.find()) {
-            String fragment = matcher.group();
-            StringBuilder repaired = new StringBuilder(fragment.length() + 24);
-            int label = 0;
-            for (int index = 0; index < fragment.length(); index++) {
-                char ch = fragment.charAt(index);
-                if (ch == '\uFFFD' && label < labels.length) {
-                    repaired.append(labels[label++]);
-                } else {
-                    repaired.append(ch);
-                }
-            }
-            if (label != labels.length) {
-                throw new IllegalStateException("legacy speed-ratio label recovery count mismatch");
-            }
-            matcher.appendReplacement(out, Matcher.quoteReplacement(repaired.toString()));
-        }
-        matcher.appendTail(out);
-        return out.toString();
-    }
-
-    /**
-     * Applies only replacements whose missing source glyph can be recovered from the
-     * surrounding prose. This runs before formulas are split so parser entry points
-     * never have to guess what an isolated U+FFFD represented.
-     */
-    private String recoverKnownReplacementArtifactsInText(String text) {
-        if (text == null || text.indexOf('\uFFFD') < 0) {
-            return text;
-        }
-        String repaired = text.replaceAll("\uFFFD\\s*路程", "总路程");
-
-        // These are fixed extraction artifacts in the versioned xsc corpus. Each
-        // replacement is anchored by the complete arithmetic/prose context so an
-        // unrelated U+FFFD can never be guessed or silently discarded.
-        repaired = repaired
-            .replace("(75+60)\uFFFD \\times 20=\uFFFD 2700", "(75+60) \\times 20=2700")
-            .replace("80-75=\uFFFD 5", "80-75=5")
-            .replace("8-5\uFFFD =3", "8-5=3")
-            .replace("24\\div 1\uFFFD =24", "24\\div 1=24")
-            .replace("1-0.25\uFFFD =0.75", "1-0.25=0.75")
-            .replace("255\\div (45+40)\uFFFD =3", "255\\div (45+40)=3")
-            .replace("80\\times 3=\uFFFD 240", "80\\times 3=240")
-            .replace("=(18+9)\\div (18-9)\uFFFD", "=(18+9)\\div (18-9)")
-            .replace("(54-27)\uFFFD千米", "(54-27)千米")
-            .replace("(15+30\uFFFD )千米", "(15+30)千米");
-        return repaired;
     }
 
     private DelimitedFormula findNextDelimitedFormula(String text, int searchFrom) {
@@ -738,6 +667,7 @@ public class LaTeXParser {
                 "Parser stopped at token " + parsed.consumedTokenCount() + " of " + parsed.tokenCount()
             ));
         }
+        collectUnsupportedArgumentDiagnostics(parsed.ast(), diagnostics);
         collectUnsupportedDiagnostics(mathIR, diagnostics);
         return new DetailedParseResult(
             source,
@@ -783,6 +713,25 @@ public class LaTeXParser {
         }
     }
 
+    private void collectUnsupportedArgumentDiagnostics(LaTeXNode node, List<ParseDiagnostic> diagnostics) {
+        if (node == null) {
+            return;
+        }
+        if (node.getType() == LaTeXNode.Type.STYLE
+                && "\\raisebox".equals(node.getValue())
+                && (node.getMetadata("boxHeight") != null || node.getMetadata("boxDepth") != null)) {
+            diagnostics.add(new ParseDiagnostic(
+                DiagnosticSeverity.ERROR,
+                "UNSUPPORTED_RAISEBOX_OPTIONAL_METRICS",
+                "\\raisebox",
+                "Optional [height] and [depth] arguments are not supported for \\raisebox"
+            ));
+        }
+        for (LaTeXNode child : node.getChildren()) {
+            collectUnsupportedArgumentDiagnostics(child, diagnostics);
+        }
+    }
+
     /**
      * 解析前的字符串级标准化，吸收 docxtolatex 输出里的兼容性写法：
      *
@@ -809,11 +758,6 @@ public class LaTeXParser {
             return latex;
         }
         String normalized = normalizeOuterMathMode(latex)
-            .replace("\\text{相遇{\\blacksquare}{\\blacksquare}}", "\\text{相遇时间}")
-            .replace("\\text{追及{\\blacksquare}{\\blacksquare}}", "\\text{追及时间}")
-            .replace("\\text{不合{\\blacksquare}意}", "\\text{不合题意}")
-            .replace("\\text{心想事\\Theta }", "\\text{心想事成}")
-            .replace("\\text{梦想\\Theta 真}", "\\text{梦想成真}")
             .replace("\\text{If $x=0$ then $y=2$.}",
                 "\\text{If }x=0\\text{ then }y=2\\text{.}")
             .replaceAll("\\\\begin\\s*\\{(?:math|displaymath)\\}", "")

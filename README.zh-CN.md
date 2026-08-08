@@ -7,7 +7,7 @@
 这不是公式截图生成器。服务会写入 MathType 兼容 OLE 对象，生成 Word 可见预览，并通过 OLE 检查、Word/MathType 抽查和 `docx2tex` 回切验证结果。
 
 ```text
-PaperExportRequest -> LaTeX 解析 -> Math IR -> MTEF v5 -> OLE2 -> 纯矢量 WMF 预览 -> DOCX
+PaperExportRequest -> LaTeX 解析 -> Math IR -> MTEF v5 -> OLE2 -> MathJax/Batik EMF+ Dual 预览 -> DOCX
 ```
 
 ## 亮点
@@ -15,7 +15,8 @@ PaperExportRequest -> LaTeX 解析 -> Math IR -> MTEF v5 -> OLE2 -> 纯矢量 WM
 - Java 21 / Spring Boot 的 Word 试卷导出服务。
 - `POST /api/export/word` 返回带可编辑 MathType 公式的 `.docx`。
 - 纯 Java MTEF/OLE 写入路径；服务端不依赖桌面 MathType。
-- 公式本体、纯 `POLYPOLYGON` WMF 预览和 Word 显示框分层处理。
+- 公式本体、严格矢量 EMF+ Dual 预览和 Word 显示框分层处理。
+- 默认预览链路由 Batik 将 MathJax SVG 全部轮廓化，再写入相互匹配的 EMF+ 与经典 EMF 路径；不含位图或文本记录，也不依赖播放端字体。
 - 支持 Linux 运行；最终 GUI 可编辑性抽查使用 Windows + Word + MathType。
 
 ## 快速开始
@@ -73,14 +74,14 @@ Invoke-WebRequest `
 | 层次 | 控制内容 |
 | --- | --- |
 | MTEF/OLE 本体 | MathType 可编辑性和公式语义 |
-| 纯矢量 WMF 预览 | OLE 对象打开前 Word 绘制的内容；禁止位图和文本记录 |
+| EMF+ Dual 矢量预览 | OLE 对象打开前 Word 绘制的内容；MathJax/Batik 轮廓同时写入 EMF+ 与经典 EMF 路径，禁止位图和文本记录 |
 | Word 显示框 | 页面中的可见宽度、高度和基线 |
 
 因此，版式调校主要发生在 Word 对象外壳，而不是把固定点数字号强塞进 MTEF 本体。
 
 ## 已知限制
 
-- 完整长除法竖式尚未实现。当前 `\longdiv[商]{除数}{被除数}` 只具备商、除数和被除数的头部结构；逐步乘减、下移数字及余数的自动竖式布局不属于已支持范围。在专门验收完成前，生产输入应使用普通除法或商余关系式。
+- 完整长除法竖式尚未实现。`\longdiv[商]{除数}{被除数}` 当前只能保留可编辑的商、除数和被除数头部；后接 `array` 只是调用方手写的相邻结构，不能宣称为已经验收的长除法语义。逐步乘减、数字下移、横线对齐和余数定位均不受支持，生产输入应使用普通除法或显式商余关系式。
 
 ## 验证
 
@@ -92,7 +93,7 @@ Invoke-WebRequest `
 
 该脚本会对重建出的参考 DOCX 做 OLE 检查、可用时的 Word/MathType 探测、`docx2tex` 覆盖检查和公式显示框对比。
 
-xsc 全量验收流程见 [docs/xsc-latex-assets.md](docs/xsc-latex-assets.md)。最近记录的摘要覆盖 `1..155` 个源文件、`39551` 个成对公式对象，并且生成侧非 WMF 预览数为 `0`。
+xsc 全量验收流程见 [docs/xsc-latex-assets.md](docs/xsc-latex-assets.md)。最近一次记录覆盖全部 `551` 份重建源文档和 `93,319` 个按 trace 对齐的公式对象：`93,319` 个对象全部通过 OLE 校验、MTEF 解析/平衡/规范化结构匹配和严格 EMF+ Dual 校验，失败文档与失败公式均为 `0`。报告另行记录了 `37` 次源 `U+FFFD` 替换字符的显式恢复，没有静默输出这些乱码。
 
 ## Linux 和 Docker
 
