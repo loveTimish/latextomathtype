@@ -1,5 +1,6 @@
 package com.lz.paperword.core.docx;
 
+import com.lz.paperword.core.latex.LaTeXParser;
 import com.lz.paperword.model.PaperExportRequest;
 import com.lz.paperword.model.QuestionDTO;
 import com.lz.paperword.model.SectionDTO;
@@ -11,6 +12,7 @@ import org.apache.poi.poifs.filesystem.Entry;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -28,7 +30,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class MathTypeAlignmentRegressionTest {
@@ -40,7 +41,7 @@ class MathTypeAlignmentRegressionTest {
     @Test
     void shouldUseExpectedPreviewForFractionFormula() throws IOException {
         ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithFormula("\\frac{1}{2}"));
-        assertEquals("wmf", generated.previewExtension);
+        assertEquals("emf", generated.previewExtension);
         assertWithin(generated.positionHalfPt, -24, 4.0d, "fraction baseline position");
         assertTrue(generated.styleHeightPt >= 12.0d, "fraction preview height should stay readable");
         assertTrue(generated.styleHeightPt <= 32.0d, "fraction preview height should not be oversized");
@@ -50,7 +51,7 @@ class MathTypeAlignmentRegressionTest {
     void shouldNotUseScaledBitmapSizeAsWordDisplaySize() throws IOException {
         ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithFormula("a^2+b^2=25"));
 
-        assertEquals("wmf", generated.previewExtension);
+        assertEquals("emf", generated.previewExtension);
         assertTrue(generated.styleHeightPt <= 18.0d,
             "inline formula display height should use logical points, not high-DPI bitmap pixels");
         assertTrue(generated.styleWidthPt <= 95.0d,
@@ -58,11 +59,33 @@ class MathTypeAlignmentRegressionTest {
     }
 
     @Test
+    void shouldMatchScaledEmfPhysicalFrameToWordDisplayBox() throws IOException {
+        byte[] docx = buildDirectScaledOleDocx("a^2+b^2=c^2", 1.25d);
+        ObjectMetrics metrics = extractFirstObjectMetrics(docx);
+        Map<String, byte[]> entries = unzipBinaryEntries(docx);
+        byte[] emf = entries.get("word/media/image_eq1.emf");
+
+        assertNotNull(emf, "scaled OLE preview must remain an EMF+ Dual media part");
+        assertTrue(emf.length >= 108, "EMF header must include physical frame fields");
+        ByteBuffer header = ByteBuffer.wrap(emf).order(ByteOrder.LITTLE_ENDIAN);
+        double frameWidthPt = header.getInt(32) * 72d / 2540d;
+        double frameHeightPt = header.getInt(36) * 72d / 2540d;
+        assertWithin(frameWidthPt, metrics.styleWidthPt, 0.08d,
+            "scaled EMF physical width must equal the Word shape width");
+        assertWithin(frameHeightPt, metrics.styleHeightPt, 0.08d,
+            "scaled EMF physical height must equal the Word shape height");
+        assertWithin(metrics.dxaOrig / 20d, metrics.styleWidthPt, 0.08d,
+            "dxaOrig must equal the Word shape width");
+        assertWithin((metrics.dyaOrig + 1) / 20d, metrics.styleHeightPt, 0.08d,
+            "dyaOrig must equal the Word shape height");
+    }
+
+    @Test
     void shouldHonorExplicitShapeMetricsWhenPresent() throws IOException {
         byte[] docx = buildDocxWithContent("<p>$\\pwmetrics{12,8,20,14}a^2+b^2=25$</p>");
         ObjectMetrics generated = extractFirstObjectMetrics(docx);
 
-        assertEquals("wmf", generated.previewExtension);
+        assertEquals("emf", generated.previewExtension);
         assertWithin(generated.styleWidthPt, 20.0d, 0.6d, "shape width should come from explicit shape metrics");
         assertWithin(generated.styleHeightPt, 14.0d, 0.6d, "shape height should come from explicit shape metrics");
         assertTrue(generated.dxaOrig >= 395 && generated.dxaOrig <= 405, "dxaOrig should track explicit shape width");
@@ -78,8 +101,8 @@ class MathTypeAlignmentRegressionTest {
 
         assertTrue(reference.previewExtension.equals("wmf") || reference.previewExtension.equals("emf"),
             "reference preview should be vector");
-        assertEquals("wmf", generated.previewExtension);
-        // 预览链路已切到 WMF 媒体，断言只要求基线与尺寸保持在合理范围。
+        assertEquals("emf", generated.previewExtension);
+        // 预览容器变化不应改变公式基线与版面尺寸。
         assertWithin(generated.positionHalfPt, reference.positionHalfPt, 8.0d, "baseline position");
         assertTrue(generated.styleHeightPt >= 12.0d, "style height should stay readable after preview shrink");
         assertTrue(generated.dyaOrig > 0, "dyaOrig should be positive");
@@ -114,24 +137,29 @@ class MathTypeAlignmentRegressionTest {
     }
 
     @Test
-    void shouldUseEmfPreviewWhenMatureBackendIsEnabled() throws IOException {
-        // FreeHEP writes the EMF header via Toolkit.getScreenSize(); once a
-        // headless toolkit is cached (e.g. a Spring test context forced
-        // java.awt.headless), EMF export cannot work and the renderer falls
-        // back to WMF by design. Skip the strict EMF assertion in that case.
-        assumeFalse(isHeadlessToolkit(), "EMF export requires a display-capable AWT toolkit");
-        byte[] docx = withEmfPreviewEnabled(() -> buildDocxWithFormula("\\sqrt{a^{2}+b^{2}}"));
-        Map<String, String> entries = unzipTextEntries(docx);
-        String documentXml = entries.get("word/document.xml");
-        String relsXml = entries.get("word/_rels/document.xml.rels");
+    void shouldIgnoreRemovedEmfSwitchAndKeepStrictVectorEmfPlus() throws IOException {
+        String previous = System.getProperty("paperword.ole.preview.emf");
+        System.setProperty("paperword.ole.preview.emf", "true");
+        try {
+            byte[] docx = buildDocxWithFormula("\\sqrt{a^{2}+b^{2}}");
+            Map<String, String> entries = unzipTextEntries(docx);
+            String documentXml = entries.get("word/document.xml");
+            String relsXml = entries.get("word/_rels/document.xml.rels");
 
-        assertNotNull(documentXml);
-        assertNotNull(relsXml);
-        assertTrue(documentXml.contains("<o:OLEObject"), "EMF preview must keep editable MathType OLE");
-        assertEquals("media/image_eq1.emf",
-            extractRelationshipTarget(relsXml, extractFirstImageRelId(documentXml)));
-        ObjectMetrics metrics = extractFirstObjectMetrics(docx);
-        assertEquals("emf", metrics.previewExtension);
+            assertNotNull(documentXml);
+            assertNotNull(relsXml);
+            assertTrue(documentXml.contains("<o:OLEObject"), "vector preview must keep editable MathType OLE");
+            assertEquals("media/image_eq1.emf",
+                extractRelationshipTarget(relsXml, extractFirstImageRelId(documentXml)));
+            ObjectMetrics metrics = extractFirstObjectMetrics(docx);
+            assertEquals("emf", metrics.previewExtension);
+        } finally {
+            if (previous == null) {
+                System.clearProperty("paperword.ole.preview.emf");
+            } else {
+                System.setProperty("paperword.ole.preview.emf", previous);
+            }
+        }
     }
 
     @Test
@@ -288,6 +316,20 @@ class MathTypeAlignmentRegressionTest {
         return buildDocxWithContent("<p>计算 $" + latex + "$</p>");
     }
 
+    private byte[] buildDirectScaledOleDocx(String latex, double displayScale) throws IOException {
+        LaTeXParser.DetailedParseResult parsed = new LaTeXParser().parseDetailed(latex);
+        assertTrue(parsed.isSupported(), () -> parsed.diagnostics().toString());
+        try (XWPFDocument document = new XWPFDocument();
+             ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            var paragraph = document.createParagraph();
+            var run = paragraph.createRun();
+            new MathTypeEmbedder().embedEquation(paragraph, run, parsed.ast(), latex,
+                displayScale, 420d);
+            document.write(output);
+            return output.toByteArray();
+        }
+    }
+
     private byte[] buildDocxWithContent(String content) throws IOException {
         PaperExportRequest request = new PaperExportRequest();
 
@@ -307,29 +349,6 @@ class MathTypeAlignmentRegressionTest {
         section.setQuestions(List.of(question));
         request.setSections(List.of(section));
         return builder.build(request);
-    }
-
-    private byte[] withEmfPreviewEnabled(ThrowingDocxSupplier supplier) throws IOException {
-        String previous = System.getProperty("paperword.ole.preview.emf");
-        System.setProperty("paperword.ole.preview.emf", "true");
-        try {
-            return supplier.get();
-        } finally {
-            if (previous == null) {
-                System.clearProperty("paperword.ole.preview.emf");
-            } else {
-                System.setProperty("paperword.ole.preview.emf", previous);
-            }
-        }
-    }
-
-    @FunctionalInterface
-    private interface ThrowingDocxSupplier {
-        byte[] get() throws IOException;
-    }
-
-    private static boolean isHeadlessToolkit() {
-        return java.awt.Toolkit.getDefaultToolkit().getClass().getSimpleName().equals("HeadlessToolkit");
     }
 
     private ObjectMetrics extractFirstObjectMetrics(byte[] docxBytes) throws IOException {

@@ -2,17 +2,26 @@
 "use strict";
 
 const readline = require("readline");
+const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const { mathjax } = require("mathjax-full/js/mathjax.js");
 const { TeX } = require("mathjax-full/js/input/tex.js");
 const { SVG } = require("mathjax-full/js/output/svg.js");
 const { liteAdaptor } = require("mathjax-full/js/adaptors/liteAdaptor.js");
 const { RegisterHTMLHandler } = require("mathjax-full/js/handlers/html.js");
 const { AllPackages } = require("mathjax-full/js/input/tex/AllPackages.js");
+const MATHJAX_VERSION = require("mathjax-full/package.json").version;
 
 const adaptor = liteAdaptor();
 RegisterHTMLHandler(adaptor);
 
 const { fitMathType, stackFittedLines } = require("./mathtype_fit.cjs");
+const BUNDLE_HASH = crypto.createHash("sha256")
+  .update(fs.readFileSync(__filename)).update("\0")
+  .update(fs.readFileSync(path.join(__dirname, "mathtype_fit.cjs"))).update("\0")
+  .update(fs.readFileSync(path.join(__dirname, "..", "..", "package-lock.json")))
+  .digest("hex");
 
 /** Fit-mode padding (pt), tuned against GT MathType v:shape boxes. */
 const FIT_PAD_TOP_PT = 3.23;
@@ -26,10 +35,30 @@ function convertToSvg(latex) {
   if (start < 0 || end < 0) {
     throw new Error("MathJax did not produce SVG");
   }
-  return svg.slice(start, end + 6)
+  const rendered = svg.slice(start, end + 6)
     .replace(/currentColor/g, "#000000")
     .replace(/\s+focusable="false"/g, "")
     .replace(/\s+role="img"/g, "");
+  if (/data-mml-node=["']merror["']/.test(rendered)
+      || /data-mml-node=["']mtext["'][^>]*(?:fill|stroke)=["']red["']/.test(rendered)) {
+    throw new Error(`MathJax produced an error glyph for: ${latex}`);
+  }
+  if (/[\uFFFD\u25A1]/u.test(rendered)
+      || (/<text\b[^>]*>\?<\/text>/u.test(rendered) && !latex.includes("?"))) {
+    throw new Error(`MathJax produced a missing-glyph placeholder for: ${latex}`);
+  }
+  return rendered;
+}
+
+function materializeArrayRuleStyles(svg) {
+  return svg.replace(/<(line|rect)\b([^>]*(?:data-line|data-frame)=["'][^"']+["'][^>]*)>/g,
+    (tag, element, attrs) => {
+      const dashed = /class=["']mjx-dashed["']/.test(attrs);
+      const cleaned = attrs.replace(/\s*\/$/, "");
+      const dash = dashed ? ' stroke-dasharray="120 90"' : "";
+      const close = /\/$/.test(attrs) ? "/>" : ">";
+      return `<${element}${cleaned} fill="none" stroke="#000000" stroke-width="60"${dash}${close}`;
+    });
 }
 
 /** Split on top-level \\ line breaks (MathType piles); respects brace depth
@@ -101,7 +130,28 @@ const tex = new TeX({
     whitestar: "\\star",
     blackstar: "\\star",
     whitediamond: "\\diamond",
-    underbracechar: "\\underbrace{\\hphantom{0}}"
+    bracevert: "\\vert",
+    Circle: "\\bigcirc",
+    CIRCLE: "\\unicode{x25CF}",
+    Sun: "\\unicode{x2609}",
+    Diamondblack: "\\unicode{x25C6}",
+    bigstar: "\\unicode{x2605}",
+    underbracechar: "\\underbrace{\\hphantom{0}}",
+    upslopeellipsis: "\\begin{smallmatrix}&&\\cdot\\\\&\\cdot&\\\\\\cdot&&\\end{smallmatrix}",
+    leftbarharpoon: "\\leftharpoonup\\!|",
+    rightbarharpoon: "|\\!\\rightharpoonup",
+    dlsh: "\\hookleftarrow",
+    nwsearrow: "\\nwarrow\\!\\searrow",
+    neswarrow: "\\nearrow\\!\\swarrow",
+    nicefrac: ["{}^{#1}\\!/\\!{}_{#2}", 2],
+    ltr: ["#1", 1],
+    rtl: ["#1", 1],
+    xlongrightarrow: "\\xrightarrow",
+    xlongleftarrow: "\\xleftarrow",
+    xlongleftrightarrow: "\\xleftrightarrow",
+    xLongrightarrow: "\\xRightarrow",
+    xLongleftarrow: "\\xLeftarrow",
+    xLongleftrightarrow: "\\xLeftrightarrow"
   }
 });
 const svgOutput = new SVG({ fontCache: "none", internalSpeechTitles: false });
@@ -207,9 +257,14 @@ function renderLatex(request) {
     .replace(/\bheight=['"][^'"]+['"]/i, `height="${heightPt.toFixed(6)}pt"`)
     .replace(/\bviewBox=['"][^'"]+['"]/i, `viewBox="${paddedViewBox.map(v => v.toFixed(3)).join(" ")}"`)
     .replace(/\s+style=['"][^'"]*['"]/i, "");
+  svg = materializeArrayRuleStyles(svg);
 
   return {
     ok: true,
+    engine: "mathjax-svg",
+    mathJaxVersion: MATHJAX_VERSION,
+    nodeVersion: process.version,
+    bundleHash: BUNDLE_HASH,
     svgBase64: Buffer.from(svg, "utf8").toString("base64"),
     widthPt,
     heightPt,

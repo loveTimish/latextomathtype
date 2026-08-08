@@ -73,6 +73,8 @@ public class LaTeXNode {
         SQRT,
         /** 文本节点：表示非数学的文本内容（如 \text{...}、\mathrm{...}），子节点为文本内容 */
         TEXT,
+        /** 样式节点：字号、颜色、字体族或数学样式作用域 */
+        STYLE,
         /** 数组/竖式节点：表示 \begin{array}{...}...\end{array} */
         ARRAY,
         /** 长除法节点：表示长除法结构 \begin{longdivision} 或 \longdiv */

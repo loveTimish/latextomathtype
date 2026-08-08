@@ -49,28 +49,34 @@ This path installs OpenJDK 21 and `curl` once in a local helper image, then runs
 
 ## Formula Rendering
 
-The renderer first tries a native TeX pipeline:
+The OLE preview renderer uses one strict path:
 
 ```text
-latex -> dvisvgm -> SVG -> WMF
+LaTeX -> locked MathJax SVG -> Batik vector scene -> WMF POLYPOLYGON
 ```
 
-Install these packages on Debian/Ubuntu-style systems:
+Build the offline Linux sidecar on a release machine:
 
-```bash
-apt-get update
-apt-get install -y openjdk-21-jre-headless texlive-latex-base texlive-latex-extra texlive-fonts-recommended dvisvgm
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-vector-sidecar.ps1 -Platform linux-x64
 ```
 
-If `latex` or `dvisvgm` is not installed, OLE preview generation fails fast instead of falling back to a bitmap renderer.
+Extract `target/vector-sidecar-dist/vector-sidecar-linux-x64.tar.gz` beside the application JAR.
+The extracted directory must be named `vector-sidecar`; it contains fixed Node `24.9.0`, MathJax
+`3.2.2`, the worker, locked `node_modules`, and the required package metadata. No npm command or
+network access occurs at runtime.
 
-Override command paths when needed:
+The worker reports its engine, Node version, MathJax version, and bundle hash on every response.
+The Java side rejects any mismatch. Missing tools, unsupported SVG operations, missing glyphs,
+coordinate overflow, bitmap records, or text records fail the export with the original LaTeX.
+There is no PNG/DIB fallback.
+
+Command overrides are development-only:
 
 ```bash
 java \
-  -Dpaperword.latex.command=/usr/bin/latex \
-  -Dpaperword.dvisvgm.command=/usr/bin/dvisvgm \
-  -Dpaperword.latex.timeout.seconds=20 \
+  -Dpaperword.mathjax.node.command=/opt/dev-node/bin/node \
+  -Dpaperword.mathjax.script=/workspace/tools/mathjax/render_mathjax_svg.cjs \
   -jar target/paper-to-word-1.0.0.jar
 ```
 

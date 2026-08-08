@@ -39,6 +39,8 @@ def repair_report_output(item: dict, pos: int, mml_values: list[str]) -> tuple[s
     status = item.get("status") or ""
     reason = item.get("reason") or ""
     output = ""
+    if reason == "empty-output":
+        return "", reason
     if status == "converted":
         output = repair_single_ole_latex(item.get("output", ""))
     if output:

@@ -1,0 +1,79 @@
+id	group	name	latex
+E01	小学数学	异分母分数加法	\frac{3}{4}+\frac{1}{2}=\frac{5}{4}
+E02	小学数学	百分数、小数与分数互化	25\%=\frac{1}{4}=0.25
+E03	小学数学	比例基本性质	\frac{a}{b}=\frac{c}{d}\Rightarrow ad=bc
+E04	小学数学	单价、数量与总价	T=pn
+E05	小学数学	平均数	\bar{x}=\frac{x_1+\cdots+x_n}{n}
+E06	小学数学	长方形周长	C=2(a+b)
+E07	小学数学	三角形面积	S=\frac{ah}{2}
+E08	小学数学	梯形面积	S=\frac{(a+b)h}{2}
+E09	小学数学	圆周长	C=2\pi r
+E10	小学数学	圆面积	S=\pi r^2
+E11	小学数学	圆柱体积	V=\pi r^2h
+E12	小学数学	圆锥体积	V=\frac{1}{3}\pi r^2h
+M01	初中数学	同底数幂相乘	a^m\cdot a^n=a^{m+n}
+M02	初中数学	负整数指数幂	a^{-n}=\frac{1}{a^n}
+M03	初中数学	平方根性质	\sqrt{a^2}=\left|a\right|
+M04	初中数学	平方差公式	(a+b)(a-b)=a^2-b^2
+M05	初中数学	完全平方公式	(a+b)^2=a^2+2ab+b^2
+M06	初中数学	一元二次方程求根公式	x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}
+M07	初中数学	韦达定理	x_1+x_2=-\frac{b}{a},\quad x_1x_2=\frac{c}{a}
+M08	初中数学	一次函数	y=kx+b
+M09	初中数学	反比例函数	y=\frac{k}{x}
+M10	初中数学	二次函数顶点式	y=a(x-h)^2+k
+M11	初中数学	平面两点距离	d=\sqrt{(x_2-x_1)^2+(y_2-y_1)^2}
+M12	初中数学	勾股定理	a^2+b^2=c^2
+M13	初中数学	锐角三角函数定义	\sin A=\frac{a}{c},\quad\cos A=\frac{b}{c},\quad\tan A=\frac{a}{b}
+M14	初中数学	圆心角所对弧长	l=\frac{n\pi r}{180}
+M15	初中数学	扇形面积	S=\frac{n\pi r^2}{360}=\frac{1}{2}lr
+M16	初中数学	相似三角形对应边	\frac{AB}{A'B'}=\frac{BC}{B'C'}=\frac{AC}{A'C'}
+M17	初中数学	二元一次方程组	\left\{\begin{array}{l}2x+y=5\\x-y=1\end{array}\right.
+M18	初中数学	绝对值不等式	\left|x-a\right|\lt r
+H01	高中数学	基本不等式	a+b\ge 2\sqrt{ab}
+H02	高中数学	对数定义	a^x=N\Leftrightarrow x=\log_a N
+H03	高中数学	对数换底公式	\log_a b=\frac{\log_c b}{\log_c a}
+H04	高中数学	同角三角函数关系	\sin^2\alpha+\cos^2\alpha=1
+H05	高中数学	两角和的正弦	\sin(\alpha+\beta)=\sin\alpha\cos\beta+\cos\alpha\sin\beta
+H06	高中数学	两角和的余弦	\cos(\alpha+\beta)=\cos\alpha\cos\beta-\sin\alpha\sin\beta
+H07	高中数学	正弦定理	\frac{a}{\sin A}=\frac{b}{\sin B}=\frac{c}{\sin C}=2R
+H08	高中数学	余弦定理	a^2=b^2+c^2-2bc\cos A
+H09	高中数学	等差数列前 n 项和	S_n=\frac{n(a_1+a_n)}{2}
+H10	高中数学	等比数列前 n 项和	S_n=\frac{a_1(1-q^n)}{1-q}
+H11	高中数学	概率加法公式	P(A\cup B)=P(A)+P(B)-P(A\cap B)
+H12	高中数学	离散型随机变量方差	D(X)=\sum_{i=1}^{n}(x_i-\mu)^2p_i
+H13	高中数学	组合数	\mathrm{C}_n^k=\frac{n!}{k!(n-k)!}
+H14	高中数学	二项式定理	(a+b)^n=\sum_{k=0}^{n}\mathrm{C}_n^k a^{n-k}b^k
+H15	高中数学	导数定义	f'(x)=\lim_{\Delta x\to0}\frac{f(x+\Delta x)-f(x)}{\Delta x}
+H16	高中数学	乘积求导法则	(uv)'=u'v+uv'
+H17	高中数学	重要极限	\lim_{x\to0}\frac{\sin x}{x}=1
+H18	高中数学	定积分示例	\int_0^1x^2\,dx=\frac{1}{3}
+H19	高中数学	点到直线距离	d=\frac{\left|Ax_0+By_0+C\right|}{\sqrt{A^2+B^2}}
+H20	高中数学	椭圆标准方程	\frac{x^2}{a^2}+\frac{y^2}{b^2}=1
+H21	高中数学	向量数量积	\vec{a}\cdot\vec{b}=\left|\vec{a}\right|\left|\vec{b}\right|\cos\theta
+H22	高中数学	球体积	V=\frac{4}{3}\pi R^3
+P01	物理	匀速直线运动	s=vt
+P02	物理	匀变速运动速度	v=v_0+at
+P03	物理	匀变速运动位移	x=v_0t+\frac{1}{2}at^2
+P04	物理	牛顿第二定律	F=ma
+P05	物理	压强	p=\frac{F}{S}
+P06	物理	恒力做功	W=Fs\cos\theta
+P07	物理	动能	E_k=\frac{1}{2}mv^2
+P08	物理	重力势能	E_p=mgh
+P09	物理	密度	\rho=\frac{m}{V}
+P10	物理	欧姆定律	I=\frac{U}{R}
+P11	物理	电功率	P=UI=I^2R=\frac{U^2}{R}
+P12	物理	单摆周期	T=2\pi\sqrt{\frac{l}{g}}
+C01	化学	水的化学式	\mathrm{H}_2\mathrm{O}
+C02	化学	碳酸钙沉淀离子式	\mathrm{Ca}^{2+}+\mathrm{CO}_3^{2-}\rightarrow\mathrm{CaCO}_3\downarrow
+C03	化学	氢气燃烧	2\mathrm{H}_2+\mathrm{O}_2\rightarrow2\mathrm{H}_2\mathrm{O}
+C04	化学	物质的量	n=\frac{m}{M}
+C05	化学	物质的量浓度	c=\frac{n}{V}
+C06	化学	溶质质量分数	w=\frac{m_{\text{溶质}}}{m_{\text{溶液}}}\times100\%
+C07	化学	溶液稀释	c_1V_1=c_2V_2
+C08	化学	理想气体状态方程	pV=nRT
+C09	化学	弱酸电离常数	K_a=\frac{[\mathrm{H}^+][\mathrm{A}^-]}{[\mathrm{HA}]}
+C10	化学	pH 定义	\mathrm{pH}=-\log[\mathrm{H}^+]
+L01	竖式与结构	整数加法竖式	\begin{array}{rrrr}{}&1&2&3\\+&4&5&6\\\hline{}&5&7&9\end{array}
+L02	竖式与结构	整数乘法竖式	\begin{array}{rrrrrr}{}&{}&1&2&3&{}\\\times&{}&{}&4&5&{}\\\hline{}&{}&6&1&5&{}\\+&4&9&2&{}&{}\\\hline{}&5&5&3&5&{}\end{array}
+L03	竖式与结构	带余数除法	1234\div5=246\text{余}4,\quad1234=5\times246+4
+L04	竖式与结构	浓度十字交叉	\begin{array}{ccccc}50\%&&&&20\%\\&\searrow&&\nearrow&\\&&30\%&&\\&\nearrow&&\searrow&\\10\%&&&&20\%\end{array}

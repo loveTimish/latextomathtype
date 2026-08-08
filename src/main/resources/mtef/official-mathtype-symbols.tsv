@@ -1,0 +1,265 @@
+# latex-command<TAB>mtef-typeface<TAB>mtcode-hex<TAB>bits8-decimal
+# Mined from MathType 7.11.1.462 Equation Native objects; see the adjacent JSON report.
+\Alpha	5	391	65
+\And	2	26	-1
+\Beta	5	392	66
+\Box	11	25A1	87
+\Bumpeq	127	224E	167
+\Cap	127	22D2	211
+\Chi	5	3A7	67
+\Cup	126	22D3	210
+\Delta	5	394	68
+\Diamond	11	FFFD	110
+\Epsilon	5	395	69
+\Eta	5	397	72
+\Gamma	5	393	71
+\Im	6	2111	193
+\Iota	5	399	73
+\Kappa	5	39A	75
+\Lambda	5	39B	76
+\Longrightarrow	11	FFFD	110
+\Omega	5	3A9	87
+\Phi	5	3A6	70
+\Pi	5	3A0	80
+\Psi	5	3A8	89
+\Re	6	211C	194
+\Rho	5	3A1	82
+\Rightarrow	6	21D2	222
+\Rrightarrow	127	21DB	200
+\Sigma	5	3A3	83
+\Subset	127	22D0	208	EuclidMath2
+\Supset	127	22D1	209	EuclidMath2
+\Tau	5	3A4	84
+\Theta	5	398	81
+\Uparrow	6	21D1	221
+\Updownarrow	11	21D5	99
+\Upsilon	5	3A5	85
+\Xi	5	39E	88
+\Zeta	5	396	90
+\aleph	6	2135	192
+\alpha	4	3B1	97
+\amalg	11	2210	67
+\angle	6	2220	208
+\approx	6	2248	187
+\approxeq	127	224A	172	EuclidMath1
+\ast	6	2217	42
+\asymp	127	224D	169
+\backepsilon	6	220D	39
+\backsim	12	223D	-1
+\backsimeq	11	FFFD	110
+\backslash	2	5C	-1
+\barwedge	126	22BC	170	EuclidMath2
+\because	11	2235	81
+\beta	4	3B2	98
+\beth	127	2136	251
+\between	11	FFFD	110
+\bigcirc	12	25EF	-1
+\bigstar	12	2605	-1
+\bigtriangledown	12	25BD	-1
+\bigtriangleup	11	25B3	86
+\blacklozenge	6	2666	168
+\blacksquare	12	25A0	-1
+\blacktriangle	12	25B2	-1
+\blacktriangledown	12	25BC	-1
+\blacktriangleleft	12	25C0	-1
+\blacktriangleright	12	25B6	-1
+\bot	6	22A5	94
+\boxminus	127	229F	39
+\boxplus	127	229E	40
+\boxtimes	127	22A0	41
+\bowtie	11	FFFD	110
+\bumpeq	127	224F	166
+\bullet	2	2022	-1
+\cap	6	2229	199
+\checkmark	11	FFFD	110
+\chi	4	3C7	99
+\circ	6	B0	176
+\circeq	127	2257	161
+\circledS	127	24C8	38
+\circledast	127	229B	35
+\circledcirc	127	229A	34
+\circleddash	127	2296	33
+\clubsuit	6	2663	167
+\colon	2	3A	-1
+\complement	127	2201	240
+\cong	6	2245	64
+\cup	6	222A	200
+\curlyeqprec	126	22DE	178
+\curlyeqsucc	126	22DF	179
+\curlyvee	126	22CE	203
+\curlywedge	126	22CF	202
+\dagger	2	2020	-1
+\daleth	127	2138	253
+\dashv	126	22A3	148	EuclidMath1
+\ddagger	2	2021	-1
+\delta	4	3B4	100
+\diagdown	12	2572	-1
+\diagup	12	2571	-1
+\diamond	6	22C4	224
+\diamondsuit	11	FFFD	110
+\digamma	127	3DC	244
+\div	6	F7	184
+\divideontimes	127	22C7	230
+\doublebarwedge	126	2306	171
+\doublecap	126	22D2	211
+\doublecup	126	22D3	210
+\downharpoonleft	127	21C3	187
+\downharpoonright	127	21C2	185
+\ell	11	2113	108
+\emptyset	6	2205	198
+\epsilon	127	3F5	242
+\eqcirc	127	2256	162
+\eqsim	127	2242	171
+\eqslantgtr	126	22DD	131
+\eqslantless	126	22DC	130
+\equiv	6	2261	186
+\eta	4	3B7	104
+\exists	6	2203	36
+\forall	6	2200	34
+\frown	11	2322	41
+\gamma	4	3B3	103
+\ge	6	2265	179
+\geq	6	2265	179
+\gg	11	226B	63
+\gimel	127	2137	252
+\hbar	11	210F	104
+\imath	3	131	-1
+\in	6	2208	206
+\infty	6	221E	165
+\iota	4	3B9	105
+\jmath	127	ED02	248
+\kappa	4	3BA	107
+\lambda	4	3BB	108
+\land	6	2227	217
+\le	6	2264	163
+\leftharpoondown	11	21BD	135
+\leftharpoonup	127	21BC	180
+\leftrightharpoons	127	21CB	199
+\leq	6	2264	163
+\ll	11	226A	61
+\longleftrightarrow	11	FFFD	110
+\longrightarrow	11	FFFD	110
+\lor	6	2228	218
+\measuredangle	11	2221	82
+\mho	11	2127	74
+\mid	12	2223	-1
+\models	127	22A8	145
+\mp	11	2213	109
+\mu	4	3BC	109
+\multimap	127	22B8	168
+\nLeftarrow	127	21CD	190
+\nLeftrightarrow	127	21CE	193
+\nRightarrow	127	21CF	191
+\nabla	6	2207	209
+\natural	127	266E	232
+\ncong	127	2247	174
+\ne	6	2260	185
+\nearrow	11	2197	90
+\neswarrow	12	2922	-1
+\neg	6	AC	216
+\neq	6	2260	185
+\nexists	127	2204	243
+\ni	12	220B	-1
+\nleftarrow	127	219A	188
+\nleftrightarrow	127	21AE	192
+\nmid	127	2224	140
+\notin	6	2209	207
+\nparallel	127	2226	141
+\nprec	126	2280	186
+\npreceq	126	22E0	190
+\nrightarrow	127	219B	189
+\nshortmid	127	EA2E	138
+\nshortparallel	127	EA2F	139
+\nsim	127	2241	173
+\nsubseteq	126	2288	218
+\nsucc	126	2281	187
+\nsupseteq	126	2289	219
+\nu	4	3BD	110
+\nwarrow	11	2196	94
+\nwsearrow	12	2921	-1
+\omega	4	3C9	119
+\ominus	127	2296	33
+\oplus	6	2295	197
+\oslash	126	2298	37	EuclidMath1
+\otimes	6	2297	196
+\parallel	11	2225	80
+\partial	6	2202	182
+\perp	6	22A5	94
+\pi	4	3C0	112
+\pm	6	B1	177
+\prec	11	227A	112
+\preceq	11	FFFD	110
+\prime	6	2032	162
+\propto	6	221D	181
+\psi	4	3C8	121
+\rho	4	3C1	114
+\rightarrow	6	2192	174
+\rightarrowtail	127	21A3	176
+\rightharpoondown	127	21C1	183
+\rightharpoonup	11	21C0	134
+\rightleftarrows	11	21C4	128
+\rightleftharpoons	11	21CC	131
+\rightrightarrows	127	21C9	195
+\rightsquigarrow	127	21DD	206
+\searrow	11	2198	93
+\setminus	126	2216	130
+\sigma	4	3C3	115
+\sim	2	7E	-1
+\simeq	11	2243	59
+\smile	11	2323	40
+\spadesuit	6	2660	170
+\sphericalangle	11	2222	83
+\sqcap	127	2293	243	EuclidMath2
+\sqcup	127	2294	242
+\sqsubset	127	228F	240	EuclidMath2
+\sqsubseteq	127	2291	244	EuclidMath2
+\sqsupset	127	2290	241	EuclidMath2
+\sqsupseteq	127	2292	245	EuclidMath2
+\square	11	25A1	87
+\star	126	22C6	229
+\subset	6	2282	204
+\subseteq	6	2286	205
+\subseteqq	127	E90C	212	EuclidMath2
+\subsetneq	127	228A	214	EuclidMath2
+\subsetneqq	127	EA44	220	EuclidMath2
+\succ	11	227B	102
+\succapprox	127	E93B	185	EuclidMath2
+\succcurlyeq	127	227D	177	EuclidMath2
+\succeq	126	227D	177
+\succnapprox	127	EA3B	201	EuclidMath2
+\succneqq	127	EA41	197	EuclidMath2
+\succnsim	127	22E9	199	EuclidMath2
+\succsim	127	227F	183	EuclidMath2
+\supset	6	2283	201
+\supseteq	6	2287	202
+\supseteqq	127	E90B	213	EuclidMath2
+\supsetneq	127	228B	215	EuclidMath2
+\supsetneqq	127	EA45	221	EuclidMath2
+\surd	6	221A	214
+\swarrow	11	2199	91
+\tau	4	3C4	116
+\theta	4	3B8	113
+\times	6	D7	180
+\top	127	22A4	149
+\triangleleft	11	22B2	60
+\triangleright	11	22B3	62
+\twoheadleftarrow	127	219E	179
+\twoheadrightarrow	127	21A0	178
+\uparrow	6	2191	173
+\updownarrow	11	2195	98
+\upharpoonleft	127	21BF	186
+\upharpoonright	127	21BE	184
+\uplus	126	228E	226
+\upsilon	4	3C5	117
+\upuparrows	127	21C8	196
+\varkappa	127	3F0	249
+\varnothing	6	2205	198
+\varphi	4	3C6	106
+\varsigma	4	3C2	86
+\vdash	126	22A2	144	EuclidMath1
+\vee	6	2228	218
+\wedge	6	2227	217
+\wp	6	2118	195
+\wr	126	2240	170
+\xi	4	3BE	120
+\zeta	4	3B6	122

@@ -34,7 +34,7 @@ DOCS = [
     ),
     (
         "latex-coverage",
-        "http://www.wiris.net/demo/editor/docs/latex-coverage/",
+        "https://www.wiris.net/demo/editor/docs/latex-coverage/",
         "MathType web LaTeX coverage sample page",
     ),
     (

@@ -38,20 +38,19 @@ const DEFAULT_PARAMS = {
   slotScale: 1.0,     // MathType uses full-size numerator/denominator
   moScaleX: 1.0,      // horizontal compression for operators (disabled: with
   miScaleX: 1.0,      // spacing fixed, MJ glyph widths already match GT)
-  spaceScale: 0.85    // inter-atom gap scale around operators; the 12pt target
-                      // (fresh MathType factory settings) spaces nearly full-TeX
+  spaceScale: 1.0     // keep MathJax's natural inter-atom spacing. Compressing
+                      // this made linear formulas visibly crowded in Word.
 };
 
-// Per-operator spacing overrides, calibrated against fresh MathType 12pt
-// equations (factory defaults). The old 10.5pt reference document used
-// tighter custom spacing (0.575 / 0.3); see git history for those values.
-const DEFAULT_SPACE_BY_C = { D7: 0.85, "22C5": 0.85, "2212": 0.55, "2B": 0.9, "3D": 0.85 };
+// Ordinary operators retain MathJax's natural advance and spacing. Structure
+// fitting (fractions, piles and tall delimiters) remains independent below.
+const DEFAULT_SPACE_BY_C = {};
 
-// Per-operator glyph x-compression (GT minus is a short text-style dash).
-const DEFAULT_GLYPH_SCALE_BY_C = { "2212": 0.6 };
+const DEFAULT_GLYPH_SCALE_BY_C = {};
 
 // ---------------------------------------------------------------------------
-// Minimal XML parse/serialize for MathJax SVG (well-formed, no mixed text).
+// Minimal XML parse/serialize for MathJax SVG. Text nodes are preserved on
+// their owning <text> element so Unicode glyphs survive fit-mode rewrites.
 // ---------------------------------------------------------------------------
 
 function parseAttrs(src) {
@@ -65,11 +64,17 @@ function parseAttrs(src) {
 }
 
 function parseXml(svg) {
-  const root = { tag: null, attrs: {}, children: [], parent: null };
+  const root = { tag: null, attrs: {}, children: [], parent: null, text: "" };
   let current = root;
   const tagRe = /<(\/?)([\w:.-]+)((?:"[^"]*"|[^>"'])*?)(\/?)>/g;
   let m;
+  let cursor = 0;
   while ((m = tagRe.exec(svg)) !== null) {
+    const rawText = svg.slice(cursor, m.index);
+    if (current.tag === "text" && rawText.length > 0) {
+      current.text += rawText;
+    }
+    cursor = tagRe.lastIndex;
     const closing = m[1] === "/";
     const name = m[2];
     const attrSrc = m[3] || "";
@@ -83,7 +88,7 @@ function parseXml(svg) {
       }
       continue;
     }
-    const el = { tag: name, attrs: parseAttrs(attrSrc), children: [], parent: current };
+    const el = { tag: name, attrs: parseAttrs(attrSrc), children: [], parent: current, text: "" };
     current.children.push(el);
     if (!selfClose) {
       current = el;
@@ -102,11 +107,14 @@ const SELF_CLOSING = new Set(["path", "rect", "circle", "ellipse", "line", "use"
 
 function serialize(el, out) {
   const attrs = serializeAttrs(el.attrs);
-  if (SELF_CLOSING.has(el.tag) || el.children.length === 0) {
+  if (SELF_CLOSING.has(el.tag) || (el.children.length === 0 && !el.text)) {
     out.push(`<${el.tag}${attrs}/>`);
     return;
   }
   out.push(`<${el.tag}${attrs}>`);
+  if (el.text) {
+    out.push(el.text);
+  }
   for (const child of el.children) {
     serialize(child, out);
   }
@@ -440,9 +448,8 @@ function firstPathDataC(el) {
   return null;
 }
 
-// Horizontally compress operator/letter glyphs (left-anchored) and shrink
-// the inter-atom gaps around operators (MathType spacing is much tighter
-// than TeX's med/thick spaces), shifting following siblings accordingly.
+// Apply optional caller-provided glyph/spacing adjustments while shifting
+// following siblings consistently. Defaults preserve natural MathJax layout.
 function compressGlyphs(container, emUnits, params) {
   const moK = params.moScaleX;
   const miK = params.miScaleX;

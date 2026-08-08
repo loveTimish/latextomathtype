@@ -11,6 +11,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -43,19 +45,31 @@ class XscFullBatch10DocxTest {
         int generated = 0;
         int start = Integer.getInteger("xsc.full.start", 1);
         int end = Integer.getInteger("xsc.full.end", 10);
-        for (int i = start; i <= end; i++) {
+        boolean resume = Boolean.getBoolean("xsc.full.resume");
+        String configuredIndexes = System.getProperty("xsc.full.indexes", "").trim();
+        List<Integer> indexes = configuredIndexes.isEmpty()
+            ? IntStream.rangeClosed(start, end).boxed().toList()
+            : java.util.Arrays.stream(configuredIndexes.split(","))
+                .map(String::trim).filter(value -> !value.isEmpty()).map(Integer::parseInt).distinct().toList();
+        for (int i : indexes) {
             Path requestPath = REQUEST_DIR.resolve("full-%02d.request.json".formatted(i));
             Assumptions.assumeTrue(Files.exists(requestPath), "Missing request json: " + requestPath);
 
+            Path output = runOutputDir.resolve("xsc测试集完整重建_%02d.docx".formatted(i));
+            if (resume && Files.isRegularFile(output) && Files.size(output) > 1000) {
+                System.out.println("Reusing generated full xsc sample: " + output);
+                generated++;
+                continue;
+            }
+
             PaperExportRequest request = mapper.readValue(requestPath.toFile(), PaperExportRequest.class);
             byte[] docx = builder.build(request);
-            Path output = runOutputDir.resolve("xsc测试集完整重建_%02d.docx".formatted(i));
             Files.write(output, docx);
             System.out.println("Generated full xsc sample: " + output);
             assertTrue(Files.size(output) > 1000, "generated docx should not be empty: " + output);
             generated++;
         }
 
-        assertEquals(end - start + 1, generated, "should generate requested documents");
+        assertEquals(indexes.size(), generated, "should generate requested documents");
     }
 }

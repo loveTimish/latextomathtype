@@ -35,10 +35,16 @@ SAFE_STYLE_HINTS = {
     "letterGroupObarTemplate",
     "textFeComma",
     "explicitFractionFullSize",
+    "mixedAsciiFullwidthParens",
+    "legacyTextFeParenContent",
 }
 PIC_RE = re.compile(r"beginPic\{([^}]+)\}endPic")
 INCLUDEGRAPHICS_RE = re.compile(r"\\includegraphics(?:\[[^\]]*])?\{([^}]+)\}")
-INCLUDEGRAPHICS_LOOSE_RE = re.compile(r"\\includegraphics(?:\[[^\]]*])?\s+([^\s]+?\.(?:png|jpe?g))")
+INCLUDEGRAPHICS_LOOSE_RE = re.compile(
+    r"\\includegraphics(?:\[[^\]]*])?\s+"
+    r"([^\s]+?\.(?:png|jpe?g|gif|bmp|emf|wmf|bin)(?:\?[^\s$]*)?|[^\s$]+)",
+    re.IGNORECASE,
+)
 MATH_SPAN_RE = re.compile(r"(\$\$.*?\$\$|\$.*?\$)", re.S)
 METRICS_RE = re.compile(r"^\\pwmetrics\{[^}]+}\s*")
 STYLE_RE = re.compile(r"^\\pwstyle\{[^}]*}\s*")
@@ -237,10 +243,17 @@ def report_equations(index: int, latex_root: Path) -> list[dict]:
     if not report_path.exists():
         return []
     report = json.loads(report_path.read_text(encoding="utf-8"))
-    return [
-        item for item in report.get("equations", [])
-        if item.get("status") == "converted" and item.get("output")
-    ]
+    equations = []
+    for item in report.get("equations", []):
+        if item.get("status") != "converted":
+            continue
+        if item.get("sourceRepairReason") == "empty-output":
+            item = dict(item)
+            item["output"] = ""
+            equations.append(item)
+        elif item.get("output"):
+            equations.append(item)
+    return equations
 
 
 def metric_prefix(item: dict) -> str:
@@ -784,6 +797,11 @@ def equation_metric_lookup(equations: list[dict]) -> dict[str, deque[dict]]:
 
 
 def normalize_math_delimiters(text: str) -> str:
+    # docx2tex can place an unresolved preview immediately before adjacent
+    # MathType spans. Remove it before MATH_SPAN_RE sees the dollar run, or
+    # ``image.emf$$...$$$...$`` is paired as one malformed formula.
+    text = INCLUDEGRAPHICS_RE.sub("", text)
+    text = INCLUDEGRAPHICS_LOOSE_RE.sub("", text)
     text = re.sub(
         r"\\\[(.+?)\\\]",
         lambda m: "$$" + unwrap_inline_math_inside_command_args(m.group(1).strip()) + "$$",
@@ -976,10 +994,25 @@ def strip_minipage_environments(text: str) -> str:
 
 
 def strip_non_content_latex_commands_fragment(text: str) -> str:
+    text = re.sub(
+        r"\\begin\s+table\s+\\begin\s+tabularx\b.*?\\arraybackslash\s*",
+        " ",
+        text,
+        flags=re.S,
+    )
+    text = re.sub(r"\\(?:begin|end)(?:\{(?:table|tabularx)\}|\s+(?:table|tabularx)\b)", " ", text)
+    text = re.sub(
+        r"\\(?:arraybackslash|textwidth|linewidth|tabcolsep|arrayrulewidth|dimexpr|"
+        r"textsuperscript|textsubscript)\b",
+        " ",
+        text,
+    )
+    text = text.replace("&", " ")
     text = strip_minipage_environments(text)
     text = strip_latex_wrapper_commands(text)
+    text = re.sub(r"\\(?:fbox|mbox|makebox)\b\s*", "", text)
     text = strip_latex_text_format_commands(text)
-    text = re.sub(r"\\textcolor\s+[A-Za-z]+\s+", " ", text)
+    text = re.sub(r"\\textcolor\s+[A-Za-z][A-Za-z0-9_-]*\s*", " ", text)
     text = re.sub(r"\\(?:textbf|textit|textnormal|textrm|mathrm|textsc|emph|uline)\b\s*", "", text)
     text = DASHLINE_RE.sub(" ", text)
     text = TAG_RE.sub(" ", text)
@@ -1505,7 +1538,8 @@ def repair_docx2tex_latex(text: str) -> str:
     text = text.replace("忖", r"\Delta ")
     text = text.replace("Θ", r"\Theta ")
     text = text.replace("жи", r"\Theta ")
-    text = text.replace("成", r"\Theta ")
+    text = re.sub(r"(?<![\u3400-\u9FFF])成(?![\u3400-\u9FFF])", r"\\Theta ", text)
+    text = text.replace(r"\text{不合{\blacksquare}意}", r"\text{不合题意}")
     text = text.replace("Ο", r"\bigcirc ")
     text = text.replace("○", r"\bigcirc ")
     text = text.replace("●", r"\bullet ")
@@ -1815,6 +1849,20 @@ def fold_labeled_blocks_into_questions(questions: list[dict], preserve_formula_o
     return folded
 
 
+LOST_SPEED_SUBSCRIPT_RE = re.compile(r"V_\{(?:\\mathrm\{)?�\s*(?:\})?\}")
+
+
+def repair_known_replacement_context(text: str) -> str:
+    """Restore the four speed labels whose paragraph-level ratios identify them uniquely."""
+    if "1：12" not in text or "1：16" not in text:
+        return text
+    matches = list(LOST_SPEED_SUBSCRIPT_RE.finditer(text))
+    if len(matches) != 4:
+        return text
+    labels = iter(("甲", "车", "乙", "车"))
+    return LOST_SPEED_SUBSCRIPT_RE.sub(lambda _: rf"V_{{\mathrm{{{next(labels)}}}}}", text)
+
+
 def build_request(index: int, tex_path: Path, latex_root: Path, styles: dict[int, str] | None = None,
                   source_docx: Path | None = None, source_name: str | None = None) -> tuple[dict, int, list[dict]]:
     equations = report_equations(index, latex_root)
@@ -1840,6 +1888,7 @@ def build_request(index: int, tex_path: Path, latex_root: Path, styles: dict[int
     questions = []
     serial = 1
     for block in blocks:
+        block = repair_known_replacement_context(block)
         block = unwrap_nested_math_in_text_commands(block)
         text, images, unresolved = split_pictures(block, tex_path.parent)
         text = strip_non_content_latex_commands(text)

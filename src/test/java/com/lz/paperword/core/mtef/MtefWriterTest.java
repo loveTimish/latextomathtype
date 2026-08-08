@@ -6,12 +6,78 @@ import com.lz.paperword.core.latex.LaTeXParser.FormulaMetrics;
 import com.lz.paperword.core.latex.LaTeXParser.FormulaStyleHints;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class MtefWriterTest {
 
     private final LaTeXParser parser = new LaTeXParser();
     private final MtefWriter writer = new MtefWriter();
+
+    @Test
+    void writeWithReportReturnsStableCanonicalFormulaRecords() {
+        LaTeXNode ast = parser.parseLaTeX("\\frac{\\alpha}{2}");
+
+        MtefWriter.WriteReport report = writer.writeWithReport(ast);
+
+        assertTrue(report.bytes().length > 12);
+        assertNotNull(report.mathIR());
+        assertEquals(1, report.normalization().recordCounts().get("TMPL"));
+        assertTrue(report.normalization().canonicalSignature().contains("TMPL:11:0"));
+        assertTrue(report.normalization().canonicalSignature().contains("CHAR:"));
+        assertTrue(report.normalization().contentOffset() > 0);
+    }
+
+    @Test
+    void writeReportDefensivelyCopiesMtefBytes() {
+        MtefWriter.WriteReport report = writer.writeWithReport(parser.parseLaTeX("x"));
+        byte original = report.bytes()[0];
+
+        byte[] mutable = report.bytes();
+        mutable[0] = 0;
+
+        assertEquals(original, report.bytes()[0]);
+    }
+
+    @Test
+    void standaloneAlignmentMarkerDoesNotEnterMtefRecords() {
+        String alignedRow = writer.writeWithReport(
+            parser.parseLaTeX("&=20.08\\times (200.9-200.7)"))
+            .normalization().canonicalSignature();
+        String visibleFormula = writer.writeWithReport(
+            parser.parseLaTeX("=20.08\\times (200.9-200.7)"))
+            .normalization().canonicalSignature();
+
+        assertEquals(visibleFormula, alignedRow);
+    }
+
+    @Test
+    void raiseboxWritesNudgedMtefLine() {
+        byte[] mtef = writer.write(parser.parseLaTeX("\\raisebox{-3pt}{2}"));
+
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.LINE,
+            (byte) MtefRecord.OPT_NUDGE,
+            (byte) 0x80,
+            (byte) 0xE0
+        }), "-3pt raisebox should lower its MTEF line by 96 units");
+    }
+
+    @Test
+    void textColorMaroonWritesRgbDefinitionAndRestoresBlack() {
+        byte[] mtef = writer.write(parser.parseLaTeX("\\textcolor{maroon}{\\div 16=}"));
+
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.COLOR_DEF, 0x00,
+            (byte) 0xF6, 0x01, 0x00, 0x00, 0x00, 0x00,
+            (byte) MtefRecord.COLOR, 0x02
+        }), "maroon should be emitted as #800000-compatible RGB data");
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.COLOR, 0x01
+        }), "the scoped text color must restore the default black color");
+    }
 
     @Test
     void testWriteSimpleChar() {
@@ -47,12 +113,12 @@ class MtefWriterTest {
         assertEquals(5, mtef[0] & 0xFF);
         assertEquals(1, mtef[1] & 0xFF);
         assertEquals(0, mtef[2] & 0xFF);
-        assertEquals(6, mtef[3] & 0xFF);
-        assertEquals(5, mtef[4] & 0xFF);
-        assertTrue(containsAscii(mtef, "DSMT6\u0000"),
-            "generated MTEF should use the same legacy MathType application key as the reference document");
-        assertFalse(containsAscii(mtef, "DSMT7\u0000"),
-            "MathType 7 template identity regressed to blank Symbol glyphs in the classic editor");
+        assertEquals(7, mtef[3] & 0xFF);
+        assertEquals(11, mtef[4] & 0xFF);
+        assertTrue(containsAscii(mtef, "DSMT7\u0000"),
+            "generated MTEF should use the pinned MathType 7.11 application key");
+        assertFalse(containsAscii(mtef, "DSMT6\u0000"),
+            "all generated equations must use the MathType 7 container identity");
         assertTrue(containsBytes(mtef, new byte[] {
                 (byte) MtefRecord.CHAR,
                 (byte) MtefRecord.OPT_CHAR_ENC_CHAR_8,
@@ -94,6 +160,97 @@ class MtefWriterTest {
                 System.setProperty("latextomathtype.mtef.times.encoding", oldEncoding);
             }
         }
+    }
+
+    @Test
+    void simpleExplicitParenthesesUseMathTypeFenceTemplate() {
+        byte[] mtef = writer.write(parser.parseLaTeX("\\left(x\\right)"));
+
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PAREN,
+            (byte) (MtefRecord.TV_FENCE_L | MtefRecord.TV_FENCE_R), 0x00
+        }));
+    }
+
+    @Test
+    void italicStyleDoesNotTurnNumbersIntoVariableGlyphs() {
+        byte[] mtef = writer.write(parser.parseLaTeX("\\mathit 0"));
+
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.CHAR, 0x00, (byte) (MtefRecord.FN_NUMBER | 0x80), '0', 0x00
+        }));
+    }
+
+    @Test
+    void mathAlphabetVariantsUsePinnedMathTypeGlyphEncodings() {
+        byte[] blackboard = writer.write(parser.parseLaTeX("\\mathbb{N}\\mathbb{F}"));
+        byte[] fraktur = writer.write(parser.parseLaTeX("\\mathfrak{x}"));
+        byte[] sans = writer.write(parser.parseLaTeX("\\mathsf{x}"));
+
+        assertEquals(7, blackboard[3] & 0xFF, "extended MathType typefaces require a DSMT7 header");
+        assertEquals(11, blackboard[4] & 0xFF, "DSMT7 header must match pinned MathType 7.11");
+        assertTrue(containsBytes(blackboard,
+            ("TeX Input Language\0\\mathbb{N}\\mathbb{F}\0").getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+        assertEquals(7, fraktur[3] & 0xFF, "Euclid Math Two requires a DSMT7 header");
+        assertEquals(7, sans[3] & 0xFF, "dynamic Euclid typefaces require a DSMT7 header");
+        assertEquals(7, writer.write(parser.parseLaTeX("x"))[3] & 0xFF,
+            "all formulas target the pinned MathType 7 container contract");
+        assertTrue(containsBytes(blackboard, new byte[] {
+            (byte) MtefRecord.CHAR, 0x04, (byte) 0x8B, 0x15, 0x21, (byte) 0xA5
+        }));
+        assertTrue(containsBytes(blackboard, new byte[] {
+            (byte) MtefRecord.CHAR, 0x04, 0x7F, (byte) 0x85, (byte) 0xF0, 0x46
+        }));
+        assertTrue(containsBytes(fraktur, new byte[] {
+            (byte) MtefRecord.CHAR, 0x04, 0x7F, 0x31, (byte) 0xF0, 0x78
+        }));
+        assertTrue(containsBytes(fraktur,
+            ("EuclidFraktur\0" + (char) MtefRecord.FONT_DEF + "\u0007Euclid Fraktur\0")
+                .getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+        assertTrue(containsBytes(sans, new byte[] {
+            (byte) MtefRecord.CHAR, 0x00, 0x7F, 0x78, 0x00
+        }));
+        assertTrue(containsBytes(sans, new byte[] {
+            (byte) MtefRecord.FONT_DEF, 0x05, 'A', 'r', 'i', 'a', 'l', 0,
+            (byte) MtefRecord.FONT_STYLE_DEF, (byte) MtefRecord.FN_SYMBOL, 0
+        }));
+    }
+
+    @Test
+    void dynamicTypefaceSymbolPromotesTheWholeStreamToPinnedMathType7() {
+        byte[] mtef = writer.write(parser.parseLaTeX("\\emptyset, \\jmath, \\surd"));
+
+        assertEquals(7, mtef[3] & 0xFF);
+        assertEquals(11, mtef[4] & 0xFF);
+        assertTrue(containsBytes(mtef,
+            ("TeX Input Language\0\\emptyset, \\jmath, \\surd\0")
+                .getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.CHAR, 0x04, 0x7F, 0x02, (byte) 0xED, (byte) 0xF8
+        }));
+    }
+
+    @Test
+    void sourceMeasuredRoundTripDoesNotAskMathTypeToReparseTex() {
+        LaTeXNode ast = parser.parseLaTeX("a=1 \\\\ b=2");
+        FormulaStyleHints hints = FormulaStyleHints.empty()
+            .withSourceMetrics(new FormulaMetrics(40.0d, 28.0d));
+
+        assertFalse(containsAscii(writer.write(ast, hints), "TeX Input Language"));
+    }
+
+    @Test
+    void binomialUsesPileAndBoldEmbellishmentKeepsVectorTypeface() {
+        byte[] binomial = writer.write(parser.parseLaTeX("\\binom 1 2"));
+        byte[] boldHat = writer.write(parser.parseLaTeX("\\mathbf{\\hat u}"));
+
+        Map<String, Integer> binomialRecords = MtefRecordNormalizer.normalize(binomial).recordCounts();
+        assertEquals(1, binomialRecords.getOrDefault("PILE", 0));
+        assertEquals(0, binomialRecords.getOrDefault("MATRIX", 0));
+        assertTrue(containsBytes(boldHat, new byte[] {
+            (byte) MtefRecord.CHAR, (byte) MtefRecord.OPT_CHAR_EMBELL,
+            (byte) (MtefRecord.FN_VECTOR | 0x80), 'u', 0x00
+        }));
     }
 
     @Test
@@ -170,10 +327,20 @@ class MtefWriterTest {
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x50, 0x00}),
-            "limit should use tmLim with lower-slot and summation-style placement");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.SYM}),
-            "tmLim path should not emit a separate SYM operator record");
+        // 与 MathType 7 实测一致：\lim 用 tmSUMOP(0x16)，variation=0x50（TV_BO_SUM|TV_BO_LOWER）
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x50, 0x00}),
+            "limit should use tmSUMOP with lower-slot and summation-style placement");
+        // 算子名 slot 由 SYM 字号记录包裹（真 MathType 结构）
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.SYM}),
+            "tmSUMOP operator slot should be wrapped in a SYM size record");
+        // 回归：operator slot 必须包含算子名字符（FN_FUNCTION 直立体），
+        // 否则 MathType 打开时 "lim" 丢失（FN_FUNCTION=2 → typeface 0x82）
+        assertTrue(containsBytes(mtef, new byte[]{(byte) 0x82, 0x6c}),
+            "tmSUMOP operator slot should contain operator name char 'l'");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) 0x82, 0x69}),
+            "tmSUMOP operator slot should contain operator name char 'i'");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) 0x82, 0x6d}),
+            "tmSUMOP operator slot should contain operator name char 'm'");
     }
 
     @Test
@@ -184,6 +351,24 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTEG, 0x12, 0x00}),
             "double integral should use tmINTEG with TV_INT_2 and lower limit bits");
+    }
+
+    @Test
+    void testWriteIntegralWithOnlySpecialSymbolLowerLimitKeepsNullUpperSlot() {
+        byte[] mtef = writer.write(parser.parseLaTeX("\\int_{\\partial D}f(z)dz"));
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.SUB,
+            (byte) MtefRecord.LINE, 0x00,
+            (byte) MtefRecord.CHAR, (byte) MtefRecord.OPT_CHAR_ENC_CHAR_8,
+            (byte) (MtefRecord.FN_SYMBOL | 0x80), 0x02, 0x22, (byte) 0xB6,
+            (byte) MtefRecord.CHAR, 0x00,
+            (byte) (MtefRecord.FN_VARIABLE | 0x80), 0x44, 0x00,
+            (byte) MtefRecord.END,
+            (byte) MtefRecord.LINE, (byte) MtefRecord.OPT_LINE_NULL,
+            (byte) MtefRecord.SYM
+        }), "a lower-only integral must preserve the empty upper slot before SYM");
     }
 
     @Test
@@ -202,11 +387,11 @@ class MtefWriterTest {
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_COPROD, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_COPROD, 0x70, 0x00}),
             "coproduct should use tmCOPROD with both upper/lower limit bits");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "coproduct should not fall back to tmSUM");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PROD, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_PROD, 0x70, 0x00}),
             "coproduct should not fall back to tmPROD");
     }
 
@@ -216,9 +401,9 @@ class MtefWriterTest {
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UNION, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UNION, 0x70, 0x00}),
             "bigcup should use tmUNION with both upper/lower limit bits");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "bigcup should not fall back to tmSUM");
     }
 
@@ -228,9 +413,9 @@ class MtefWriterTest {
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTER, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTER, 0x70, 0x00}),
             "bigcap should use tmINTER with both upper/lower limit bits");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "bigcap should not fall back to tmSUM");
     }
 
@@ -240,9 +425,9 @@ class MtefWriterTest {
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x70, 0x00}),
             "bigoplus should use tmSUMOP with both upper/lower limit bits");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "bigoplus should not fall back to tmSUM");
     }
 
@@ -298,6 +483,12 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_STRIKE, 0x06, 0x00}),
             "xcancel should use tmSTRIKE with both diagonal variations enabled");
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.COLOR, 0x01,
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_STRIKE, 0x06, 0x00,
+            (byte) MtefRecord.COLOR, 0x00,
+            (byte) MtefRecord.LINE, 0x00
+        }), "MathType strike templates require black template state and automatic-color content");
     }
 
     @Test
@@ -332,6 +523,126 @@ class MtefWriterTest {
             (byte) MtefRecord.EMBELL, 0x00, (byte) MtefRecord.EMB_1DOT,
             (byte) MtefRecord.END
         }), "dot embellishment should be terminated so docx2tex can read it as \\dot{6}");
+    }
+
+    @Test
+    void testWriteSingleCharacterBarAndHatAsMathTypeEmbellishments() {
+        LaTeXNode ast = parser.parseLaTeX("\\bar x + \\hat y");
+        byte[] mtef = writer.write(ast);
+
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.CHAR, (byte) MtefRecord.OPT_CHAR_EMBELL,
+            (byte) (MtefRecord.FN_VARIABLE - 128), 0x78, 0x00,
+            (byte) MtefRecord.EMBELL, 0x00, (byte) MtefRecord.EMB_OBAR,
+            (byte) MtefRecord.END
+        }));
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.CHAR, (byte) MtefRecord.OPT_CHAR_EMBELL,
+            (byte) (MtefRecord.FN_VARIABLE - 128), 0x79, 0x00,
+            (byte) MtefRecord.EMBELL, 0x00, (byte) MtefRecord.EMB_HAT,
+            (byte) MtefRecord.END
+        }));
+        assertFalse(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_HAT, 0x00, 0x00
+        }));
+    }
+
+    @Test
+    void testNolimitsArrayUsesMathTypeSideLimitSumTemplate() {
+        LaTeXNode ast = parser.parseLaTeX(
+            "\\sum\\nolimits_{\\begin{array}{c}a\\\\[0.1em]b\\\\[0.1em]c\\end{array}}");
+        byte[] mtef = writer.write(ast);
+
+        assertFalse(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x50, 0x00
+        }));
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x10, 0x00
+        }));
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX));
+    }
+
+    @Test
+    void testLabeledBidirectionalArrowUsesMathTypeCompatibleLimitTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("A\\xleftrightarrow{\\cong}B");
+        byte[] mtef = writer.write(ast);
+
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x20, 0x00
+        }));
+        assertFalse(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x24, 0x00
+        }));
+    }
+
+    @Test
+    void testLongRightArrowWithScriptedLabelUsesMathTypeCompatibleLimitTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("\\mathbb{Q}\\xlongrightarrow{\\operatorname{ord}_p}\\mathbb{Z}");
+        byte[] mtef = writer.write(ast);
+
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x20, 0x00
+        }));
+        assertFalse(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x24, 0x00
+        }));
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUB, 0x00, 0x00
+        }), "the operator-name annotation must retain its p subscript");
+    }
+
+    @Test
+    void testDoubleRightArrowAndLabeledEqualUseMathTypeCompatibleLimitTemplates() {
+        byte[] doubleArrow = writer.write(parser.parseLaTeX("A\\xLongrightarrow{\\text{implies}}B"));
+        byte[] labeledEqual = writer.write(parser.parseLaTeX(
+            "A\\xlongequal[\\text{subscript}]{\\text{superscript}}B"));
+
+        assertTrue(containsBytes(doubleArrow, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x20, 0x00
+        }));
+        assertTrue(containsBytes(labeledEqual, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x30, 0x00
+        }));
+        assertFalse(containsBytes(doubleArrow, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW
+        }));
+        assertFalse(containsBytes(labeledEqual, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW
+        }));
+    }
+
+    @Test
+    void testUnlabeledExpandableArrowDoesNotWritePhantomLimitSlots() {
+        byte[] mtef = writer.write(parser.parseLaTeX("B\\xLeftrightarrow{}A"));
+
+        assertFalse(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM
+        }));
+        MtefCharMap.CharEntry arrow = MtefCharMap.lookup("\\Leftrightarrow");
+        assertNotNull(arrow);
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.CHAR, (byte) MtefRecord.OPT_CHAR_ENC_CHAR_8,
+            (byte) (arrow.typeface() | 0x80),
+            (byte) (arrow.mtcode() & 0xFF), (byte) (arrow.mtcode() >> 8)
+        }));
+    }
+
+    @Test
+    void testUndersetPreservesCenteredLowerLimitTemplate() {
+        byte[] mtef = writer.write(parser.parseMathIR("\\underset{!}{=}"));
+
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x10, 0x00,
+            (byte) MtefRecord.LINE, 0x00
+        }));
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.CHAR, 0x00, (byte) (MtefRecord.FN_FUNCTION | 0x80), 0x21, 0x00
+        }));
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.COLOR, 0x00,
+            (byte) MtefRecord.LINE, (byte) MtefRecord.OPT_LINE_NULL,
+            (byte) MtefRecord.END
+        }), "underset must restore color before the empty upper slot");
     }
 
     @Test
@@ -403,46 +714,62 @@ class MtefWriterTest {
     }
 
     @Test
-    void testWriteXrightarrowUsesTmArrowTemplate() {
+    void testWriteXrightarrowUsesMathTypeCompatibleLimitTemplate() {
         LaTeXNode ast = parser.parseLaTeX("\\xrightarrow{n\\to\\infty}");
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x24, 0x00}),
-            "xrightarrow should use tmARROW with top-slot + right-arrow variation");
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0x92, 0x21}),
-            "xrightarrow should serialize the expandable right arrow glyph in FN_EXPAND");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x20, 0x00}),
+            "xrightarrow should use the MathType-format-compatible upper-slot form");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x24, 0x00}));
     }
 
     @Test
-    void testWriteXleftarrowUsesTmArrowTemplate() {
+    void testWriteXleftarrowUsesMathTypeCompatibleLimitTemplate() {
         LaTeXNode ast = parser.parseLaTeX("\\xleftarrow{f}");
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x14, 0x00}),
-            "xleftarrow should use tmARROW with top-slot + left-arrow variation");
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0x90, 0x21}),
-            "xleftarrow should serialize the expandable left arrow glyph in FN_EXPAND");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x20, 0x00}),
+            "xleftarrow should use the MathType-format-compatible upper-slot form");
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x14, 0x00}));
     }
 
     @Test
-    void testWriteXrightarrowWithBottomAnnotationUsesTmArrowTopAndBottomVariation() {
+    void testWriteXrightarrowWithBottomAnnotationUsesLimitTopAndBottomSlots() {
         LaTeXNode ast = parser.parseLaTeX("\\xrightarrow[b]{a}");
         byte[] mtef = writer.write(ast);
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x2C, 0x00}),
-            "xrightarrow[below]{above} should set both top and bottom variation bits");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x30, 0x00}),
+            "xrightarrow[below]{above} should set both limit-slot variation bits");
         byte[] topChar = new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x61, 0x00};
         byte[] bottomChar = new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x62, 0x00};
         byte[] arrowChar = new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0x92, 0x21};
         assertTrue(containsBytes(mtef, topChar), "top annotation should still be serialized");
         assertTrue(containsBytes(mtef, bottomChar), "bottom annotation should be serialized");
-        assertTrue(indexOfBytes(mtef, topChar) < indexOfBytes(mtef, arrowChar),
-            "top annotation should appear before the expandable arrow glyph");
-        assertTrue(indexOfBytes(mtef, bottomChar) < indexOfBytes(mtef, arrowChar),
-            "bottom annotation should appear before the expandable arrow glyph");
+        assertTrue(indexOfBytes(mtef, bottomChar) < indexOfBytes(mtef, topChar),
+            "MathType limit slots must preserve bottom-before-top ordering");
+    }
+
+    @Test
+    void testWriteXLongleftarrowUsesMathTypeFormatCompatibleLimitTemplate() {
+        LaTeXNode ast = parser.parseLaTeX("B\\xLongleftarrow[\\text{seilpmi}]{}A");
+
+        byte[] mtef = writer.write(ast);
+
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x10, 0x00
+        }), "xLongleftarrow with a lower label should use MathType's TM_LIM lower-slot form");
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.CHAR, (byte) MtefRecord.OPT_CHAR_ENC_CHAR_8,
+            (byte) 0x8B, (byte) 0xFD, (byte) 0xFF, 0x6E
+        }), "Longleftarrow must use MathType's MT Extra legacy glyph position");
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.LINE, (byte) MtefRecord.OPT_LINE_NULL,
+            (byte) MtefRecord.END, (byte) MtefRecord.FULL,
+            (byte) MtefRecord.COLOR, 0x01
+        }), "the template must close after the null upper label before restoring size and color");
     }
 
     @Test
@@ -453,11 +780,12 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_HBRACE, 0x01, 0x00}),
             "overbrace should use tmHBRACE with TV_HB_TOP variation bit set");
-        // Should contain 0x23DE (⏞ overbrace character) in FN_EXPAND (encoded)
-        // encodeTypeface(FN_EXPAND = 22) → (22 | 0x80) = 0x96
-        // mtcode: 0x23DE → low byte 0xDE, high byte 0x23
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xDE, 0x23}),
-            "overbrace should write U+23DE overbrace character with FN_EXPAND font");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x37, (byte) 0xFE}),
+            "overbrace should use MathType's native U+FE37 expandable glyph");
+        assertTrue(containsBytes(mtef, new byte[]{
+            (byte) MtefRecord.SUB, (byte) MtefRecord.LINE, 0x00,
+            (byte) MtefRecord.END, (byte) MtefRecord.FULL
+        }), "horizontal fence templates must retain their empty annotation slot");
     }
 
     @Test
@@ -468,11 +796,8 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_HBRACE, 0x00, 0x00}),
             "underbrace should use tmHBRACE with TV_HB_TOP variation bit clear");
-        // Should contain 0x23DF (⏟ underbrace character) in FN_EXPAND (encoded)
-        // encodeTypeface(FN_EXPAND = 22) → (22 | 0x80) = 0x96
-        // mtcode: 0x23DF → low byte 0xDF, high byte 0x23
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xDF, 0x23}),
-            "underbrace should write U+23DF underbrace character with FN_EXPAND font");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x38, (byte) 0xFE}),
+            "underbrace should use MathType's native U+FE38 expandable glyph");
     }
 
     @Test
@@ -483,9 +808,8 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_HBRACK, 0x01, 0x00}),
             "overbracket should use tmHBRACK with TV_HB_TOP variation bit set");
-        // Should contain 0x23B4 (⎴ top square bracket) in FN_EXPAND (encoded)
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xB4, 0x23}),
-            "overbracket should write U+23B4 top square bracket with FN_EXPAND font");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x47, (byte) 0xFE}),
+            "overbracket should use MathType's native U+FE47 expandable glyph");
     }
 
     @Test
@@ -496,9 +820,8 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_HBRACK, 0x00, 0x00}),
             "underbracket should use tmHBRACK with TV_HB_TOP variation bit clear");
-        // Should contain 0x23B5 (⎵ bottom square bracket) in FN_EXPAND (encoded)
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xB5, 0x23}),
-            "underbracket should write U+23B5 bottom square bracket with FN_EXPAND font");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x48, (byte) 0xFE}),
+            "underbracket should use MathType's native U+FE48 expandable glyph");
     }
 
     @Test
@@ -552,6 +875,24 @@ class MtefWriterTest {
 
         assertNotNull(mtef);
         assertTrue(containsRecord(mtef, MtefRecord.MATRIX), "matrix environment should emit MATRIX record");
+    }
+
+    @Test
+    void officialArrayMatrixHeadersMatchDesktopMathTypeAlignmentAndPartitions() {
+        byte[] multiColumn = writer.write(parser.parseLaTeX(
+            "\\begin{array}{cc|c}1&2&3\\\\x&y&z\\end{array}"));
+        byte[] leftColumn = writer.write(parser.parseLaTeX(
+            "\\begin{array}{l}a\\\\b\\end{array}"));
+
+        MtefRecordNormalizer.CanonicalRecord multi = MtefRecordNormalizer.normalize(multiColumn).records()
+            .stream().filter(record -> record.tag() == MtefRecord.MATRIX).findFirst().orElseThrow();
+        MtefRecordNormalizer.CanonicalRecord left = MtefRecordNormalizer.normalize(leftColumn).records()
+            .stream().filter(record -> record.tag() == MtefRecord.MATRIX).findFirst().orElseThrow();
+        assertEquals(1, multi.matrixVerticalAlignment());
+        assertEquals(1, multi.matrixHorizontalAlignment());
+        assertEquals("00", multi.rowPartitions());
+        assertEquals("00", multi.columnPartitions());
+        assertEquals(0, left.matrixHorizontalAlignment());
     }
 
     @Test
@@ -736,6 +1077,68 @@ class MtefWriterTest {
     }
 
     @Test
+    void testFlatFenceRestoresFullSizeBeforeClosingAfterTrailingScript() {
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, false, false, false, false, null);
+        byte[] mtef = writer.write(parser.parseLaTeX("(1^3+2^3)"), hints);
+        var records = MtefRecordNormalizer.normalize(mtef).records();
+        int close = -1;
+        for (int index = 0; index < records.size(); index++) {
+            if (records.get(index).tag() == MtefRecord.CHAR
+                    && Integer.valueOf((int) ')').equals(records.get(index).mtcode())) {
+                close = index;
+                break;
+            }
+        }
+
+        assertTrue(close > 0, "flat closing parenthesis must be present");
+        assertEquals(MtefRecord.FULL, records.get(close - 1).tag(),
+            "a trailing script must restore the containing line size before its closing delimiter");
+    }
+
+    @Test
+    void testExplicitEmptyFirstArrayCellProducesAnEmptyMatrixSlot() {
+        byte[] mtef = writer.write(parser.parseLaTeX(
+            "\\begin{array}{cc} {} & \\frac14 \\end{array}"));
+        var records = MtefRecordNormalizer.normalize(mtef).records();
+        int matrix = -1;
+        for (int index = 0; index < records.size(); index++) {
+            if (records.get(index).tag() == MtefRecord.MATRIX) {
+                matrix = index;
+                break;
+            }
+        }
+
+        assertTrue(matrix >= 0, "array must emit a MATRIX record");
+        assertEquals(MtefRecord.LINE, records.get(matrix + 1).tag());
+        assertEquals(MtefRecord.END, records.get(matrix + 2).tag(),
+            "the explicit empty first cell must remain an empty LINE slot");
+        assertEquals(MtefRecord.LINE, records.get(matrix + 3).tag(),
+            "the fraction must remain in the second cell");
+    }
+
+    @Test
+    void testExplicitEmptyFirstArrayCellSurvivesStructuredSecondCell() {
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, true, false, false, false, false, false, null);
+        byte[] mtef = writer.write(parser.parseLaTeX(
+            "\\begin{array}{cc} {} & \\frac { 1 } { 4 }\\times \\left( { 4.85\\div \\frac { 5 } { 18 }-3.6+6.15\\times 3\\frac { 3 } { 5 } } \\right)+\\left[ 5.5-1.75\\times \\left( { 1\\frac { 2 } { 3 }+\\frac { 19 } { 21 } } \\right) \\right] \\end{array}"), hints);
+        var records = MtefRecordNormalizer.normalize(mtef).records();
+        int matrix = -1;
+        for (int index = 0; index < records.size(); index++) {
+            if (records.get(index).tag() == MtefRecord.MATRIX) {
+                matrix = index;
+                break;
+            }
+        }
+
+        assertTrue(matrix >= 0);
+        assertEquals(MtefRecord.LINE, records.get(matrix + 1).tag());
+        assertEquals(MtefRecord.END, records.get(matrix + 2).tag());
+        assertEquals(MtefRecord.LINE, records.get(matrix + 3).tag());
+    }
+
+    @Test
     void testSourceFlatParenTemplateHintUsesTmParen() {
         LaTeXNode ast = parser.parseLaTeX("(105-5)");
         FormulaStyleHints hints = new FormulaStyleHints(
@@ -797,6 +1200,28 @@ class MtefWriterTest {
             "reversed interval should keep the left bracket glyph");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x28, 0x00}),
             "reversed interval should keep the right parenthesis glyph");
+    }
+
+    @Test
+    void testCrossingFenceUsesTwoOneSidedTemplatesInSourceOrder() {
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, false, false, false, false, null);
+        var records = MtefRecordNormalizer.normalize(writer.write(parser.parseLaTeX(
+            "\\left[ 13\\times (\\frac{5}{7}+\\frac{5}{9}\\right]"), hints)).records();
+        var bracketTemplates = records.stream()
+            .filter(record -> record.tag() == MtefRecord.TMPL
+                && Integer.valueOf(MtefRecord.TM_BRACK).equals(record.selector()))
+            .toList();
+
+        assertEquals(2, bracketTemplates.size());
+        assertEquals(1, bracketTemplates.get(0).variation());
+        assertEquals(2, bracketTemplates.get(1).variation());
+        assertTrue(records.stream().anyMatch(record -> record.tag() == MtefRecord.CHAR
+            && Integer.valueOf(MtefRecord.FN_FUNCTION | 0x80).equals(record.typeface())
+            && Integer.valueOf((int) ')').equals(record.mtcode())));
+        assertTrue(records.stream().noneMatch(record -> record.tag() == MtefRecord.TMPL
+            && Integer.valueOf(MtefRecord.TM_BRACK).equals(record.selector())
+            && Integer.valueOf(3).equals(record.variation())));
     }
 
     @Test
@@ -968,25 +1393,21 @@ class MtefWriterTest {
     }
 
     @Test
-    void testWriteMathIrDirectlyForXrightarrowArrowTemplate() {
+    void testWriteMathIrDirectlyForXrightarrowLimitTemplate() {
         byte[] mtef = writer.write(parser.parseMathIR("\\xrightarrow{f}"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x24, 0x00}),
-            "IR path should lower xrightarrow to tmARROW");
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0x92, 0x21}),
-            "IR path should keep the expandable right arrow glyph");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x20, 0x00}),
+            "IR path should lower xrightarrow to the format-compatible limit template");
     }
 
     @Test
-    void testWriteMathIrDirectlyForXleftarrowArrowTemplate() {
+    void testWriteMathIrDirectlyForXleftarrowLimitTemplate() {
         byte[] mtef = writer.write(parser.parseMathIR("\\xleftarrow{g}"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x14, 0x00}),
-            "IR path should lower xleftarrow to tmARROW");
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0x90, 0x21}),
-            "IR path should keep the expandable left arrow glyph");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x20, 0x00}),
+            "IR path should lower xleftarrow to the format-compatible limit template");
     }
 
     @Test
@@ -994,8 +1415,8 @@ class MtefWriterTest {
         byte[] mtef = writer.write(parser.parseMathIR("\\xleftarrow[b]{a}"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ARROW, 0x1C, 0x00}),
-            "IR path should preserve both top and bottom bits for xleftarrow");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x30, 0x00}),
+            "IR path should preserve both limit slots for xleftarrow");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x61, 0x00}),
             "IR path should preserve the top annotation payload");
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x83, 0x62, 0x00}),
@@ -1009,7 +1430,7 @@ class MtefWriterTest {
         assertNotNull(mtef);
         assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_HBRACK, 0x01, 0x00}),
             "IR path should lower overbracket to tmHBRACK");
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, (byte) 0xB4, 0x23}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.CHAR, 0x00, (byte) 0x96, 0x47, (byte) 0xFE}),
             "IR path should keep the top square bracket expandable character");
     }
 
@@ -1018,8 +1439,8 @@ class MtefWriterTest {
         byte[] mtef = writer.write(parser.parseMathIR("\\lim_{n\\to\\infty} a_n"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LIM, 0x50, 0x00}),
-            "IR path should lower \\lim to tmLIM");
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x50, 0x00}),
+            "IR path should lower \\lim to tmSUMOP (matching real MathType 7)");
     }
 
     @Test
@@ -1027,9 +1448,9 @@ class MtefWriterTest {
         byte[] mtef = writer.write(parser.parseMathIR("\\coprod_{i=1}^{n} A_i"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_COPROD, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_COPROD, 0x70, 0x00}),
             "IR path should lower \\coprod to tmCOPROD");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "IR path should not route \\coprod through tmSUM fallback");
     }
 
@@ -1038,9 +1459,9 @@ class MtefWriterTest {
         byte[] mtef = writer.write(parser.parseMathIR("\\bigcup_{i=1}^{n} A_i"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UNION, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UNION, 0x70, 0x00}),
             "IR path should lower \\bigcup to tmUNION");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "IR path should not route \\bigcup through tmSUM fallback");
     }
 
@@ -1049,9 +1470,9 @@ class MtefWriterTest {
         byte[] mtef = writer.write(parser.parseMathIR("\\bigcap_{i=1}^{n} A_i"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTER, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_INTER, 0x70, 0x00}),
             "IR path should lower \\bigcap to tmINTER");
-        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x30, 0x00}),
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
             "IR path should not route \\bigcap through tmSUM fallback");
     }
 
@@ -1060,7 +1481,7 @@ class MtefWriterTest {
         byte[] mtef = writer.write(parser.parseMathIR("\\bigotimes_{i=1}^{n} A_i"));
 
         assertNotNull(mtef);
-        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x30, 0x00}),
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_SUMOP, 0x70, 0x00}),
             "IR path should lower \\bigotimes to tmSUMOP");
     }
 
@@ -1411,6 +1832,90 @@ class MtefWriterTest {
     }
 
     @Test
+    void testAsciiFlatParensFlattenStructuredImplicitFence() {
+        LaTeXNode ast = parser.parseLaTeX("(1+\\frac{1}{2})");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            true, false, false, false, false, false, false, false, false, false, null);
+        byte[] mtef = writer.write(ast, hints);
+
+        var records = MtefRecordNormalizer.normalize(mtef).records();
+        assertFalse(records.stream().anyMatch(record ->
+            record.tag() == MtefRecord.TMPL
+                && Integer.valueOf(MtefRecord.TM_PAREN).equals(record.selector())));
+        assertTrue(records.stream().anyMatch(record ->
+            record.tag() == MtefRecord.CHAR && Integer.valueOf('(').equals(record.mtcode())));
+        assertTrue(records.stream().anyMatch(record ->
+            record.tag() == MtefRecord.CHAR && Integer.valueOf(')').equals(record.mtcode())));
+    }
+
+    @Test
+    void testLegacyLiteralAsteriskAndEscapedUnderscoreUseFunctionTypeface() {
+        var asterisk = MtefCharMap.lookup("*");
+        var underscore = MtefCharMap.lookup("\\_");
+
+        assertEquals(MtefRecord.FN_FUNCTION, asterisk.typeface());
+        assertEquals((int) '*', asterisk.mtcode());
+        assertEquals(MtefRecord.FN_FUNCTION, underscore.typeface());
+        assertEquals((int) '_', underscore.mtcode());
+    }
+
+    @Test
+    void testFullwidthParenHintFlattensStructuredImplicitFence() {
+        LaTeXNode ast = parser.parseLaTeX("(1+\\frac{1}{2})");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            false, false, false, false, false, false, false, false, false, true, null);
+        var records = MtefRecordNormalizer.normalize(writer.write(ast, hints)).records();
+
+        assertFalse(records.stream().anyMatch(record ->
+            record.tag() == MtefRecord.TMPL
+                && Integer.valueOf(MtefRecord.TM_PAREN).equals(record.selector())));
+        assertTrue(records.stream().anyMatch(record -> Integer.valueOf(0xFF08).equals(record.mtcode())));
+        assertTrue(records.stream().anyMatch(record -> Integer.valueOf(0xFF09).equals(record.mtcode())));
+    }
+
+    @Test
+    void testMixedAsciiFullwidthParenHintPreservesPairOrder() {
+        LaTeXNode ast = parser.parseLaTeX("(1+\\frac{1}{2})+(3+\\frac{1}{4})");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            false, false, false, false, false, false, false, false, false, false,
+            true, false, null);
+        var parens = MtefRecordNormalizer.normalize(writer.write(ast, hints)).records().stream()
+            .filter(record -> record.tag() == MtefRecord.CHAR)
+            .filter(record -> Integer.valueOf('(').equals(record.mtcode())
+                || Integer.valueOf(')').equals(record.mtcode())
+                || Integer.valueOf(0xFF08).equals(record.mtcode())
+                || Integer.valueOf(0xFF09).equals(record.mtcode()))
+            .toList();
+
+        assertEquals(List.of((int) '(', (int) ')', 0xFF08, 0xFF09),
+            parens.stream().map(record -> record.mtcode()).toList());
+    }
+
+    @Test
+    void testLegacyTextFeParenContentScopesAsciiTypeface() {
+        LaTeXNode ast = parser.parseLaTeX("(1^3+2^3+3^3+\\cdots+10^3)");
+        FormulaStyleHints hints = new FormulaStyleHints(
+            false, false, false, false, false, false, false, false, false, true,
+            false, true, null);
+        var textFeCodes = MtefRecordNormalizer.normalize(writer.write(ast, hints)).records().stream()
+            .filter(record -> record.tag() == MtefRecord.CHAR && Integer.valueOf(0x8C).equals(record.typeface()))
+            .map(record -> record.mtcode()).toList();
+
+        assertEquals(List.of(0xFF08, (int) '+', (int) '+', (int) '1', (int) '0', 0xFF09), textFeCodes);
+    }
+
+
+    @Test
+    void testExplicitMathSpacePreservesMathTypeSpaceEncoding() {
+        var records = MtefRecordNormalizer.normalize(writer.write(parser.parseLaTeX("1\\ \\ 2"))).records();
+
+        assertEquals(2, records.stream().filter(record ->
+            record.tag() == MtefRecord.CHAR
+                && Integer.valueOf(0x98).equals(record.typeface())
+                && Integer.valueOf(0xEF04).equals(record.mtcode())).count());
+    }
+
+    @Test
     void testAsciiFlatParensDoesNotFlattenExplicitFenceWithSourceMetrics() {
         LaTeXNode ast = parser.parseLaTeX("\\left(110+126\\right)");
         FormulaStyleHints hints = new FormulaStyleHints(
@@ -1489,6 +1994,290 @@ class MtefWriterTest {
         byte[] box = new byte[]{(byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_BOX, 0x1E, 0x00};
         assertEquals(0, countOccurrences(mtef, box),
             "large-number multiplication equations do not follow the one-digit boxed operand pattern");
+    }
+
+    // =====================================================================
+    // typesize 差分状态机测试（与真 MathType 差分编码逐字节对齐）
+    // 证据：real-src.docx 541 个真对象 + 课程文档 DSMT6/DSMT7 嵌套根式对象。
+    // =====================================================================
+
+    @Test
+    void testNestedSqrtSkipsRedundantSubBeforeIndexSlot() {
+        // 被开方数以 tmSUP 结尾时，字号上下文已是 SUB，
+        // 真 MathType（DSMT7 oleObject117）在 index 槽前不再写 SUB。
+        LaTeXNode ast = parser.parseLaTeX("\\sqrt{a^{2}+b^{2}}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        // 整个流只应有 2 条 SUB 记录（两个 tmSUP 各一条）；
+        // 旧行为会在 ROOT index 槽前再写第 3 条。
+        byte sub = (byte) MtefRecord.SUB;
+        int subCount = 0;
+        // 从表达式区域开始数（跳过前缀——前缀 EQN_PREFS 不含孤立 0x0b 记录语义，
+        // 但保险起见用 END+SUB 序列统计 ROOT index 前的 SUB 是否出现）
+        for (int i = 12; i < mtef.length; i++) {
+            if (mtef[i] == sub) {
+                subCount++;
+            }
+        }
+        assertEquals(2, subCount,
+            "radicand ends with tmSUP: size context already SUB, root index slot must not emit another SUB");
+        // 序列校验：radicand LINE 的 END 之后应直接跟 index NULL LINE（00 00 01 01）。
+        // 旧行为是 00 00 0b 01 01（END+END+SUB+NULL LINE），真 MathType 不写那个 SUB。
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.END, (byte) MtefRecord.END,
+                        (byte) MtefRecord.COLOR, 0x00, (byte) MtefRecord.LINE, 0x01}),
+            "radicand END must be followed directly by the index NULL LINE (no SUB in between)");
+    }
+
+    @Test
+    void testSimpleSqrtStillEmitsSubBeforeIndexSlot() {
+        // 被开方数以普通字符结尾（上下文 FULL）时，index 槽前必须写 SUB。
+        LaTeXNode ast = parser.parseLaTeX("\\sqrt{x+1}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.END, (byte) MtefRecord.SUB,
+                        (byte) MtefRecord.COLOR, 0x00, (byte) MtefRecord.LINE, 0x01}),
+            "radicand ends at FULL size: root index slot needs the SUB typesize record");
+    }
+
+    @Test
+    void testFractionWithPlainNumeratorHasNoFullBeforeFollowingSibling() {
+        // 分子以普通字符结尾（上下文 FULL）且分式后还有兄弟时，
+        // 真 MathType 不写 FULL（222/224 真分式验证）。
+        LaTeXNode ast = parser.parseLaTeX("\\frac{a}{b}+c");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertFalse(containsBytes(mtef, new byte[]{(byte) MtefRecord.END, (byte) MtefRecord.FULL,
+                        (byte) MtefRecord.CHAR}),
+            "fraction leaving FULL context must not be followed by a spurious FULL record");
+    }
+
+    @Test
+    void testFractionWithScriptedNumeratorKeepsFullBetweenSlots() {
+        // 分子以 tmSUB 结尾（上下文 SUB）时，槽间必须写 FULL 恢复分母字号
+        // （真 MathType oleObject144 实测模式）。
+        LaTeXNode ast = parser.parseLaTeX("\\frac{b_{8}}{81}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.END, (byte) MtefRecord.FULL,
+                        (byte) MtefRecord.LINE, 0x00}),
+            "numerator ending with a script template leaves SUB context: FULL required before denominator slot");
+    }
+
+    @Test
+    void niceFractionUsesCompleteMathTypeSlashFractionVariation() {
+        byte[] mtef = writer.write(parser.parseLaTeX("\\nicefrac12"));
+
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_FRACT, 0x03, 0x00
+        }), "nicefrac requires SMALL and SLASH variation bits");
+        assertFalse(containsAscii(mtef, "TeX Input Language"),
+            "unsupported MathType TeX source must not override native slash-fraction records");
+    }
+
+    @Test
+    void squareRootUsesNativeTemplateWithoutTexReparseMetadata() {
+        byte[] mtef = writer.write(parser.parseLaTeX("\\sqrt x"));
+
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ROOT, 0x00, 0x00
+        }), "the native square-root template must remain present");
+        assertFalse(containsAscii(mtef, "TeX Input Language"),
+            "Format Equations must consume the native root instead of reparsing the source tag");
+        assertTrue(hasDefaultBlackColorState(mtef),
+            "native root serialization must retain MathType's black color state");
+    }
+
+    @Test
+    void layoutSensitiveStructuresUseNativeColorSerializationWithoutTexReparseMetadata() {
+        for (String latex : new String[] {
+            "\\cfrac{2}{1+\\cfrac21}",
+            "\\frac{\\displaystyle\\frac12}3",
+            "\\textstyle\\frac{\\textstyle\\frac12}2",
+            "\\int\\limits_a^b"
+        }) {
+            byte[] mtef = writer.write(parser.parseLaTeX(latex));
+            assertFalse(containsAscii(mtef, "TeX Input Language"), latex);
+            assertTrue(hasDefaultBlackColorState(mtef), latex);
+        }
+
+        byte[] indexedRoot = writer.write(parser.parseLaTeX("\\sqrt[x+1]{2}"));
+        assertTrue(containsBytes(indexedRoot, new byte[] {
+            (byte) MtefRecord.COLOR, 0x01,
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ROOT, 0x01, 0x00,
+            (byte) MtefRecord.COLOR, 0x00,
+            (byte) MtefRecord.LINE, 0x00,
+            (byte) MtefRecord.COLOR, 0x01,
+            (byte) MtefRecord.CHAR, 0x00, (byte) 0x88, 0x32, 0x00
+        }), "indexed root must scope each MathType template slot like TeXToggle");
+    }
+
+    @Test
+    void directionCommandsDoNotWriteUnsupportedMathTypeTexMetadata() {
+        assertFalse(containsAscii(writer.write(parser.parseLaTeX("\\ltr{x+3}")), "TeX Input Language"));
+        assertFalse(containsAscii(writer.write(parser.parseLaTeX("\\rtl{x+3}")), "TeX Input Language"));
+    }
+
+    private boolean hasDefaultBlackColorState(byte[] mtef) {
+        return containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.COLOR_DEF, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            (byte) MtefRecord.COLOR, 0x01
+        });
+    }
+
+    @Test
+    void extendedLabeledArrowsDoNotWriteUnsupportedMathTypeTexMetadata() {
+        assertFalse(containsAscii(
+            writer.write(parser.parseLaTeX("A\\xlongrightarrow{f}B")), "TeX Input Language"));
+        assertFalse(containsAscii(
+            writer.write(parser.parseLaTeX("A\\xLongleftarrow{f}B")), "TeX Input Language"));
+        assertFalse(containsAscii(
+            writer.write(parser.parseLaTeX("A\\xlongequal{f}B")), "TeX Input Language"));
+    }
+
+    @Test
+    void xLongLeftArrowWritesMathTypeSupportedEquivalentTexMetadata() {
+        byte[] mtef = writer.write(parser.parseLaTeX("B\\xLongleftarrow[\\text{seilpmi}]{}A"));
+
+        assertTrue(containsAscii(mtef,
+            "B\\mathop{\\Longleftarrow}\\limits_{\\rm seilpmi}A"));
+        assertFalse(containsAscii(mtef, "\\xLongleftarrow"));
+    }
+
+    @Test
+    void desktopEquivalentOfficialExamplesUseTheirPinnedTexMetadata() {
+        byte[] mbox = writer.write(parser.parseLaTeX("\\mbox{\\large$T$}_0^2"));
+        byte[] mixedText = writer.write(parser.parseLaTeX("\\text{If $x=0$ then $y=2$.}"));
+
+        assertFalse(containsAscii(mbox, "TeX Input Language"));
+        assertFalse(containsAscii(mbox, "\\mbox"));
+        assertTrue(containsBytes(mbox, new byte[] {
+            (byte) MtefRecord.CHAR, (byte) 0x80, (byte) (MtefRecord.FN_TEXT | 0x80), '\\', 0
+        }));
+        assertTrue(containsAscii(mixedText, "\\text{If }x=0\\text{ then }y=2\\text{.}"));
+        assertFalse(containsAscii(mixedText, "$x=0$"));
+        assertTrue(containsBytes(mixedText, new byte[] {
+            (byte) MtefRecord.CHAR, 0, (byte) (MtefRecord.FN_TEXT | 0x80), 'I', 0,
+            (byte) MtefRecord.CHAR, 0, (byte) (MtefRecord.FN_TEXT | 0x80), 'f', 0
+        }));
+        assertTrue(containsBytes(mixedText, new byte[] {
+            (byte) MtefRecord.CHAR, 0, (byte) (MtefRecord.FN_VARIABLE | 0x80), 'x', 0
+        }));
+    }
+
+    @Test
+    void mathcalUppercaseUsesPinnedEuclidMathTwoEncodings() {
+        byte[] mtef = writer.write(parser.parseLaTeX("\\mathcal{LZF}"));
+
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.CHAR, (byte) MtefRecord.OPT_CHAR_ENC_CHAR_8,
+            0x7F, 0x12, 0x21, 0x4C
+        }), "script L must use U+2112 at Euclid Math Two position 0x4C");
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.CHAR, (byte) MtefRecord.OPT_CHAR_ENC_CHAR_8,
+            0x7F, 0x19, (byte) 0xF1, 0x5A
+        }), "script Z must use MathType private code F119 at position 0x5A");
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.CHAR, (byte) MtefRecord.OPT_CHAR_ENC_CHAR_8,
+            0x7F, 0x31, 0x21, 0x46
+        }), "script F must use U+2131 at Euclid Math Two position 0x46");
+        assertTrue(containsAscii(mtef, "EuclidMath2"));
+    }
+
+    @Test
+    void officialDynamicSymbolTypefacesUsePinnedEuclidFamilies() {
+        byte[] mtef = writer.write(parser.parseLaTeX("\\approxeq,\\barwedge"));
+
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.ENCODING_DEF, 'E', 'u', 'c', 'l', 'i', 'd', 'M', 'a', 't', 'h', '1', 0,
+            (byte) MtefRecord.FONT_DEF, 0x07
+        }), "typeface 0x7F symbols must bind Euclid Math One");
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.ENCODING_DEF, 'E', 'u', 'c', 'l', 'i', 'd', 'M', 'a', 't', 'h', '2', 0,
+            (byte) MtefRecord.FONT_DEF, 0x08
+        }), "typeface 0x7E symbols must bind Euclid Math Two");
+
+        byte[] reversed = writer.write(parser.parseLaTeX("\\sqcap,\\oslash,\\sqsubset,\\vdash"));
+        assertEquals("EuclidMath2", MtefCharMap.lookup("\\sqcap").dynamicFontProfile());
+        assertEquals("EuclidMath1", MtefCharMap.lookup("\\oslash").dynamicFontProfile());
+        assertTrue(containsBytes(reversed, new byte[] {
+            (byte) MtefRecord.ENCODING_DEF, 'E', 'u', 'c', 'l', 'i', 'd', 'M', 'a', 't', 'h', '2', 0,
+            (byte) MtefRecord.FONT_DEF, 0x07
+        }), "sqcap must bind typeface 0x7F to Euclid Math Two");
+        assertTrue(containsBytes(reversed, new byte[] {
+            (byte) MtefRecord.ENCODING_DEF, 'E', 'u', 'c', 'l', 'i', 'd', 'M', 'a', 't', 'h', '1', 0,
+            (byte) MtefRecord.FONT_DEF, 0x08
+        }), "oslash must bind typeface 0x7E to Euclid Math One");
+    }
+
+    @Test
+    void extendedRelationsAndBlackboardFBindEuclidMathTwo() {
+        assertEquals("EuclidMath2", MtefCharMap.lookup("\\Subset").dynamicFontProfile());
+
+        byte[] relations = writer.write(parser.parseLaTeX("\\Subset,\\succapprox,\\supsetneqq"));
+        assertTrue(containsAscii(relations, "EuclidMath2"));
+        assertTrue(containsAscii(relations, "Euclid Math Two"));
+
+        byte[] blackboard = writer.write(parser.parseLaTeX("\\mathbb{F}"));
+        assertTrue(containsAscii(blackboard, "EuclidMath2"));
+        assertTrue(containsAscii(blackboard, "Euclid Math Two"));
+    }
+
+    @Test
+    void mathttUsesPinnedCourierFontStyleDefinition() {
+        byte[] mtef = writer.write(parser.parseLaTeX("\\mathtt x"));
+
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.FONT_STYLE_DEF, 0x03, 0x00,
+            (byte) MtefRecord.CHAR, 0x00, 0x7F, 0x78, 0x00
+        }), "mathtt must bind typeface 0x7F to the prefix Courier New font definition");
+        assertFalse(containsAscii(mtef, "TeX Input Language"));
+    }
+
+    @Test
+    void unicodeDiagonalArrowPairUsesTextFeWithoutUnsupportedTexMetadata() {
+        byte[] mtef = writer.write(parser.parseLaTeX("\\nwsearrow\\neswarrow"));
+
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.CHAR, 0x00, (byte) 0x8C, 0x21, 0x29,
+            (byte) MtefRecord.CHAR, 0x00, (byte) 0x8C, 0x22, 0x29
+        }));
+        assertFalse(containsAscii(mtef, "TeX Input Language"));
+    }
+
+    @Test
+    void testLimFollowedByContentEmitsFullAfterTemplate() {
+        // 真 MathType 在 tmSUMOP 模板结束后、后续兄弟之前写 FULL 复位
+        // （operator 槽把上下文留在 SYM）。
+        LaTeXNode ast = parser.parseLaTeX("\\lim_{x \\to 0} \\frac{\\sin x}{x}");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.END, (byte) MtefRecord.FULL,
+                        (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_FRACT}),
+            "tmSUMOP template must be followed by a FULL record before the next sibling");
+        // 缩小槽（lower slot）内部的多字符内容保持 SUB 字号：
+        // 'x'(fn=VARIABLE 0x83, mt=0x0078) 之后必须直接跟下一条 CHAR 记录，
+        // 不能插入 FULL——真 MathType 的缩小槽内不写字号恢复记录。
+        assertTrue(containsBytes(mtef, new byte[]{(byte) 0x83, 0x78, 0x00, (byte) MtefRecord.CHAR}),
+            "reduced (SUB) slot content must stay at SUB size: no FULL between slot characters");
+    }
+
+    @Test
+    void testSumVariationIncludesSummationStyleBit() {
+        // 真 MathType tmSUM variation 恒含 TV_BO_SUM(0x40)：
+        // oleObject37/39 实测 var=0x70 = SUM|LOWER|UPPER。
+        LaTeXNode ast = parser.parseLaTeX("\\sum_{i=1}^{n} i");
+        byte[] mtef = writer.write(ast);
+
+        assertNotNull(mtef);
+        assertTrue(containsBytes(mtef, new byte[]{(byte) MtefRecord.TMPL, 0x00,
+                        (byte) MtefRecord.TM_SUM, 0x70, 0x00}),
+            "sum with both limits should use variation 0x70 (TV_BO_SUM|TV_BO_LOWER|TV_BO_UPPER)");
     }
 
     private boolean containsRecord(byte[] bytes, int recordType) {
