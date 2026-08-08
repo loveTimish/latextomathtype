@@ -8,6 +8,7 @@ import com.lz.paperword.core.mtef.MtefRecord;
 import com.lz.paperword.core.mtef.MtefRecordNormalizer;
 import com.lz.paperword.core.mtef.MtefWriter;
 import com.lz.paperword.core.render.SvgVectorEmfPlusRenderer;
+import com.lz.paperword.support.XscSourceReplacementRepairs;
 import org.apache.poi.poifs.filesystem.DocumentEntry;
 import org.apache.poi.poifs.filesystem.DocumentInputStream;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
@@ -93,11 +94,18 @@ class XscEmfPlusCorpusAcceptanceTest {
     void everyXscFormulaHasOneTraceableEditableOleAndStrictEmfPlusDualPreview() throws Exception {
         Assumptions.assumeTrue(Boolean.getBoolean("paperword.acceptance.xscEmfPlus"),
             "Enable with -Dpaperword.acceptance.xscEmfPlus=true");
-        Assumptions.assumeTrue(Files.isDirectory(CORPUS), "Missing xsc corpus: " + CORPUS);
-        Assumptions.assumeTrue(Files.isDirectory(REQUESTS), "Missing xsc requests: " + REQUESTS);
+        assertTrue(Files.isDirectory(CORPUS), "Missing xsc corpus: " + CORPUS);
+        assertTrue(Files.isDirectory(REQUESTS), "Missing xsc requests: " + REQUESTS);
 
         int expectedDocuments = Integer.getInteger("xsc.emfplus.expectedDocuments", 551);
-        int minimumOle = Integer.getInteger("xsc.emfplus.minimumOle", 39_551);
+        int expectedFullFormulaCount = Integer.getInteger(
+            "xsc.emfplus.expectedFormulaCount", 93_319);
+        int expectedSourceRepairCount = Integer.getInteger(
+            "xsc.emfplus.expectedSourceRepairCount", 52);
+        int expectedFormulaRepairCount = Integer.getInteger(
+            "xsc.emfplus.expectedFormulaRepairCount", 46);
+        int expectedReplacementFormulaCount = Integer.getInteger(
+            "xsc.emfplus.expectedReplacementFormulaCount", 37);
         int startDocument = Integer.getInteger("xsc.emfplus.startDocument", 1);
         int endDocument = Integer.getInteger("xsc.emfplus.endDocument", expectedDocuments);
         if (startDocument < 1 || endDocument < startDocument || endDocument > expectedDocuments) {
@@ -136,7 +144,7 @@ class XscEmfPlusCorpusAcceptanceTest {
 
         boolean fullScope = startDocument == 1 && endDocument == expectedDocuments;
         Map<String, Object> report = new LinkedHashMap<>();
-        report.put("schemaVersion", 3);
+        report.put("schemaVersion", 4);
         report.put("corpus", CORPUS.toAbsolutePath().normalize().toString());
         report.put("requests", REQUESTS.toAbsolutePath().normalize().toString());
         report.put("documentStart", startDocument);
@@ -158,10 +166,17 @@ class XscEmfPlusCorpusAcceptanceTest {
         report.put("emfRelationshipCount", totals.emfRelationshipCount);
         report.put("emfCount", totals.emfCount);
         report.put("validEmfPlusDualCount", totals.validEmfPlusDualCount);
+        report.put("sourceRepairCount", totals.sourceRepairCount);
+        report.put("formulaSourceRepairCount", totals.formulaSourceRepairCount);
+        report.put("replacementFormulaRepairCount", totals.replacementFormulaRepairCount);
+        report.put("sourceRepairApplications", totals.sourceRepairApplications);
         report.put("recoveredSourceReplacementCount", totals.recoveredSourceReplacementCount);
         report.put("sourceReplacementRecoveries", totals.sourceReplacementRecoveries);
         report.put("sourceReportsChecked", totals.sourceReportsChecked);
-        report.put("minimumOle", minimumOle);
+        report.put("expectedFullFormulaCount", expectedFullFormulaCount);
+        report.put("expectedSourceRepairCount", expectedSourceRepairCount);
+        report.put("expectedFormulaRepairCount", expectedFormulaRepairCount);
+        report.put("expectedReplacementFormulaCount", expectedReplacementFormulaCount);
         report.put("failedDocumentCount", failures.stream()
             .map(failure -> failure.get("documentIndex")).distinct().count());
         report.put("failureCount", failures.size());
@@ -170,7 +185,12 @@ class XscEmfPlusCorpusAcceptanceTest {
         boolean passed = rawDocxCount == allDocuments.size()
             && allDocuments.size() == expectedDocuments
             && documents.size() == endDocument - startDocument + 1
-            && (!fullScope || totals.oleCount >= minimumOle)
+            && (!fullScope || totals.expectedFormulaCount == expectedFullFormulaCount)
+            && (!fullScope || totals.oleCount == expectedFullFormulaCount)
+            && (!fullScope || totals.sourceRepairCount == expectedSourceRepairCount)
+            && (!fullScope || totals.formulaSourceRepairCount == expectedFormulaRepairCount)
+            && (!fullScope
+                || totals.replacementFormulaRepairCount == expectedReplacementFormulaCount)
             && totals.expectedFormulaCount == totals.objectCount
             && totals.objectCount == totals.traceMatchedCount
             && totals.objectCount == totals.oleRelationshipCount
@@ -195,7 +215,17 @@ class XscEmfPlusCorpusAcceptanceTest {
         assertEquals(rawDocxCount, allDocuments.size(), "every DOCX filename must expose its corpus index");
         assertEquals(endDocument - startDocument + 1, documents.size(), "selected xsc document scope");
         if (fullScope) {
-            assertTrue(totals.oleCount >= minimumOle, "xsc OLE minimum: " + totals.oleCount);
+            assertEquals(expectedFullFormulaCount, totals.expectedFormulaCount,
+                "xsc request formula total");
+            assertEquals(expectedFullFormulaCount, totals.oleCount,
+                "xsc OLE formula total");
+            assertEquals(expectedSourceRepairCount, totals.sourceRepairCount,
+                "xsc source repair total");
+            assertEquals(expectedFormulaRepairCount, totals.formulaSourceRepairCount,
+                "xsc formula source repair total");
+            assertEquals(expectedReplacementFormulaCount,
+                totals.replacementFormulaRepairCount,
+                "xsc U+FFFD formula repair total");
         }
         assertEquals(totals.expectedFormulaCount, totals.objectCount,
             "every request formula must have one w:object");
@@ -866,7 +896,10 @@ class XscEmfPlusCorpusAcceptanceTest {
         if (!Files.isRegularFile(request)) {
             throw new IllegalStateException("request file is missing");
         }
-        JsonNode root = JSON.readTree(request.toFile());
+        counters.sourceRepairCount += XscSourceReplacementRepairs
+            .occurrenceCount(documentIndex);
+        JsonNode root = XscSourceReplacementRepairs.apply(
+            documentIndex, JSON.readTree(request.toFile()));
         boolean compact = root.path("paper").path("compactLayout").asBoolean(false);
         List<ExpectedFormula> formulas = new ArrayList<>();
         JsonNode sections = root.path("sections");
@@ -935,8 +968,14 @@ class XscEmfPlusCorpusAcceptanceTest {
             List<ManifestFormula> parsed = new ArrayList<>(parsedSegments.size());
             for (int formulaIndex = 0; formulaIndex < parsedSegments.size(); formulaIndex++) {
                 LaTeXParser.ContentSegment segment = parsedSegments.get(formulaIndex);
-                String sourceLatex = formulaIndex < rawDelimitedFormulas.size()
-                    ? rawDelimitedFormulas.get(formulaIndex) : segment.rawText();
+                String formulaLocation = sourceLocation + "#math" + (formulaIndex + 1);
+                XscSourceReplacementRepairs.RepairInfo repair = XscSourceReplacementRepairs
+                    .repairFor(documentIndex, formulaLocation).orElse(null);
+                String sourceLatex = repair != null
+                    ? repair.sourceLatex()
+                    : formulaIndex < rawDelimitedFormulas.size()
+                        ? rawDelimitedFormulas.get(formulaIndex)
+                        : segment.rawText();
                 parsed.add(new ManifestFormula(segment, segment.rawText(), sourceLatex, null));
             }
             manifestFormulas = List.copyOf(parsed);
@@ -944,7 +983,13 @@ class XscEmfPlusCorpusAcceptanceTest {
             // Do not lose every earlier/later formula in a field just because one source
             // formula is invalid. Recover delimiters, then diagnose formulas individually.
             List<ManifestFormula> recovered = new ArrayList<>();
-            for (String fallbackLatex : rawDelimitedFormulas) {
+            for (int formulaIndex = 0; formulaIndex < rawDelimitedFormulas.size(); formulaIndex++) {
+                String fallbackLatex = rawDelimitedFormulas.get(formulaIndex);
+                String formulaLocation = sourceLocation + "#math" + (formulaIndex + 1);
+                String sourceLatex = XscSourceReplacementRepairs
+                    .repairFor(documentIndex, formulaLocation)
+                    .map(XscSourceReplacementRepairs.RepairInfo::sourceLatex)
+                    .orElse(fallbackLatex);
                 try {
                     LaTeXParser.ContentSegment segment = LATEX_PARSER
                         .parseText("$" + fallbackLatex + "$").stream()
@@ -953,10 +998,10 @@ class XscEmfPlusCorpusAcceptanceTest {
                         .orElseThrow(() -> new IllegalStateException(
                             "formula delimiter was not recovered"));
                     recovered.add(new ManifestFormula(
-                        segment, segment.rawText(), fallbackLatex, null));
+                        segment, segment.rawText(), sourceLatex, null));
                 } catch (Exception formulaFailure) {
                     recovered.add(new ManifestFormula(null,
-                        stripRawFormulaAnnotations(fallbackLatex), fallbackLatex, formulaFailure));
+                        stripRawFormulaAnnotations(fallbackLatex), sourceLatex, formulaFailure));
                 }
             }
             manifestFormulas = List.copyOf(recovered);
@@ -966,6 +1011,27 @@ class XscEmfPlusCorpusAcceptanceTest {
             fieldFormula++;
             int ordinal = formulas.size() + 1;
             String latex = manifest.latex();
+            String formulaLocation = sourceLocation + "#math" + fieldFormula;
+            XscSourceReplacementRepairs.RepairInfo appliedRepair =
+                XscSourceReplacementRepairs.repairFor(documentIndex, formulaLocation)
+                    .orElse(null);
+            if (appliedRepair != null) {
+                if (appliedRepair.formulaOrdinal() != ordinal) {
+                    throw new IllegalStateException("xsc source repair ordinal drift at "
+                        + formulaLocation + ": catalog=" + appliedRepair.formulaOrdinal()
+                        + ", actual=" + ordinal);
+                }
+                if (!appliedRepair.repairedLatex().equals(latex)) {
+                    throw new IllegalStateException("xsc source repair output drift at "
+                        + formulaLocation);
+                }
+                counters.formulaSourceRepairCount++;
+                if (appliedRepair.sourceLatex().indexOf('\uFFFD') >= 0) {
+                    counters.replacementFormulaRepairCount++;
+                }
+                addSourceRepairApplication(counters.sourceRepairApplications,
+                    documentIndex, document, ordinal, formulaLocation, appliedRepair);
+            }
             List<MtefRecordNormalizer.CanonicalRecord> expectedMtefRecords = null;
             Exception expectedMtefFailure = null;
             if (manifest.segment() != null) {
@@ -982,7 +1048,7 @@ class XscEmfPlusCorpusAcceptanceTest {
                 }
             }
             ExpectedFormula expected = new ExpectedFormula(ordinal,
-                sourceLocation + "#math" + fieldFormula, latex, traceId(ordinal, latex),
+                formulaLocation, latex, traceId(ordinal, latex),
                 manifest.sourceLatex(), expectedMtefRecords);
             formulas.add(expected);
             if (manifest.sourceLatex().indexOf('\uFFFD') >= 0) {
@@ -1021,6 +1087,25 @@ class XscEmfPlusCorpusAcceptanceTest {
         recovery.put("repairedLatex", formula.latex());
         recovery.put("replacementCharacters", replacementCharacterDetail(formula.sourceLatex()));
         recoveries.add(recovery);
+    }
+
+    private static void addSourceRepairApplication(
+            List<Map<String, Object>> applications,
+            int documentIndex,
+            Path document,
+            int formulaOrdinal,
+            String sourceLocation,
+            XscSourceReplacementRepairs.RepairInfo repair) {
+        Map<String, Object> application = new LinkedHashMap<>();
+        application.put("documentIndex", documentIndex);
+        application.put("document", document.toString());
+        application.put("formulaOrdinal", formulaOrdinal);
+        application.put("sourceLocation", sourceLocation);
+        application.put("kind", repair.kind());
+        application.put("reason", repair.reason());
+        application.put("sourceLatex", repair.sourceLatex());
+        application.put("repairedLatex", repair.repairedLatex());
+        applications.add(application);
     }
 
     private static String replacementCharacterDetail(String sourceLatex) {
@@ -1385,6 +1470,10 @@ class XscEmfPlusCorpusAcceptanceTest {
         private int emfRelationshipCount;
         private int emfCount;
         private int validEmfPlusDualCount;
+        private int sourceRepairCount;
+        private int formulaSourceRepairCount;
+        private int replacementFormulaRepairCount;
+        private final List<Map<String, Object>> sourceRepairApplications = new ArrayList<>();
         private int recoveredSourceReplacementCount;
         private final List<Map<String, Object>> sourceReplacementRecoveries = new ArrayList<>();
         private int sourceReportsChecked;
@@ -1403,6 +1492,10 @@ class XscEmfPlusCorpusAcceptanceTest {
             emfRelationshipCount += other.emfRelationshipCount;
             emfCount += other.emfCount;
             validEmfPlusDualCount += other.validEmfPlusDualCount;
+            sourceRepairCount += other.sourceRepairCount;
+            formulaSourceRepairCount += other.formulaSourceRepairCount;
+            replacementFormulaRepairCount += other.replacementFormulaRepairCount;
+            sourceRepairApplications.addAll(other.sourceRepairApplications);
             recoveredSourceReplacementCount += other.recoveredSourceReplacementCount;
             sourceReplacementRecoveries.addAll(other.sourceReplacementRecoveries);
             sourceReportsChecked += other.sourceReportsChecked;

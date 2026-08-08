@@ -1,8 +1,10 @@
 package com.lz.paperword.tools;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lz.paperword.core.docx.DocxBuilder;
 import com.lz.paperword.model.PaperExportRequest;
+import com.lz.paperword.support.XscSourceReplacementRepairs;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
@@ -53,7 +55,7 @@ class XscFullBatch10DocxTest {
                 .map(String::trim).filter(value -> !value.isEmpty()).map(Integer::parseInt).distinct().toList();
         for (int i : indexes) {
             Path requestPath = REQUEST_DIR.resolve("full-%02d.request.json".formatted(i));
-            Assumptions.assumeTrue(Files.exists(requestPath), "Missing request json: " + requestPath);
+            assertTrue(Files.isRegularFile(requestPath), "Missing request json: " + requestPath);
 
             Path output = runOutputDir.resolve("xsc测试集完整重建_%02d.docx".formatted(i));
             if (resume && Files.isRegularFile(output) && Files.size(output) > 1000) {
@@ -62,7 +64,9 @@ class XscFullBatch10DocxTest {
                 continue;
             }
 
-            PaperExportRequest request = mapper.readValue(requestPath.toFile(), PaperExportRequest.class);
+            JsonNode requestTree = mapper.readTree(requestPath.toFile());
+            JsonNode repairedTree = XscSourceReplacementRepairs.apply(i, requestTree);
+            PaperExportRequest request = mapper.treeToValue(repairedTree, PaperExportRequest.class);
             byte[] docx = builder.build(request);
             Files.write(output, docx);
             System.out.println("Generated full xsc sample: " + output);

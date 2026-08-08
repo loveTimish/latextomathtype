@@ -103,7 +103,7 @@ public class LaTeXImageRenderer {
     private static final double MATHJAX_DEFAULT_PADDING_PT = 2.3d;
     private static final double MATHJAX_DEFAULT_MAX_WIDTH_PT = 400.0d;
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v309-emfplus-limit-under";
+    private static final String CACHE_VERSION = "v310-emf-classic-physical-grid";
     private static final String EXPECTED_NODE_VERSION = "v24.9.0";
     private static final String EXPECTED_MATHJAX_VERSION = "3.2.2";
     private static final String EXPECTED_MATHJAX_BUNDLE_HASH =

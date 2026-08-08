@@ -93,7 +93,7 @@ Invoke-WebRequest `
 
 该脚本会对重建出的参考 DOCX 做 OLE 检查、可用时的 Word/MathType 探测、`docx2tex` 覆盖检查和公式显示框对比。
 
-xsc 全量验收流程见 [docs/xsc-latex-assets.md](docs/xsc-latex-assets.md)。最近一次记录覆盖全部 `551` 份重建源文档和 `93,319` 个按 trace 对齐的公式对象：`93,319` 个对象全部通过 OLE 校验、MTEF 解析/平衡/规范化结构匹配和严格 EMF+ Dual 校验，失败文档与失败公式均为 `0`。报告另行记录了 `37` 次源 `U+FFFD` 替换字符的显式恢复，没有静默输出这些乱码。
+xsc 全量验收流程见 [docs/xsc-latex-assets.md](docs/xsc-latex-assets.md)。最近一次记录覆盖全部 `551` 份重建源文档和精确 `93,319` 个按 trace 对齐的公式对象：`93,319` 个对象全部通过 OLE 校验、MTEF 解析/平衡/规范化结构匹配和严格 EMF+ Dual 校验，失败文档与失败公式均为 `0`。版本化的精确位置清单共应用 `52` 处抽取修复：`46` 处公式修复（其中 `37` 处含源 `U+FFFD`，另有 `9` 处已知占位符误识别）和 `6` 处普通文本修复。未登记的 `U+FFFD` 会直接失败，不会静默输出乱码。
 
 ## Linux 和 Docker
 

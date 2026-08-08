@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "description": "Exact source-indexed extraction repairs for the versioned xsc request corpus. Base64 values are UTF-8 LaTeX.",
+  "repairs": [
+    {
+      "occurrences": [
+        {"documentIndex": 25, "formulaOrdinal": 50, "sourceLocation": "sections[0].questions[39].analyze#math2"},
+        {"documentIndex": 218, "formulaOrdinal": 34, "sourceLocation": "sections[0].questions[15].analyze#math2"},
+        {"documentIndex": 397, "formulaOrdinal": 34, "sourceLocation": "sections[0].questions[24].analyze#math2"}
+      ],
+      "reason": "arithmetic identity and repeated corpus copies",
+      "sourceBase64": "KDc1KzYwKe+/vSBcdGltZXMgMjA977+9IDI3MDA=",
+      "repairedBase64": "KDc1KzYwKSBcdGltZXMgMjA9MjcwMA=="
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 25, "formulaOrdinal": 16, "sourceLocation": "sections[0].questions[22].content#math1"}
+      ],
+      "reason": "surrounding Chinese labels and motion-formula identities",
+      "sourceBase64": "XGJlZ2lue2FycmF5fXtsfSBcdGV4dHvnm7jpgYd7XGJsYWNrc3F1YXJlfXtcYmxhY2tzcXVhcmV9fVxiZWdpbntjYXNlc30g77+9IOi3r+eoiz3pgJ/luqblkoxcdGltZXMgXHRleHR755u46YGHe1xibGFja3NxdWFyZX17XGJsYWNrc3F1YXJlfX1cXCDpgJ/luqblkow977+9IOi3r+eoi1xkaXYgXHRleHR755u46YGHe1xibGFja3NxdWFyZX17XGJsYWNrc3F1YXJlfX1cXCBcdGV4dHvnm7jpgYd7XGJsYWNrc3F1YXJlfXtcYmxhY2tzcXVhcmV9fT3vv70g6Lev56iLXGRpdiDpgJ/luqblkowgXGVuZHtjYXNlc30gXFwgXHRleHR76L+95Y+Ke1xibGFja3NxdWFyZX17XGJsYWNrc3F1YXJlfX1cYmVnaW57Y2FzZXN9IFx0ZXh0e+i/veWPintcYmxhY2tzcXVhcmV9e1xibGFja3NxdWFyZX19PVx0ZXh0e+i/veWPiui3r+eoi31cZGl2IOmAn+W6puW3rlxcIFx0ZXh0e+i/veWPiui3r+eoi3096YCf5bqm5beuXHRpbWVzIFx0ZXh0e+i/veWPintcYmxhY2tzcXVhcmV9e1xibGFja3NxdWFyZX19XFwg6YCf5bqm5beuPVx0ZXh0e+i/veWPiui3r+eoi31cZGl2IFx0ZXh0e+i/veWPintcYmxhY2tzcXVhcmV9e1xibGFja3NxdWFyZX19IFxlbmR7Y2FzZXN9IFxlbmR7YXJyYXl9",
+      "repairedBase64": "XGJlZ2lue2FycmF5fXtsfSBcdGV4dHvnm7jpgYfml7bpl7R9XGJlZ2lue2Nhc2VzfSDmgLvot6/nqIs96YCf5bqm5ZKMXHRpbWVzIFx0ZXh0e+ebuOmBh+aXtumXtH1cXCDpgJ/luqblkow95oC76Lev56iLXGRpdiBcdGV4dHvnm7jpgYfml7bpl7R9XFwgXHRleHR755u46YGH5pe26Ze0fT3mgLvot6/nqItcZGl2IOmAn+W6puWSjCBcZW5ke2Nhc2VzfSBcXCBcdGV4dHvov73lj4rml7bpl7R9XGJlZ2lue2Nhc2VzfSBcdGV4dHvov73lj4rml7bpl7R9PVx0ZXh0e+i/veWPiui3r+eoi31cZGl2IOmAn+W6puW3rlxcIFx0ZXh0e+i/veWPiui3r+eoi3096YCf5bqm5beuXHRpbWVzIFx0ZXh0e+i/veWPiuaXtumXtH1cXCDpgJ/luqblt649XHRleHR76L+95Y+K6Lev56iLfVxkaXYgXHRleHR76L+95Y+K5pe26Ze0fSBcZW5ke2Nhc2VzfSBcZW5ke2FycmF5fQ=="
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 25, "formulaOrdinal": 342, "sourceLocation": "sections[0].questions[161].analyze#math1"},
+        {"documentIndex": 218, "formulaOrdinal": 326, "sourceLocation": "sections[0].questions[137].analyze#math1"},
+        {"documentIndex": 397, "formulaOrdinal": 326, "sourceLocation": "sections[0].questions[236].analyze#math1"}
+      ],
+      "reason": "trailing replacement character after a complete arithmetic identity",
+      "sourceBase64": "PSgxOCs5KVxkaXYgKDE4LTkp77+9",
+      "repairedBase64": "PSgxOCs5KVxkaXYgKDE4LTkp"
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 30, "formulaOrdinal": 216, "sourceLocation": "sections[0].questions[94].analyze#math4"},
+        {"documentIndex": 223, "formulaOrdinal": 214, "sourceLocation": "sections[0].questions[72].analyze#math4"},
+        {"documentIndex": 402, "formulaOrdinal": 214, "sourceLocation": "sections[0].questions[125].analyze#math4"}
+      ],
+      "reason": "arithmetic identity and repeated corpus copies",
+      "sourceBase64": "MS0wLjI177+9ID0wLjc1",
+      "repairedBase64": "MS0wLjI1PTAuNzU="
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 30, "formulaOrdinal": 214, "sourceLocation": "sections[0].questions[94].analyze#math2"},
+        {"documentIndex": 223, "formulaOrdinal": 212, "sourceLocation": "sections[0].questions[72].analyze#math2"},
+        {"documentIndex": 402, "formulaOrdinal": 212, "sourceLocation": "sections[0].questions[125].analyze#math2"}
+      ],
+      "reason": "arithmetic identity and repeated corpus copies",
+      "sourceBase64": "MjRcZGl2IDHvv70gPTI0",
+      "repairedBase64": "MjRcZGl2IDE9MjQ="
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 25, "formulaOrdinal": 202, "sourceLocation": "sections[0].questions[107].analyze#math1"},
+        {"documentIndex": 218, "formulaOrdinal": 186, "sourceLocation": "sections[0].questions[83].analyze#math1"},
+        {"documentIndex": 397, "formulaOrdinal": 186, "sourceLocation": "sections[0].questions[143].analyze#math1"}
+      ],
+      "reason": "arithmetic identity and repeated corpus copies",
+      "sourceBase64": "MjU1XGRpdiAoNDUrNDAp77+9ID0z",
+      "repairedBase64": "MjU1XGRpdiAoNDUrNDApPTM="
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 26, "formulaOrdinal": 66, "sourceLocation": "sections[0].questions[42].analyze#math5"},
+        {"documentIndex": 219, "formulaOrdinal": 63, "sourceLocation": "sections[0].questions[30].analyze#math5"},
+        {"documentIndex": 398, "formulaOrdinal": 63, "sourceLocation": "sections[0].questions[45].analyze#math5"}
+      ],
+      "reason": "arithmetic identity and repeated corpus copies",
+      "sourceBase64": "OC0177+9ID0z",
+      "repairedBase64": "OC01PTM="
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 26, "formulaOrdinal": 59, "sourceLocation": "sections[0].questions[41].content#math2"},
+        {"documentIndex": 219, "formulaOrdinal": 56, "sourceLocation": "sections[0].questions[29].content#math2"},
+        {"documentIndex": 398, "formulaOrdinal": 56, "sourceLocation": "sections[0].questions[43].content#math2"}
+      ],
+      "reason": "arithmetic identity and repeated corpus copies",
+      "sourceBase64": "ODAtNzU977+9IDU=",
+      "repairedBase64": "ODAtNzU9NQ=="
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 32, "formulaOrdinal": 76, "sourceLocation": "sections[0].questions[55].analyze#math1"},
+        {"documentIndex": 225, "formulaOrdinal": 74, "sourceLocation": "sections[0].questions[41].analyze#math1"},
+        {"documentIndex": 404, "formulaOrdinal": 74, "sourceLocation": "sections[0].questions[68].analyze#math1"}
+      ],
+      "reason": "arithmetic identity and repeated corpus copies",
+      "sourceBase64": "ODBcdGltZXMgMz3vv70gMjQw",
+      "repairedBase64": "ODBcdGltZXMgMz0yNDA="
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 39, "formulaOrdinal": 38, "sourceLocation": "sections[0].questions[45].content#math2"},
+        {"documentIndex": 39, "formulaOrdinal": 40, "sourceLocation": "sections[0].questions[45].content#math4"},
+        {"documentIndex": 231, "formulaOrdinal": 38, "sourceLocation": "sections[0].questions[29].content#math2"},
+        {"documentIndex": 231, "formulaOrdinal": 40, "sourceLocation": "sections[0].questions[29].content#math4"},
+        {"documentIndex": 410, "formulaOrdinal": 38, "sourceLocation": "sections[0].questions[40].content#math2"},
+        {"documentIndex": 410, "formulaOrdinal": 40, "sourceLocation": "sections[0].questions[40].content#math4"}
+      ],
+      "reason": "paired vehicle-ratio labels and repeated corpus copies",
+      "sourceBase64": "Vl9777+9IH0=",
+      "repairedBase64": "Vl97XHRleHR76L2mfSB9"
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 39, "formulaOrdinal": 37, "sourceLocation": "sections[0].questions[45].content#math1"},
+        {"documentIndex": 231, "formulaOrdinal": 37, "sourceLocation": "sections[0].questions[29].content#math1"},
+        {"documentIndex": 410, "formulaOrdinal": 37, "sourceLocation": "sections[0].questions[40].content#math1"}
+      ],
+      "reason": "paired vehicle-ratio labels and repeated corpus copies",
+      "sourceBase64": "Vl9777+9IH0=",
+      "repairedBase64": "Vl97XHRleHR755SyfSB9"
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 39, "formulaOrdinal": 39, "sourceLocation": "sections[0].questions[45].content#math3"},
+        {"documentIndex": 231, "formulaOrdinal": 39, "sourceLocation": "sections[0].questions[29].content#math3"},
+        {"documentIndex": 410, "formulaOrdinal": 39, "sourceLocation": "sections[0].questions[40].content#math3"}
+      ],
+      "reason": "paired vehicle-ratio labels and repeated corpus copies",
+      "sourceBase64": "Vl9777+9IH0=",
+      "repairedBase64": "Vl97XHRleHR75LmZfSB9"
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 25, "formulaOrdinal": 0, "sourceLocation": "sections[0].questions[46].analyze#text"},
+        {"documentIndex": 218, "formulaOrdinal": 0, "sourceLocation": "sections[0].questions[22].analyze#text"},
+        {"documentIndex": 397, "formulaOrdinal": 0, "sourceLocation": "sections[0].questions[36].analyze#text"}
+      ],
+      "reason": "replacement character between a closed expression and its unit",
+      "sourceBase64": "KDU0LTI3Ke+/veWNg+exsw==",
+      "repairedBase64": "KDU0LTI3KeWNg+exsw=="
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 25, "formulaOrdinal": 0, "sourceLocation": "sections[0].questions[125].analyze#text"},
+        {"documentIndex": 218, "formulaOrdinal": 0, "sourceLocation": "sections[0].questions[101].analyze#text"},
+        {"documentIndex": 397, "formulaOrdinal": 0, "sourceLocation": "sections[0].questions[175].analyze#text"}
+      ],
+      "reason": "replacement character inside otherwise balanced punctuation",
+      "sourceBase64": "KDE1KzMw77+9ICnljYPnsbM=",
+      "repairedBase64": "KDE1KzMwKeWNg+exsw=="
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 130, "formulaOrdinal": 32, "sourceLocation": "sections[0].questions[61].content#math1"},
+        {"documentIndex": 312, "formulaOrdinal": 32, "sourceLocation": "sections[0].questions[45].content#math1"},
+        {"documentIndex": 491, "formulaOrdinal": 32, "sourceLocation": "sections[0].questions[57].content#math1"}
+      ],
+      "reason": "fixed Chinese phrase in repeated source context",
+      "sourceBase64": "XGJlZ2lue2FycmF5fXtsfSAyN1xiZWdpbntjYXNlc30gNTRcYmVnaW57Y2FzZXN9IDEwOFxiZWdpbntjYXNlc30gMjE2XFwgMTA1IFxlbmR7Y2FzZXN9XFwgNTFcYmVnaW57Y2FzZXN9IDEwMlxcIDQ4KFx0ZXh0e+S4jeWQiHtcYmxhY2tzcXVhcmV95oSPfSkgXGVuZHtjYXNlc30gXGVuZHtjYXNlc31cXCAyNChcdGV4dHvkuI3lkIh7XGJsYWNrc3F1YXJlfeaEj30pIFxlbmR7Y2FzZXN9IFxlbmR7YXJyYXl9",
+      "repairedBase64": "XGJlZ2lue2FycmF5fXtsfSAyN1xiZWdpbntjYXNlc30gNTRcYmVnaW57Y2FzZXN9IDEwOFxiZWdpbntjYXNlc30gMjE2XFwgMTA1IFxlbmR7Y2FzZXN9XFwgNTFcYmVnaW57Y2FzZXN9IDEwMlxcIDQ4KFx0ZXh0e+S4jeWQiOmimOaEj30pIFxlbmR7Y2FzZXN9IFxlbmR7Y2FzZXN9XFwgMjQoXHRleHR75LiN5ZCI6aKY5oSPfSkgXGVuZHtjYXNlc30gXGVuZHthcnJheX0="
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 78, "formulaOrdinal": 207, "sourceLocation": "sections[0].questions[62].content#math1"},
+        {"documentIndex": 260, "formulaOrdinal": 206, "sourceLocation": "sections[0].questions[48].content#math1"},
+        {"documentIndex": 439, "formulaOrdinal": 206, "sourceLocation": "sections[0].questions[68].content#math1"}
+      ],
+      "reason": "fixed Chinese idiom in repeated source context",
+      "sourceBase64": "XGZyYWN75YyXfXvkuqx9PVxmcmFje+Wlpei/kOS8mn17XHRleHR75b+D5oOz5LqLXFRoZXRhIH19",
+      "repairedBase64": "XGZyYWN75YyXfXvkuqx9PVxmcmFje+Wlpei/kOS8mn17XHRleHR75b+D5oOz5LqL5oiQfX0="
+    },
+    {
+      "occurrences": [
+        {"documentIndex": 78, "formulaOrdinal": 208, "sourceLocation": "sections[0].questions[62].analyze#math1"},
+        {"documentIndex": 260, "formulaOrdinal": 207, "sourceLocation": "sections[0].questions[48].analyze#math1"},
+        {"documentIndex": 439, "formulaOrdinal": 207, "sourceLocation": "sections[0].questions[68].analyze#math1"}
+      ],
+      "reason": "fixed Chinese idiom in repeated source context",
+      "sourceBase64": "XGZyYWN7MX17OX09XGZyYWN75aWl6L+Q5LyafXtcdGV4dHvmoqbmg7NcVGhldGEg55yffX0=",
+      "repairedBase64": "XGZyYWN7MX17OX09XGZyYWN75aWl6L+Q5LyafXtcdGV4dHvmoqbmg7PmiJDnnJ99fQ=="
+    }
+  ]
+}
