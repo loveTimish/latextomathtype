@@ -7,6 +7,24 @@ param(
 $ErrorActionPreference = "Stop"
 $nodeVersion = "24.9.0"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$bundleHasher = [Security.Cryptography.IncrementalHash]::CreateHash(
+    [Security.Cryptography.HashAlgorithmName]::SHA256)
+try {
+    $bundleInputs = @(
+        (Join-Path $repoRoot "tools\mathjax\render_mathjax_svg.cjs"),
+        (Join-Path $repoRoot "tools\mathjax\mathtype_fit.cjs"),
+        (Join-Path $repoRoot "package-lock.json")
+    )
+    for ($index = 0; $index -lt $bundleInputs.Count; $index++) {
+        $bundleHasher.AppendData([IO.File]::ReadAllBytes($bundleInputs[$index]))
+        if ($index -lt $bundleInputs.Count - 1) {
+            $bundleHasher.AppendData([byte[]]@(0))
+        }
+    }
+    $bundleHash = -join ($bundleHasher.GetHashAndReset() | ForEach-Object { $_.ToString("x2") })
+} finally {
+    $bundleHasher.Dispose()
+}
 $outputRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot $OutDir))
 $targetRoot = [IO.Path]::GetFullPath((Join-Path $repoRoot "target"))
 if (-not $outputRoot.StartsWith($targetRoot + [IO.Path]::DirectorySeparatorChar,
@@ -89,7 +107,7 @@ foreach ($name in $platforms) {
         platform = $name
         nodeVersion = "v$nodeVersion"
         mathJaxVersion = "3.2.2"
-        bundleHash = "25b54e1bdcab669e9e7d53f97f81d161a760c813356cecc9b99aea968d17bc35"
+        bundleHash = $bundleHash
         artifact = $artifact
         sha256 = $artifactHash
     } | ConvertTo-Json | Set-Content -LiteralPath "$artifact.json" -Encoding utf8
