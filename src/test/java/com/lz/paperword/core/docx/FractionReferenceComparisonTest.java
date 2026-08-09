@@ -43,7 +43,7 @@ class FractionReferenceComparisonTest {
         Metrics reference = extractMetrics(Files.readAllBytes(REFERENCE_DOCX));
         Metrics current = extractMetrics(generated);
 
-        assertTrue(current.previewExtension.equals("emf"));
+        assertTrue(current.previewExtension.equals("wmf"));
         assertTrue(current.heightPt <= reference.heightPt * 1.25d,
             "generated formula should not be much taller than reference");
         // 已知差距（显式跳过而非隐藏）：我们的预览显示框约为真 MathType 框的 0.61，

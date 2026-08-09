@@ -1,5 +1,9 @@
 package com.lz.paperword.core.render;
 
+import com.lz.paperword.core.latex.LaTeXParser;
+import com.lz.paperword.core.mathml.LongDivisionMathMlWriter;
+import com.lz.paperword.core.mathml.MathIRNode;
+
 import org.apache.batik.transcoder.TranscoderInput;
 import org.apache.batik.transcoder.TranscoderOutput;
 import org.apache.batik.transcoder.image.PNGTranscoder;
@@ -47,8 +51,7 @@ import java.util.regex.Pattern;
  * LaTeX 公式图片渲染器。
  *
  * <p>OLE 预览图使用 MathJax 排版 SVG，再由 Batik 展开为字形轮廓并编码为
- * 抗锯齿 EMF+ Dual；经典 EMF 矢量记录作为旧播放器回退。普通图片模式仍保留
- * 原生 TeX/JLaTeXMath 通道。</p>
+ * 经典 POLYPOLYGON WMF。普通图片模式仍保留原生 TeX/JLaTeXMath 通道。</p>
  *
  * <p>OLE 预览使用严格的轮廓矢量链路，失败即失败，不再静默回退为位图或纯文本占位。</p>
  */
@@ -97,17 +100,16 @@ public class LaTeXImageRenderer {
     private static final String MATHJAX_PADDING_PT_PROP = "paperword.mathjax.paddingPt";
     /** 系统属性：MathJax WMF 预览最大宽度，单位 pt。 */
     private static final String MATHJAX_MAX_WIDTH_PT_PROP = "paperword.mathjax.maxWidthPt";
-    /** 开发调试开关；默认 EMF+ Dual，可显式设为 wmf 对照经典 GDI 显示。 */
-    private static final String OLE_PREVIEW_FORMAT_PROP = "paperword.ole.previewFormat";
     private static final double MATHJAX_DEFAULT_EX_RATIO = 0.431d;
     private static final double MATHJAX_DEFAULT_PADDING_PT = 2.3d;
     private static final double MATHJAX_DEFAULT_MAX_WIDTH_PT = 400.0d;
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v310-emf-classic-physical-grid";
+    private static final String CACHE_VERSION = "v323-longdivision-right-aligned-rule-content";
     private static final String EXPECTED_NODE_VERSION = "v24.9.0";
     private static final String EXPECTED_MATHJAX_VERSION = "3.2.2";
+    private static final String EXPECTED_SAXON_JS_VERSION = "2.7.0";
     private static final String EXPECTED_MATHJAX_BUNDLE_HASH =
-        "d40faed500decb5f9718d87396194e424faa736f01fd8be78e7813230292c50e";
+        "829325803cc6b561b43a5c17837ffc8f4ea8a18abe7893dce7a76c1358fcb7bf";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(
@@ -191,8 +193,7 @@ public class LaTeXImageRenderer {
      * @return 预览图数据；失败返回 null
      */
     public PreviewImage renderForOlePreview(String latex) {
-        String previewFormat = olePreviewFormat();
-        String cacheKey = cacheKey("ole-" + previewFormat, latex, OLE_PREVIEW_SIZE);
+        String cacheKey = cacheKey("ole-wmf", latex, OLE_PREVIEW_SIZE);
         PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
         if (cached != null && isRequestedPreviewFormat(cached)) {
             return cached;
@@ -202,9 +203,7 @@ public class LaTeXImageRenderer {
             PREVIEW_CACHE.put(cacheKey, cached);
             return cached;
         }
-        PreviewImage preview = "emf".equals(previewFormat)
-            ? renderEmfPreviewViaMathJax(latex, null, null)
-            : renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE);
+        PreviewImage preview = renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE);
         if (preview != null) {
             if (isRequestedPreviewFormat(preview)) {
                 PREVIEW_CACHE.put(cacheKey, preview);
@@ -219,8 +218,7 @@ public class LaTeXImageRenderer {
         if (targetWidthPt == null || targetHeightPt == null || targetWidthPt <= 0d || targetHeightPt <= 0d) {
             return renderForOlePreview(latex);
         }
-        String previewFormat = olePreviewFormat();
-        String cacheKey = cacheKey("ole-" + previewFormat + "-target-"
+        String cacheKey = cacheKey("ole-wmf-target-"
                 + String.format(Locale.ROOT, "%.2fx%.2f", targetWidthPt, targetHeightPt),
             latex, OLE_PREVIEW_SIZE);
         PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
@@ -232,9 +230,7 @@ public class LaTeXImageRenderer {
             PREVIEW_CACHE.put(cacheKey, cached);
             return cached;
         }
-        PreviewImage preview = "emf".equals(previewFormat)
-            ? renderEmfPreviewViaMathJax(latex, targetWidthPt, targetHeightPt)
-            : renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE, targetWidthPt, targetHeightPt);
+        PreviewImage preview = renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE, targetWidthPt, targetHeightPt);
         if (preview != null) {
             if (isRequestedPreviewFormat(preview)) {
                 PREVIEW_CACHE.put(cacheKey, preview);
@@ -248,25 +244,13 @@ public class LaTeXImageRenderer {
     /**
      * 校验预览产物是否满足当前请求的格式。
      *
-     * <p>缓存产物必须与当前选择的后端完全一致；旧 WMF 或非 EMF+ 记录不能
-     * 冒充默认高质量预览。</p>
+     * <p>缓存产物必须是经典纯矢量 WMF，不能包含位图记录。</p>
      */
     private boolean isRequestedPreviewFormat(PreviewImage preview) {
         if (preview == null) {
             return false;
         }
-        if ("emf".equals(olePreviewFormat())) {
-            return "emf".equals(preview.extension())
-                && "image/x-emf".equals(preview.contentType())
-                && SvgVectorEmfPlusRenderer.isValidDualVector(preview.data());
-        }
         return "wmf".equals(preview.extension()) && !SvgVectorWmfRenderer.containsBitmapRecord(preview.data());
-    }
-
-    private String olePreviewFormat() {
-        return "wmf".equalsIgnoreCase(System.getProperty(OLE_PREVIEW_FORMAT_PROP, "emf"))
-            ? "wmf"
-            : "emf";
     }
 
     /**
@@ -345,10 +329,7 @@ public class LaTeXImageRenderer {
             + "|xelatex=" + System.getProperty(XELATEX_CMD_PROP, "")
             + "|dvisvgm=" + System.getProperty(DVISVGM_CMD_PROP, "")
             + "|timeout=" + System.getProperty(RENDER_TIMEOUT_PROP, String.valueOf(DEFAULT_TIMEOUT_SECONDS))
-            + "|oleVectorBackend=" + ("emf".equals(olePreviewFormat())
-                ? "batik-emfplus-dual-v2"
-                : "batik-polypolygon-v1")
-            + "|emfOpticalCompensationPt=" + SvgVectorEmfPlusRenderer.opticalCompensationPt()
+            + "|oleVectorBackend=batik-polypolygon-v2"
             + "|vectorFontSet=" + BundledVectorFonts.FONT_SET_ID
             + "|mathjaxNode=" + System.getProperty(MATHJAX_NODE_CMD_PROP, "node")
             + "|mathjaxScript=" + System.getProperty(MATHJAX_SCRIPT_PROP, "tools/mathjax/render_mathjax_svg.cjs")
@@ -547,8 +528,8 @@ public class LaTeXImageRenderer {
 
     private PreviewImage renderMathJaxWmfPreview(String latex, Double targetWidthPt, Double targetHeightPt)
         throws Exception {
-        String localRenderLatex = normalizeLatexForLocalRender(latex);
-        MathJaxSvgResult svg = renderSvgViaMathJax(localRenderLatex);
+        MathJaxInput input = mathJaxInput(latex);
+        MathJaxSvgResult svg = renderSvgViaMathJax(input.source(), input.format());
         double widthPt = svg.widthPt();
         double heightPt = svg.heightPt();
         double depthPt = mathJaxMathTypeFit()
@@ -578,37 +559,6 @@ public class LaTeXImageRenderer {
         int heightPx = Math.max((int) Math.round(heightPt * PX_PER_PT), 4);
         return new PreviewImage(vector.bytes(), widthPx, heightPx, "wmf", "image/x-wmf", false,
             depthPt, widthPt, heightPt);
-    }
-
-    private PreviewImage renderEmfPreviewViaMathJax(String latex, Double targetWidthPt, Double targetHeightPt) {
-        try {
-            String localRenderLatex = normalizeLatexForLocalRender(latex);
-            MathJaxSvgResult svg = renderSvgViaMathJax(localRenderLatex);
-            double widthPt = svg.widthPt();
-            double heightPt = svg.heightPt();
-            double depthPt = mathJaxMathTypeFit()
-                ? svg.depthPt()
-                : calibrateMathJaxDepthPt(latex, heightPt, svg.depthPt());
-            if (targetWidthPt != null && targetHeightPt != null
-                    && targetWidthPt > 0d && targetHeightPt > 0d) {
-                widthPt = targetWidthPt;
-                heightPt = targetHeightPt;
-                depthPt = targetDepthPt(latex, heightPt);
-            } else {
-                double scale = Math.min(1.0d,
-                    genericVectorWidthCapPt(latex) / Math.max(widthPt, 1.0d));
-                widthPt *= scale;
-                heightPt *= scale;
-                depthPt *= scale;
-            }
-            byte[] emf = SvgVectorEmfPlusRenderer.render(svg.svgBytes(), widthPt, heightPt);
-            int widthPx = Math.max((int) Math.round(widthPt * PX_PER_PT), 4);
-            int heightPx = Math.max((int) Math.round(heightPt * PX_PER_PT), 4);
-            return new PreviewImage(emf, widthPx, heightPx, "emf", "image/x-emf", false,
-                depthPt, widthPt, heightPt);
-        } catch (Exception e) {
-            throw new IllegalStateException("Strict vector EMF preview failed for LaTeX: " + latex, e);
-        }
     }
 
     private BufferedImage addSafetyBorderIfInkTouchesEdge(BufferedImage source, int borderPx) {
@@ -958,16 +908,21 @@ public class LaTeXImageRenderer {
 
     private MathJaxSvgResult renderSvgViaMathJax(String latex)
         throws IOException, InterruptedException, ExecutionException, TimeoutException {
+        return renderSvgViaMathJax(latex, "tex");
+    }
+
+    private MathJaxSvgResult renderSvgViaMathJax(String source, String inputFormat)
+        throws IOException, InterruptedException, ExecutionException, TimeoutException {
         synchronized (MATHJAX_WORKER_LOCK) {
             ensureMathJaxWorker();
             long id = ++mathJaxRequestId;
-            String latexBase64 = Base64.getEncoder().encodeToString((latex == null ? "" : latex)
+            String sourceBase64 = Base64.getEncoder().encodeToString((source == null ? "" : source)
                 .getBytes(StandardCharsets.UTF_8));
             boolean mathTypeFit = mathJaxMathTypeFit();
             double fontPt = mathTypeFit ? mathJaxMathTypeFitFontPt() : (double) OLE_PREVIEW_SIZE;
             String request = String.format(Locale.ROOT,
-                "{\"id\":%d,\"latexBase64\":\"%s\",\"fontPt\":%.6f,\"exRatio\":%.6f,\"paddingPt\":%.6f,\"maxWidthPt\":%.6f,\"mathTypeFit\":%s}",
-                id, latexBase64, fontPt, mathJaxExRatio(), mathJaxPaddingPt(), mathJaxMaxWidthPt(), mathTypeFit);
+                "{\"id\":%d,\"inputFormat\":\"%s\",\"sourceBase64\":\"%s\",\"fontPt\":%.6f,\"exRatio\":%.6f,\"paddingPt\":%.6f,\"maxWidthPt\":%.6f,\"mathTypeFit\":%s}",
+                id, inputFormat, sourceBase64, fontPt, mathJaxExRatio(), mathJaxPaddingPt(), mathJaxMaxWidthPt(), mathTypeFit);
             mathJaxWorkerInput.write(request);
             mathJaxWorkerInput.newLine();
             mathJaxWorkerInput.flush();
@@ -983,17 +938,21 @@ public class LaTeXImageRenderer {
             }
             String engine = jsonString(response, "engine", "");
             String mathJaxVersion = jsonString(response, "mathJaxVersion", "");
+            String saxonJsVersion = jsonString(response, "saxonJsVersion", "");
             String nodeVersion = jsonString(response, "nodeVersion", "");
             String bundleHash = jsonString(response, "bundleHash", "");
             if (!"mathjax-svg".equals(engine)
                     || !EXPECTED_NODE_VERSION.equals(nodeVersion)
                     || !EXPECTED_MATHJAX_VERSION.equals(mathJaxVersion)
+                    || !EXPECTED_SAXON_JS_VERSION.equals(saxonJsVersion)
                     || !EXPECTED_MATHJAX_BUNDLE_HASH.equals(bundleHash)) {
                 stopMathJaxWorker();
                 throw new IOException("MathJax worker version mismatch: engine=" + engine
                     + ", node=" + nodeVersion + ", MathJax=" + mathJaxVersion
+                    + ", Saxon-JS=" + saxonJsVersion
                     + ", bundle=" + bundleHash + "; expected node=" + EXPECTED_NODE_VERSION
                     + ", MathJax=" + EXPECTED_MATHJAX_VERSION
+                    + ", Saxon-JS=" + EXPECTED_SAXON_JS_VERSION
                     + ", bundle=" + EXPECTED_MATHJAX_BUNDLE_HASH);
             }
             String svgBase64 = jsonString(response, "svgBase64", "");
@@ -1010,7 +969,24 @@ public class LaTeXImageRenderer {
 
     MathJaxSvgResult renderMathJaxSvgForAcceptance(String latex)
         throws IOException, InterruptedException, ExecutionException, TimeoutException {
-        return renderSvgViaMathJax(normalizeLatexForLocalRender(latex));
+        MathJaxInput input = mathJaxInput(latex);
+        return renderSvgViaMathJax(input.source(), input.format());
+    }
+
+    private MathJaxInput mathJaxInput(String latex) throws IOException {
+        String source = latex == null ? "" : latex;
+        if (!source.contains("\\begin{longdivision}")) {
+            return new MathJaxInput(normalizeLatexForLocalRender(source), "tex");
+        }
+        LaTeXParser.DetailedParseResult parsed = new LaTeXParser().parseDetailed(source);
+        if (!parsed.isSupported()) {
+            throw new IOException("Invalid structured longdivision: " + source + "; " + parsed.diagnostics());
+        }
+        MathIRNode longDivision = parsed.mathIR().getChildren().stream()
+            .filter(node -> node.getType() == MathIRNode.Type.LONG_DIVISION)
+            .findFirst()
+            .orElseThrow(() -> new IOException("Structured longdivision IR is missing: " + source));
+        return new MathJaxInput(new LongDivisionMathMlWriter().write(longDivision), "mathml");
     }
 
     private void ensureMathJaxWorker() throws IOException {
@@ -2460,6 +2436,9 @@ public class LaTeXImageRenderer {
     }
 
     record MathJaxSvgResult(byte[] svgBytes, double widthPt, double heightPt, double depthPt) {
+    }
+
+    private record MathJaxInput(String source, String format) {
     }
 
     /**

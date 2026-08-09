@@ -6,6 +6,7 @@
     "test": "node tools/mathjax/test_mathtype_fit.cjs"
   },
   "dependencies": {
-    "mathjax-full": "3.2.2"
+    "mathjax-full": "3.2.2",
+    "saxon-js": "2.7.0"
   }
 }

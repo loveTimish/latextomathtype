@@ -339,6 +339,9 @@ public class MathIRLowerer {
         longDivision.addChild(lowerArgument(node.child(0)));
         longDivision.addChild(lowerArgument(node.child(1)));
         longDivision.addChild(lowerArgument(node.child(2)));
+        if (node.child(3) != null) {
+            longDivision.addChild(lower(node.child(3)));
+        }
         return longDivision;
     }
 

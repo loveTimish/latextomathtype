@@ -1588,6 +1588,58 @@ class MtefWriterTest {
     }
 
     @Test
+    void writesStructuredLongDivisionAsEditableMatrixAndNativeTemplates() {
+        LaTeXNode ast = parser.parseLaTeX(
+            "\\begin{longdivision}{rrrr}{6}{570}{3420}"
+                + "&30\\\\\\cline{1-2}&&42\\\\&&42\\\\\\cline{2-3}&&&0"
+                + "\\end{longdivision}");
+        byte[] mtef = writer.write(ast);
+        MtefRecordNormalizer.NormalizationReport normalized = MtefRecordNormalizer.normalize(mtef);
+
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX));
+        assertTrue(containsRecord(mtef, MtefRecord.PILE));
+        assertEquals(0, normalized.recordCounts().getOrDefault("RULER", 0),
+            "MathType rejects structured longdivision when TAB/RULER layout enters tmUBAR slots");
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_LDIV, 0x01, 0x00
+        }), "structured longdivision must use MathType's dedicated tmLDIV template");
+        assertFalse(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_OBAR, 0x00, 0x00
+        }), "the native long-division bar must not be composed from tmOBAR");
+        assertEquals(2, countOccurrences(mtef, new byte[] {
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_UBAR, 0x00, 0x00
+        }));
+        assertTrue(normalized.recordCounts().getOrDefault("MATRIX", 0) >= 1);
+        assertTrue(normalized.recordCounts().getOrDefault("CHAR", 0) >= 15,
+            "digits plus editable alignment spaces must be present");
+        assertTrue(normalized.canonicalSignature().contains("TMPL:26:1"));
+        assertFalse(normalized.canonicalSignature().contains("TMPL:13:0"));
+        assertTrue(normalized.canonicalSignature().contains("TMPL:12:0"));
+    }
+
+    @Test
+    void structuredLongDivisionKeepsNestedMathAndSpecialSymbolEncoding() {
+        LaTeXNode ast = parser.parseLaTeX(
+            "\\begin{longdivision}{rrr}{\\sqrt{2}}{}{\\frac{a}{b}}"
+                + "&\\frac{\\alpha}{2}\\\\\\cline{1-2}&&\\sqrt{\\beta}"
+                + "\\end{longdivision}");
+        byte[] mtef = writer.write(ast);
+        MtefRecordNormalizer.NormalizationReport normalized = MtefRecordNormalizer.normalize(mtef);
+
+        assertTrue(containsRecord(mtef, MtefRecord.MATRIX));
+        assertTrue(containsRecord(mtef, MtefRecord.PILE));
+        assertEquals(0, normalized.recordCounts().getOrDefault("RULER", 0));
+        assertTrue(normalized.canonicalSignature().contains("TMPL:26:1"));
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_FRACT
+        }));
+        assertTrue(containsBytes(mtef, new byte[] {
+            (byte) MtefRecord.TMPL, 0x00, (byte) MtefRecord.TM_ROOT
+        }));
+        assertTrue(extractDigitStream(mtef).contains("2"));
+    }
+
+    @Test
     void testWriteExplicitLongDivisionSerializesDividendBeforeQuotient() {
         LaTeXNode ast = parser.parseLaTeX("\\longdiv[129]{12}{1548}");
         byte[] mtef = writer.write(ast);

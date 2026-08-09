@@ -7,14 +7,18 @@ const fs = require("fs");
 const path = require("path");
 const { mathjax } = require("mathjax-full/js/mathjax.js");
 const { TeX } = require("mathjax-full/js/input/tex.js");
+const { MathML } = require("mathjax-full/js/input/mathml.js");
+const { Mml3Handler } = require("mathjax-full/js/input/mathml/mml3/mml3.js");
 const { SVG } = require("mathjax-full/js/output/svg.js");
 const { liteAdaptor } = require("mathjax-full/js/adaptors/liteAdaptor.js");
 const { RegisterHTMLHandler } = require("mathjax-full/js/handlers/html.js");
 const { AllPackages } = require("mathjax-full/js/input/tex/AllPackages.js");
 const MATHJAX_VERSION = require("mathjax-full/package.json").version;
+const SAXON_JS_VERSION = require("saxon-js/package.json").version;
 
 const adaptor = liteAdaptor();
-RegisterHTMLHandler(adaptor);
+const handler = RegisterHTMLHandler(adaptor);
+Mml3Handler(handler);
 
 const { fitMathType, stackFittedLines } = require("./mathtype_fit.cjs");
 // Git may materialize these pinned text files with LF or CRLF on Windows.
@@ -32,8 +36,9 @@ const BUNDLE_HASH = crypto.createHash("sha256")
 const FIT_PAD_TOP_PT = 3.23;
 const FIT_PAD_BOTTOM_PT = 2.64;
 
-function convertToSvg(latex) {
-  const node = html.convert(latex, { display: false, em: 16, ex: 8, containerWidth: 100000 });
+function convertToSvg(source, inputFormat = "tex") {
+  const document = inputFormat === "mathml" ? mathmlHtml : html;
+  const node = document.convert(source, { display: false, em: 16, ex: 8, containerWidth: 100000 });
   let svg = adaptor.outerHTML(node);
   const start = svg.indexOf("<svg");
   const end = svg.lastIndexOf("</svg>");
@@ -46,11 +51,11 @@ function convertToSvg(latex) {
     .replace(/\s+role="img"/g, "");
   if (/data-mml-node=["']merror["']/.test(rendered)
       || /data-mml-node=["']mtext["'][^>]*(?:fill|stroke)=["']red["']/.test(rendered)) {
-    throw new Error(`MathJax produced an error glyph for: ${latex}`);
+    throw new Error(`MathJax produced an error glyph for ${inputFormat} input`);
   }
   if (/[\uFFFD\u25A1]/u.test(rendered)
-      || (/<text\b[^>]*>\?<\/text>/u.test(rendered) && !latex.includes("?"))) {
-    throw new Error(`MathJax produced a missing-glyph placeholder for: ${latex}`);
+      || (/<text\b[^>]*>\?<\/text>/u.test(rendered) && !source.includes("?"))) {
+    throw new Error(`MathJax produced a missing-glyph placeholder for ${inputFormat} input`);
   }
   return rendered;
 }
@@ -161,6 +166,13 @@ const tex = new TeX({
 });
 const svgOutput = new SVG({ fontCache: "none", internalSpeechTitles: false });
 const html = mathjax.document("", { InputJax: tex, OutputJax: svgOutput });
+const mathmlOutput = new SVG({ fontCache: "none", internalSpeechTitles: false });
+const mathmlInput = new MathML({ forceReparse: true });
+const mathmlHtml = mathjax.document("", {
+  InputJax: mathmlInput,
+  OutputJax: mathmlOutput,
+  enableMml3: true
+});
 
 function numberAttr(svg, name) {
   const match = svg.match(new RegExp("\\b" + name + "=['\"]([^'\"]+)['\"]", "i"));
@@ -191,16 +203,19 @@ function verticalAlignEx(svg) {
 }
 
 function renderLatex(request) {
-  const latex = Buffer.from(request.latexBase64 || "", "base64").toString("utf8");
+  const inputFormat = request.inputFormat === "mathml" ? "mathml" : "tex";
+  const sourceBase64 = request.sourceBase64 || request.latexBase64 || "";
+  const latex = Buffer.from(sourceBase64, "base64").toString("utf8");
   const fontPt = finiteOr(request.fontPt, 9.02);
   const exRatio = finiteOr(request.exRatio, 0.431);
   const paddingPt = finiteOr(request.paddingPt, 2.3);
   const maxWidthPt = finiteOr(request.maxWidthPt, 400);
-  const split = request.mathTypeFit
+  const useMathTypeFit = Boolean(request.mathTypeFit) && inputFormat === "tex";
+  const split = useMathTypeFit
     ? splitTopLevelLines(latex, fontPt)
     : { lines: [latex], gapsEm: [0] };
   const lines = split.lines;
-  let svg = convertToSvg(lines[0]);
+  let svg = convertToSvg(lines[0], inputFormat);
 
   const widthEx = Math.max(numberAttr(svg, "width"), 0.1);
   const heightEx = Math.max(numberAttr(svg, "height"), 0.1);
@@ -216,12 +231,12 @@ function renderLatex(request) {
   let fitDepthPt = null;
   let padTopPt = paddingPt;
   let padBottomPt = paddingPt;
-  if (request.mathTypeFit) {
+  if (useMathTypeFit) {
     // Re-layout fractions/delimiters with measured MathType geometry.
     // emUnits is intrinsic to the SVG (independent of the requested fontPt).
     const emUnits = exRatio > 0 ? vb[2] / (widthEx * exRatio) : 1000;
     const parts = lines.map((line, idx) => {
-      const lineSvg = idx === 0 ? svg : convertToSvg(line);
+      const lineSvg = idx === 0 ? svg : convertToSvg(line, inputFormat);
       return fitMathType(lineSvg, emUnits, request.fitParams);
     });
     const fit = parts.length > 1
@@ -268,6 +283,7 @@ function renderLatex(request) {
     ok: true,
     engine: "mathjax-svg",
     mathJaxVersion: MATHJAX_VERSION,
+    saxonJsVersion: SAXON_JS_VERSION,
     nodeVersion: process.version,
     bundleHash: BUNDLE_HASH,
     svgBase64: Buffer.from(svg, "utf8").toString("base64"),

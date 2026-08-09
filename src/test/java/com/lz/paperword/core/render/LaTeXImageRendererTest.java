@@ -56,6 +56,27 @@ class LaTeXImageRendererTest {
     }
 
     @Test
+    void shouldRenderStructuredLongDivisionThroughMathMl3AsPureVector() throws Exception {
+        String latex = "\\begin{longdivision}{rrrr}{6}{570}{3420}"
+            + "&30\\\\\\cline{1-2}&&42\\\\&&42\\\\\\cline{2-3}&&&0"
+            + "\\end{longdivision}";
+        LaTeXImageRenderer renderer = new LaTeXImageRenderer();
+
+        String svg = new String(renderer.renderMathJaxSvgForAcceptance(latex).svgBytes(),
+            StandardCharsets.UTF_8);
+        assertTrue(svg.contains("data-mml-node=\"mtable\""));
+        assertTrue(svg.contains("<path") || svg.contains("<line"));
+        assertFalse(svg.contains("data-mml-node=\"merror\""));
+        assertFalse(svg.contains("<text"), "MathJax SVG must contain outlined glyphs only");
+
+        LaTeXImageRenderer.PreviewImage preview = renderer.renderForOlePreview(latex);
+        WmfPreviewInspector.Inspection inspection = WmfPreviewInspector.inspect(preview.data());
+        assertEquals("wmf", preview.extension());
+        assertTrue(inspection.pureVector(), () -> inspection.toString());
+        assertTrue(inspection.drawingRecordCount() > 0);
+    }
+
+    @Test
     void shouldRemoveStandaloneAlignmentMarkerBeforeLocalRender() throws Exception {
         Method method = LaTeXImageRenderer.class.getDeclaredMethod("normalizeLatexForLocalRender", String.class);
         method.setAccessible(true);
@@ -119,7 +140,7 @@ class LaTeXImageRendererTest {
         LaTeXImageRenderer.PreviewImage preview =
             new LaTeXImageRenderer().renderForOlePreview("\\raisebox{-3pt}{2}");
         assertFalse(preview.placeholder());
-        assertTrue(SvgVectorEmfPlusRenderer.isValidDualVector(preview.data()));
+        assertTrue(WmfPreviewInspector.inspect(preview.data()).pureVector());
     }
 
     @Test
@@ -144,9 +165,9 @@ class LaTeXImageRendererTest {
         LaTeXImageRenderer.PreviewImage preview =
             new LaTeXImageRenderer().renderForOlePreview("\\Bbb x");
 
-        assertEquals("emf", preview.extension());
-        assertEquals("image/x-emf", preview.contentType());
-        assertTrue(SvgVectorEmfPlusRenderer.isValidDualVector(preview.data()));
+        assertEquals("wmf", preview.extension());
+        assertEquals("image/x-wmf", preview.contentType());
+        assertTrue(WmfPreviewInspector.inspect(preview.data()).pureVector());
     }
 
     @Test
@@ -218,10 +239,10 @@ class LaTeXImageRendererTest {
         LaTeXImageRenderer.PreviewImage preview = new LaTeXImageRenderer().renderForOlePreview(
             "\\begin{array}{r}2.30€\\\\55.60€\\\\1001.00€\\end{array}");
 
-        assertEquals("emf", preview.extension());
+        assertEquals("wmf", preview.extension());
         assertFalse(preview.placeholder());
         assertTrue(preview.data().length > 0);
-        assertTrue(SvgVectorEmfPlusRenderer.isValidDualVector(preview.data()));
+        assertTrue(WmfPreviewInspector.inspect(preview.data()).pureVector());
     }
 
     @Test
@@ -282,27 +303,17 @@ class LaTeXImageRendererTest {
     }
 
     @Test
-    void legacyEmfToggleCannotBypassStrictVectorWmfBackend() {
-        String oldEmf = System.getProperty("paperword.ole.preview.emf");
-        String oldFormat = System.getProperty("paperword.ole.previewFormat");
-        try {
-            System.setProperty("paperword.ole.preview.emf", "true");
-            System.setProperty("paperword.ole.previewFormat", "wmf");
+    void olePreviewAlwaysUsesStrictVectorWmfBackend() {
+        LaTeXImageRenderer.PreviewImage preview =
+            new LaTeXImageRenderer().renderForOlePreview("\\sqrt{a^{2}+b^{2}}", 56.0d, 21.0d);
 
-            LaTeXImageRenderer.PreviewImage preview =
-                new LaTeXImageRenderer().renderForOlePreview("\\sqrt{a^{2}+b^{2}}", 56.0d, 21.0d);
-
-            assertEquals("wmf", preview.extension());
-            assertEquals("image/x-wmf", preview.contentType());
-            assertTrue(preview.data().length > 0);
-            assertFalse(SvgVectorWmfRenderer.containsBitmapRecord(preview.data()));
-            assertTrue(WmfPreviewInspector.inspect(preview.data()).pureVector());
-            assertEquals(56.0d, preview.widthPt(), 0.01d);
-            assertEquals(21.0d, preview.heightPt(), 0.01d);
-        } finally {
-            restoreProperty("paperword.ole.preview.emf", oldEmf);
-            restoreProperty("paperword.ole.previewFormat", oldFormat);
-        }
+        assertEquals("wmf", preview.extension());
+        assertEquals("image/x-wmf", preview.contentType());
+        assertTrue(preview.data().length > 0);
+        assertFalse(SvgVectorWmfRenderer.containsBitmapRecord(preview.data()));
+        assertTrue(WmfPreviewInspector.inspect(preview.data()).pureVector());
+        assertEquals(56.0d, preview.widthPt(), 0.01d);
+        assertEquals(21.0d, preview.heightPt(), 0.01d);
     }
 
     @Test

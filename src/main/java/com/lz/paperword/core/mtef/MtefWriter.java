@@ -383,6 +383,20 @@ public class MtefWriter {
             longDivision = root.getChildren().get(0);
         }
 
+        if ("true".equals(longDivision.getMetadata("structured"))) {
+            try {
+                if (Boolean.getBoolean("paperword.longdivision.nativeHeaderCandidate")) {
+                    longDivision = verticalLayoutNodeFactory.buildNativeLongDivisionHeaderCandidate(longDivision);
+                } else {
+                    return writeStructuredLongDivisionWithNativeTemplate(longDivision);
+                }
+            } catch (IllegalArgumentException exception) {
+                String source = root.getMetadata("sourceLatex");
+                throw new IOException("Invalid structured longdivision"
+                    + (source == null || source.isBlank() ? "" : ": " + source), exception);
+            }
+        }
+
         VerticalLayoutSpec layoutSpec = verticalLayoutCompiler.compileExplicitLongDivision(longDivision);
         String originalQuotient = flattenNodeText(childAt(longDivision, 1));
         boolean shouldUseComputedLayout = layoutSpec != null
@@ -402,6 +416,37 @@ public class MtefWriter {
             writeNode(out, divisor);
         }
         writeNode(out, longDivision);
+        out.write(MtefRecord.END);
+        return out.toByteArray();
+    }
+
+    private byte[] writeStructuredLongDivisionWithNativeTemplate(LaTeXNode source) throws IOException {
+        LaTeXNode header = verticalLayoutNodeFactory.buildNativeLongDivisionHeaderCandidate(source);
+        LaTeXNode steps = verticalLayoutNodeFactory.buildEditableStructuredLongDivisionStepsMatrix(source);
+        ByteArrayOutputStream out = new ByteArrayOutputStream(768);
+        out.write(LONG_DIVISION_REFERENCE_PREFIX);
+        currentTypeSize = MtefRecord.FULL;
+        header.setMetadata("skipLongDivisionLeadingDivisor", "true");
+        header.setMetadata("forceEmptyQuotientSlot", "true");
+        out.write(MtefRecord.PILE);
+        out.write(0x00);
+        out.write(0x03); // MathType PILE right alignment
+        out.write(0x00); // top baseline
+
+        out.write(MtefRecord.LINE);
+        out.write(0x00);
+        LaTeXNode divisor = childAt(header, 0);
+        if (divisor != null) {
+            writeNode(out, divisor);
+        }
+        writeNode(out, header);
+        out.write(MtefRecord.END);
+
+        out.write(MtefRecord.LINE);
+        out.write(0x00);
+        writeNode(out, steps);
+        out.write(MtefRecord.END);
+        out.write(MtefRecord.END);
         out.write(MtefRecord.END);
         return out.toByteArray();
     }
@@ -3488,14 +3533,48 @@ public class MtefWriter {
         LaTeXNode quotient = childAt(node, 1);
         LaTeXNode dividend = childAt(node, 2);
         boolean hasQuotient = quotient != null && !quotient.getChildren().isEmpty();
+        boolean writesQuotientSlot = hasQuotient
+            || "true".equals(node.getMetadata("forceEmptyQuotientSlot"));
 
         if (!"true".equals(node.getMetadata("skipLongDivisionLeadingDivisor")) && divisor != null) {
             writeNode(out, divisor);
         }
-        MtefTemplateBuilder.writeLongDivisionHeader(out, hasQuotient);
+        MtefTemplateBuilder.writeLongDivisionHeader(out, writesQuotientSlot);
         writeSlot(out, dividend);
-        if (hasQuotient) {
-            writeSlot(out, quotient);
+        if (writesQuotientSlot) {
+            if (hasQuotient) {
+                writeSlotWithHorizontalNudge(out, quotient);
+            } else {
+                writeSlot(out, null);
+            }
+        }
+        out.write(MtefRecord.END);
+    }
+
+    private void writeSlotWithHorizontalNudge(ByteArrayOutputStream out, LaTeXNode node) throws IOException {
+        String encoded = node == null ? null : node.getMetadata("horizontalNudge");
+        if (encoded == null || encoded.isBlank()) {
+            writeSlot(out, node);
+            return;
+        }
+        int dx;
+        try {
+            dx = Integer.parseInt(encoded);
+        } catch (NumberFormatException exception) {
+            throw new IOException("Invalid longdivision quotient nudge: " + encoded, exception);
+        }
+        if (dx < Short.MIN_VALUE || dx > Short.MAX_VALUE) {
+            throw new IOException("Longdivision quotient nudge exceeds int16 capacity: " + dx);
+        }
+        out.write(MtefRecord.LINE);
+        out.write(MtefRecord.OPT_NUDGE);
+        writeNudge(out, dx, 0);
+        int savedTarget = currentLineTargetSize;
+        currentLineTargetSize = currentTypeSize;
+        try {
+            writeNode(out, node);
+        } finally {
+            currentLineTargetSize = savedTarget;
         }
         out.write(MtefRecord.END);
     }

@@ -464,6 +464,12 @@ public class MathIRConverter {
         longDivision.addChild(convertArgument(childAt(node, 0)));
         longDivision.addChild(convertArgument(childAt(node, 1)));
         longDivision.addChild(convertArgument(childAt(node, 2)));
+        if (node.getChildren().size() > 3) {
+            MathIRNode steps = convertNode(node.getChildren().get(3));
+            if (steps != null) {
+                longDivision.addChild(steps);
+            }
+        }
         return longDivision;
     }
 

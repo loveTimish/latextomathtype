@@ -61,7 +61,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Generates a compact K12 formula reference whose equations remain editable
- * Equation.DSMT4 objects with strict outline-only EMF+ Dual previews.
+ * Equation.DSMT4 objects with strict outline-only POLYPOLYGON WMF previews.
  */
 class K12CommonFormulaWordAcceptanceTest {
 

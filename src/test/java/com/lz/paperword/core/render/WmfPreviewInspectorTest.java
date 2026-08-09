@@ -1,7 +1,5 @@
 package com.lz.paperword.core.render;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,23 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class WmfPreviewInspectorTest {
 
     private final LaTeXImageRenderer renderer = new LaTeXImageRenderer();
-    private String previousPreviewFormat;
-
-    @BeforeEach
-    void selectClassicWmfBackend() {
-        previousPreviewFormat = System.getProperty("paperword.ole.previewFormat");
-        System.setProperty("paperword.ole.previewFormat", "wmf");
-    }
-
-    @AfterEach
-    void restorePreviewBackend() {
-        if (previousPreviewFormat == null) {
-            System.clearProperty("paperword.ole.previewFormat");
-        } else {
-            System.setProperty("paperword.ole.previewFormat", previousPreviewFormat);
-        }
-    }
-
     @Test
     void acceptsReadableUnicodeAndNestedStructurePreviews() {
         assertReadable("\\begin{array}{r}2.30€\\\\中文𝛼\\end{array}");

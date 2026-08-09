@@ -24,7 +24,7 @@ class OfficialVectorWmfWordAcceptanceTest {
 
     private static final Path CORPUS = Path.of("docs/reference/mathtype/latex-coverage-corpus.json");
     private static final Path OUTPUT = Path.of(
-        "target/vector-acceptance/official-238-vector-emfplus-machine-corpus.docx");
+        "target/vector-acceptance/official-238-vector-wmf-machine-corpus.docx");
 
     @Test
     void generateSingleWordDocumentWithEveryOfficialVectorPreview() throws Exception {
@@ -49,7 +49,7 @@ class OfficialVectorWmfWordAcceptanceTest {
 
         PaperExportRequest request = new PaperExportRequest();
         PaperExportRequest.PaperInfo paper = new PaperExportRequest.PaperInfo();
-        paper.setName("Machine Coverage Corpus - Official LaTeX EMF+ Dual");
+        paper.setName("Machine Coverage Corpus - Official LaTeX POLYPOLYGON WMF");
         paper.setScore(questions.size());
         paper.setSuggestTime(30);
         request.setPaper(paper);

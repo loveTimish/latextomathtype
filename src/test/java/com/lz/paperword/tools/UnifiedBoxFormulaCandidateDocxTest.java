@@ -120,7 +120,7 @@ class UnifiedBoxFormulaCandidateDocxTest {
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
                 String name = entry.getName();
-                if (name.startsWith("word/media/") && name.endsWith(".emf")) {
+                if (name.startsWith("word/media/") && name.endsWith(".wmf")) {
                     vectorPreviewCount++;
                 } else if (name.startsWith("word/embeddings/") && name.endsWith(".bin")) {
                     oleCount++;
@@ -132,7 +132,7 @@ class UnifiedBoxFormulaCandidateDocxTest {
             }
         }
         assertEquals(expectedFormulaCount, vectorPreviewCount,
-            "each formula should have an EMF+ Dual vector preview");
+            "each formula should have a pure vector WMF preview");
         assertEquals(expectedFormulaCount, oleCount, "each formula should have an OLE embedding");
         assertEquals(expectedFormulaCount, equationDsmt4Count, "each OLE should be MathType Equation.DSMT4");
     }
