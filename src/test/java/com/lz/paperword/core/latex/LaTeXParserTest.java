@@ -518,6 +518,57 @@ class LaTeXParserTest {
     }
 
     @Test
+    void parsesStructuredLongDivisionWithoutComputingAnyRows() {
+        LaTeXParser.DetailedParseResult result = parser.parseDetailed(
+            "\\begin{longdivision}{rrrr}{6}{570}{3420}"
+                + "&30\\\\\\cline{1-2}&&42\\\\&&42\\\\\\cline{2-3}&&&0"
+                + "\\end{longdivision}");
+
+        assertTrue(result.isSupported(), () -> result.diagnostics().toString());
+        LaTeXNode longDivision = result.ast().getChildren().get(0);
+        assertEquals(LaTeXNode.Type.LONG_DIVISION, longDivision.getType());
+        assertEquals("true", longDivision.getMetadata("structured"));
+        assertEquals("rrrr", longDivision.getMetadata("columnSpec"));
+        assertEquals(4, longDivision.getChildren().size());
+        assertEquals("6", flatten(longDivision.getChildren().get(0)));
+        assertEquals("570", flatten(longDivision.getChildren().get(1)));
+        assertEquals("3420", flatten(longDivision.getChildren().get(2)));
+
+        LaTeXNode steps = longDivision.getChildren().get(3);
+        assertEquals(4, steps.getChildren().size());
+        assertEquals("2", steps.getChildren().get(0).getMetadata("endColumn"));
+        assertEquals("1", steps.getChildren().get(0).getMetadata("ruleStartColumn"));
+        assertEquals("2", steps.getChildren().get(0).getMetadata("ruleEndColumn"));
+        assertEquals("3", steps.getChildren().get(2).getMetadata("ruleEndColumn"));
+        assertEquals("4", steps.getChildren().get(3).getMetadata("endColumn"));
+        assertEquals("30", flatten(steps.getChildren().get(0)));
+        assertEquals("42", flatten(steps.getChildren().get(1)));
+        assertEquals("42", flatten(steps.getChildren().get(2)));
+        assertEquals("0", flatten(steps.getChildren().get(3)));
+    }
+
+    @Test
+    void rejectsMalformedStructuredLongDivisionInsteadOfFillingItIn() {
+        LaTeXParser.DetailedParseResult invalidSpec = parser.parseDetailed(
+            "\\begin{longdivision}{rc}{6}{}{12}&12\\end{longdivision}");
+        LaTeXParser.DetailedParseResult multipleCells = parser.parseDetailed(
+            "\\begin{longdivision}{rr}{6}{}{12}1&2\\end{longdivision}");
+        LaTeXParser.DetailedParseResult invalidRule = parser.parseDetailed(
+            "\\begin{longdivision}{rr}{6}{}{12}&12\\\\\\cline{1-3}&0\\end{longdivision}");
+        LaTeXParser.DetailedParseResult orphanRule = parser.parseDetailed(
+            "\\begin{longdivision}{rr}{6}{}{12}\\cline{1-2}&12\\end{longdivision}");
+
+        assertTrue(invalidSpec.diagnostics().stream()
+            .anyMatch(d -> "LONG_DIVISION_COLUMN_SPEC".equals(d.code())));
+        assertTrue(multipleCells.diagnostics().stream()
+            .anyMatch(d -> "LONG_DIVISION_MULTIPLE_CELLS".equals(d.code())));
+        assertTrue(invalidRule.diagnostics().stream()
+            .anyMatch(d -> "LONG_DIVISION_CLINE_RANGE".equals(d.code())));
+        assertTrue(orphanRule.diagnostics().stream()
+            .anyMatch(d -> "LONG_DIVISION_ORPHAN_CLINE".equals(d.code())));
+    }
+
+    @Test
     void testParseCompositeLongDivisionWithStepArrayInSingleBlock() {
         LaTeXNode ast = parser.parseLaTeX(
             "\\longdiv[570]{6}{3420}\\begin{array}{l}\\text{   }\\underline{30}\\\\\\text{    }42\\\\\\text{    }\\underline{42}\\\\\\text{      }0\\end{array}"

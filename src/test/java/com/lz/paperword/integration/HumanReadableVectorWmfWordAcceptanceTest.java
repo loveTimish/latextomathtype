@@ -30,7 +30,7 @@ class HumanReadableVectorWmfWordAcceptanceTest {
         "analysis/formula-golden-corpus/formula-golden-corpus-report-latest.json");
     private static final Path OUTPUT = Path.of(System.getProperty(
         "paperword.acceptance.humanWord.output",
-        "target/vector-acceptance/vector-emfplus-dual-quality-review.docx"));
+        "target/vector-acceptance/vector-wmf-quality-review.docx"));
     /** 15pt review size: readable at 125% without the heavy 18.6pt appearance of the old 1.55x draft. */
     private static final double DISPLAY_SCALE = 1.25d;
     private static final Map<String, String> REVIEW_LATEX_OVERRIDES = Map.of(
@@ -127,7 +127,7 @@ class HumanReadableVectorWmfWordAcceptanceTest {
         note.setAlignment(ParagraphAlignment.CENTER);
         note.setSpacingAfter(180);
         XWPFRun noteRun = note.createRun();
-        noteRun.setText("28 representative editable MathType OLE formulas - exact MathJax outlines in EMF+ Dual");
+        noteRun.setText("28 representative editable MathType OLE formulas - exact MathJax outlines in POLYPOLYGON WMF");
         noteRun.setFontFamily("Arial");
         noteRun.setFontSize(9);
         noteRun.setColor("666666");

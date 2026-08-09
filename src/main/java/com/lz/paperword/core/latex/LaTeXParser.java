@@ -668,6 +668,7 @@ public class LaTeXParser {
             ));
         }
         collectUnsupportedArgumentDiagnostics(parsed.ast(), diagnostics);
+        collectLongDivisionDiagnostics(parsed.ast(), diagnostics);
         collectUnsupportedDiagnostics(mathIR, diagnostics);
         return new DetailedParseResult(
             source,
@@ -730,6 +731,37 @@ public class LaTeXParser {
         for (LaTeXNode child : node.getChildren()) {
             collectUnsupportedArgumentDiagnostics(child, diagnostics);
         }
+    }
+
+    private void collectLongDivisionDiagnostics(LaTeXNode node, List<ParseDiagnostic> diagnostics) {
+        if (node == null) {
+            return;
+        }
+        if (node.getType() == LaTeXNode.Type.LONG_DIVISION
+                && "true".equals(node.getMetadata("structured"))) {
+            addLongDivisionDiagnostic(node, diagnostics, "longDivisionError");
+            LaTeXNode steps = node.getChildren().size() > 3 ? node.getChildren().get(3) : null;
+            if (steps != null) {
+                addLongDivisionDiagnostic(steps, diagnostics, "longDivisionError");
+                for (LaTeXNode row : steps.getChildren()) {
+                    addLongDivisionDiagnostic(row, diagnostics, "longDivisionError");
+                }
+            }
+        }
+        for (LaTeXNode child : node.getChildren()) {
+            collectLongDivisionDiagnostics(child, diagnostics);
+        }
+    }
+
+    private void addLongDivisionDiagnostic(LaTeXNode node, List<ParseDiagnostic> diagnostics, String key) {
+        String encoded = node.getMetadata(key);
+        if (encoded == null || encoded.isBlank()) {
+            return;
+        }
+        int separator = encoded.indexOf(':');
+        String code = separator < 0 ? encoded : encoded.substring(0, separator);
+        String message = separator < 0 ? encoded : encoded.substring(separator + 1);
+        diagnostics.add(new ParseDiagnostic(DiagnosticSeverity.ERROR, code, "longdivision", message));
     }
 
     /**
@@ -1466,10 +1498,7 @@ public class LaTeXParser {
             return parseArrayEnvironment(stream, envName, extractPlainText(parseRequiredGroup(stream)));
         }
         if ("longdivision".equals(envName)) {
-            // `longdivision` 环境暂按 array 兼容处理：
-            // 目前已确认的 MTEF `tmLDIV` 只支持商槽和被除数槽，
-            // 不能安全承载完整步骤矩阵；为保证 MathType 可识别，这里不将环境直接提升为自定义模板节点。
-            return parseArrayEnvironment(stream, envName, extractPlainText(parseRequiredGroup(stream)));
+            return parseLongDivisionEnvironment(stream, envName);
         }
         if (isMatrixLikeEnvironment(envName)) {
             return wrapEnvironmentFence(envName, parseArrayEnvironment(stream, envName, null));
@@ -1478,6 +1507,87 @@ public class LaTeXParser {
             return parseArrayEnvironment(stream, envName, null);
         }
         return new LaTeXNode(LaTeXNode.Type.COMMAND, "\\begin{" + envName + "}");
+    }
+
+    private LaTeXNode parseLongDivisionEnvironment(TokenStream stream, String envName) {
+        LaTeXNode columnSpecGroup = parseRequiredGroup(stream);
+        String columnSpec = extractPlainText(columnSpecGroup).trim();
+        LaTeXNode divisor = parseRequiredGroup(stream);
+        LaTeXNode quotient = parseRequiredGroup(stream);
+        LaTeXNode dividend = parseRequiredGroup(stream);
+        LaTeXNode steps = parseArrayEnvironment(stream, envName, columnSpec);
+
+        LaTeXNode node = new LaTeXNode(LaTeXNode.Type.LONG_DIVISION, "\\longdivision");
+        node.setMetadata("structured", "true");
+        node.setMetadata("longdivstyle", "lefttop");
+        node.setMetadata("columnSpec", columnSpec);
+        int columnCount = countArrayColumns(columnSpec);
+        node.setMetadata("columnCount", String.valueOf(columnCount));
+        node.addChild(divisor);
+        node.addChild(quotient);
+        node.addChild(dividend);
+        node.addChild(steps);
+
+        if (columnSpec.isBlank() || !columnSpec.matches("r+")) {
+            node.setMetadata("longDivisionError",
+                "LONG_DIVISION_COLUMN_SPEC:longdivision column specification must match r+");
+            return node;
+        }
+        if (steps.getChildren().isEmpty()) {
+            node.setMetadata("longDivisionError",
+                "LONG_DIVISION_MISSING_STEPS:longdivision requires at least one explicit step row");
+            return node;
+        }
+        validateLongDivisionRows(steps, columnCount);
+        return node;
+    }
+
+    private void validateLongDivisionRows(LaTeXNode steps, int columnCount) {
+        for (LaTeXNode row : steps.getChildren()) {
+            int nonEmpty = 0;
+            int endColumn = -1;
+            for (int index = 0; index < row.getChildren().size(); index++) {
+                LaTeXNode cell = row.getChildren().get(index);
+                if (!cell.getChildren().isEmpty() && !"true".equals(cell.getMetadata("explicitEmptyCell"))) {
+                    nonEmpty++;
+                    endColumn = index + 1;
+                }
+            }
+            if (nonEmpty == 0) {
+                row.setMetadata("longDivisionError",
+                    "LONG_DIVISION_EMPTY_STEP:each longdivision step row requires one non-empty cell");
+                continue;
+            }
+            if (nonEmpty > 1) {
+                row.setMetadata("longDivisionError",
+                    "LONG_DIVISION_MULTIPLE_CELLS:each longdivision step row allows exactly one non-empty cell");
+                continue;
+            }
+            if (endColumn > columnCount || row.getChildren().size() > columnCount) {
+                row.setMetadata("longDivisionError",
+                    "LONG_DIVISION_COLUMN_OVERFLOW:step row exceeds the declared longdivision columns");
+                continue;
+            }
+            row.setMetadata("endColumn", String.valueOf(endColumn));
+            String cline = row.getMetadata("clineBelow");
+            if (cline != null) {
+                Matcher matcher = Pattern.compile("(\\d+)\\s*-\\s*(\\d+)").matcher(cline);
+                if (!matcher.matches()) {
+                    row.setMetadata("longDivisionError",
+                        "LONG_DIVISION_INVALID_CLINE:cline must use the form \\cline{m-n}");
+                    continue;
+                }
+                int start = Integer.parseInt(matcher.group(1));
+                int end = Integer.parseInt(matcher.group(2));
+                if (start < 1 || start > end || end > columnCount) {
+                    row.setMetadata("longDivisionError",
+                        "LONG_DIVISION_CLINE_RANGE:cline range is outside the declared longdivision columns");
+                    continue;
+                }
+                row.setMetadata("ruleStartColumn", String.valueOf(start));
+                row.setMetadata("ruleEndColumn", String.valueOf(end));
+            }
+        }
     }
 
     private LaTeXNode parseBinaryCommand(TokenStream stream, String cmd) {
@@ -1559,6 +1669,18 @@ public class LaTeXParser {
                 rowLines.set(rowLines.size() - 1, 1);
                 if ("\\hdashline".equals(token.value())) {
                     arrayNode.setMetadata("rowLineStyle", "dashed");
+                }
+                continue;
+            }
+            if (token.type() == TokenType.COMMAND && "\\cline".equals(token.value())) {
+                stream.next();
+                String range = extractPlainText(parseRequiredGroup(stream)).trim();
+                if (arrayNode.getChildren().isEmpty()) {
+                    arrayNode.setMetadata("longDivisionError",
+                        "LONG_DIVISION_ORPHAN_CLINE:cline must follow a step row");
+                } else {
+                    arrayNode.getChildren().get(arrayNode.getChildren().size() - 1)
+                        .setMetadata("clineBelow", range);
                 }
                 continue;
             }

@@ -109,6 +109,7 @@ foreach ($name in $platforms) {
         platform = $name
         nodeVersion = "v$nodeVersion"
         mathJaxVersion = "3.2.2"
+        saxonJsVersion = "2.7.0"
         bundleHash = $bundleHash
         artifact = $artifact
         sha256 = $artifactHash

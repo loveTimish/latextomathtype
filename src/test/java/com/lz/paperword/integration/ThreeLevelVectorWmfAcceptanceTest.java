@@ -5,8 +5,6 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.lz.paperword.core.render.LaTeXImageRenderer;
 import com.lz.paperword.core.render.WmfPreviewInspector;
 import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Files;
@@ -23,23 +21,6 @@ class ThreeLevelVectorWmfAcceptanceTest {
 
     private static final Path REPORT = Path.of(
         "target/vector-acceptance/three-level-vector-wmf.json");
-    private String previousPreviewFormat;
-
-    @BeforeEach
-    void selectClassicWmfBackend() {
-        previousPreviewFormat = System.getProperty("paperword.ole.previewFormat");
-        System.setProperty("paperword.ole.previewFormat", "wmf");
-    }
-
-    @AfterEach
-    void restorePreviewBackend() {
-        if (previousPreviewFormat == null) {
-            System.clearProperty("paperword.ole.previewFormat");
-        } else {
-            System.setProperty("paperword.ole.previewFormat", previousPreviewFormat);
-        }
-    }
-
     @Test
     void everyThreeLevelCombinationProducesReadablePureVectorWmf() throws Exception {
         Assumptions.assumeTrue(Boolean.getBoolean("paperword.acceptance.threeLevelVector"),

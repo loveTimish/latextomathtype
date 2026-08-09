@@ -7,11 +7,11 @@ This file is generated from the current codebase and then manually curated as im
 - Templates with both builder + writer path: **38**
 - Templates with builder helper only: **0**
 - Templates only declared in constants: **1**
-- Default OLE preview: MathJax 3.2.2 SVG -> Batik outlined vector scene -> EMF+ Dual (`image/x-emf`), with matching classic EMF paths and no bitmap/text records. Classic `POLYPOLYGON` WMF is an explicit development comparison mode (`-Dpaperword.ole.previewFormat=wmf`), not the default.
+- OLE preview: MathJax 3.2.2 SVG -> Batik outlined vector scene -> classic `POLYPOLYGON` WMF (`image/x-wmf`). Bitmap and text WMF records are forbidden; there is no EMF fallback.
 
 ## Parser coverage signals
 - linear commands: \frac, \sqrt, \sum, \int, \xrightarrow, \xleftarrow, \overbrace, \overarc
-- environments: matrix, pmatrix, bmatrix, cases, aligned, align / align*, split; `longdivision` is parsed for legacy/header compatibility only and is not supported as a complete long-division layout
+- environments: matrix, pmatrix, bmatrix, cases, aligned, align / align*, split, and structured `longdivision`; long-division steps and `\cline{m-n}` spans are explicit input and are never calculated locally
 
 ## Official MTEF template coverage
 | Template | Selector | Status | Builder path | Writer path |

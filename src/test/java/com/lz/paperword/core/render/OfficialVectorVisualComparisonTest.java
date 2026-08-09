@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.junit.jupiter.api.Assumptions;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import javax.imageio.ImageIO;
@@ -29,23 +27,6 @@ class OfficialVectorVisualComparisonTest {
     private static final Path CORPUS = Path.of("docs/reference/mathtype/latex-coverage-corpus.json");
     private static final Path OUTPUT = Path.of("target/vector-acceptance/official-visual");
     private static final int[] DPIS = {144, 300, 600};
-    private String previousPreviewFormat;
-
-    @BeforeEach
-    void selectClassicWmfBackend() {
-        previousPreviewFormat = System.getProperty("paperword.ole.previewFormat");
-        System.setProperty("paperword.ole.previewFormat", "wmf");
-    }
-
-    @AfterEach
-    void restorePreviewBackend() {
-        if (previousPreviewFormat == null) {
-            System.clearProperty("paperword.ole.previewFormat");
-        } else {
-            System.setProperty("paperword.ole.previewFormat", previousPreviewFormat);
-        }
-    }
-
     @Test
     void compareBatikSvgAndIndependentWmfRasterAtMultipleDpi() throws Exception {
         Assumptions.assumeTrue(Boolean.getBoolean("paperword.acceptance.visual"),

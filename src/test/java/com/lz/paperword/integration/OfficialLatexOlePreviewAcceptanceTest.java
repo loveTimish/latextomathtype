@@ -11,8 +11,6 @@ import com.lz.paperword.core.render.WmfPreviewInspector;
 import org.apache.poi.poifs.filesystem.DocumentEntry;
 import org.apache.poi.poifs.filesystem.DocumentInputStream;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
@@ -40,23 +38,6 @@ class OfficialLatexOlePreviewAcceptanceTest {
     private final MtefWriter writer = new MtefWriter();
     private final OlePackager packager = new OlePackager();
     private final LaTeXImageRenderer renderer = new LaTeXImageRenderer();
-    private String previousPreviewFormat;
-
-    @BeforeEach
-    void selectClassicWmfBackend() {
-        previousPreviewFormat = System.getProperty("paperword.ole.previewFormat");
-        System.setProperty("paperword.ole.previewFormat", "wmf");
-    }
-
-    @AfterEach
-    void restorePreviewBackend() {
-        if (previousPreviewFormat == null) {
-            System.clearProperty("paperword.ole.previewFormat");
-        } else {
-            System.setProperty("paperword.ole.previewFormat", previousPreviewFormat);
-        }
-    }
-
     @Test
     void everyOfficialExampleProducesEditableOleAndReadableUnclippedWmf() throws Exception {
         JsonNode corpus = mapper.readTree(CORPUS.toFile());

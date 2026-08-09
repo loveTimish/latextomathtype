@@ -1,0 +1,186 @@
+{
+  "schemaVersion": 1,
+  "reviewer": "luna/manual-visual-review",
+  "issues": [
+    {
+      "id": "official-004",
+      "category": "missing-glyph-placeholder",
+      "severity": "blocking",
+      "observation": "Black diamond is shown instead of the requested blackboard-bold x."
+    },
+    {
+      "id": "official-031",
+      "category": "solid-or-corrupt-render",
+      "severity": "blocking",
+      "observation": "The array with dashed rules is replaced by a solid black rectangle."
+    },
+    {
+      "id": "official-034",
+      "category": "missing-array-rules",
+      "severity": "blocking",
+      "observation": "The solid and dotted vertical column rules are absent."
+    },
+    {
+      "id": "official-035",
+      "category": "missing-array-rules",
+      "severity": "blocking",
+      "observation": "The requested vertical column rules are absent."
+    },
+    {
+      "id": "official-037",
+      "category": "missing-array-rules",
+      "severity": "blocking",
+      "observation": "The requested hline and hdashline are absent."
+    },
+    {
+      "id": "official-044",
+      "category": "solid-or-corrupt-render",
+      "severity": "blocking",
+      "observation": "The array with horizontal rules is replaced by a solid black rectangle."
+    },
+    {
+      "id": "official-045",
+      "category": "missing-array-rules",
+      "severity": "blocking",
+      "observation": "The requested vertical column rules are absent."
+    },
+    {
+      "id": "official-046",
+      "category": "missing-array-rules",
+      "severity": "blocking",
+      "observation": "The requested vertical column rules are absent."
+    },
+    {
+      "id": "official-047",
+      "category": "solid-or-corrupt-render",
+      "severity": "blocking",
+      "observation": "The array with horizontal rules is replaced by a solid black rectangle."
+    },
+    {
+      "id": "official-078",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "The upslopeellipsis command is printed literally in red."
+    },
+    {
+      "id": "official-089",
+      "category": "nested-structure-overlap",
+      "severity": "blocking",
+      "observation": "The inner fraction denominator touches the outer fraction bar."
+    },
+    {
+      "id": "official-090",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "All three harpoon commands are printed literally in red."
+    },
+    {
+      "id": "official-099",
+      "category": "nested-structure-overlap",
+      "severity": "blocking",
+      "observation": "The inner fraction denominator touches the outer fraction bar."
+    },
+    {
+      "id": "official-120",
+      "category": "nested-structure-overlap",
+      "severity": "blocking",
+      "observation": "The inner fraction denominator collides with the outer fraction bar."
+    },
+    {
+      "id": "official-135",
+      "category": "nested-structure-overlap",
+      "severity": "blocking",
+      "observation": "Integral limit labels overlap the upper and lower ends of the integral glyph."
+    },
+    {
+      "id": "official-147",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "The nicefrac command is printed literally in red."
+    },
+    {
+      "id": "official-153",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "The ltr command is printed literally in red."
+    },
+    {
+      "id": "official-154",
+      "category": "missing-glyph-placeholder",
+      "severity": "blocking",
+      "observation": "Black diamond is shown instead of the requested blackboard-bold x."
+    },
+    {
+      "id": "official-156",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "The xlongrightarrow command is printed literally in red."
+    },
+    {
+      "id": "official-168",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "The nwsearrow and neswarrow commands are printed literally in red."
+    },
+    {
+      "id": "official-190",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "The rtl command is printed literally in red."
+    },
+    {
+      "id": "official-191",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "The rtl command is printed literally in red."
+    },
+    {
+      "id": "official-197",
+      "category": "delimiter-leak",
+      "severity": "blocking",
+      "observation": "Display-math dollar delimiters are visible as formula content."
+    },
+    {
+      "id": "official-198",
+      "category": "delimiter-leak",
+      "severity": "blocking",
+      "observation": "Inline-math dollar delimiters are visible as formula content."
+    },
+    {
+      "id": "official-202",
+      "category": "solid-or-corrupt-render",
+      "severity": "blocking",
+      "observation": "The nested radical expression is replaced by a wide solid black rectangle."
+    },
+    {
+      "id": "official-215",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "The xLongrightarrow command is printed literally in red."
+    },
+    {
+      "id": "official-217",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "The xLongleftarrow command is printed literally in red."
+    },
+    {
+      "id": "official-234",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "The xLongleftrightarrow command is printed literally in red."
+    },
+    {
+      "id": "official-237",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "The xlongleftarrow command is printed literally in red."
+    },
+    {
+      "id": "official-238",
+      "category": "literal-unknown-command",
+      "severity": "blocking",
+      "observation": "The xlongleftrightarrow command is printed literally in red."
+    }
+  ]
+}

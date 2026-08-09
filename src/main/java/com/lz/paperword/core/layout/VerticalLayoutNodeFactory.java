@@ -38,6 +38,7 @@ public class VerticalLayoutNodeFactory {
     public static final String RAW_MATRIX_HALIGN = "rawMatrixHalign";
 
     private final VerticalLayoutCompiler verticalLayoutCompiler = new VerticalLayoutCompiler();
+    private final MathStructureMeasurer structureMeasurer = new MathStructureMeasurer();
 
     public record RawLongDivisionLine(String text, boolean underlined) {
         public RawLongDivisionLine {
@@ -232,6 +233,217 @@ public class VerticalLayoutNodeFactory {
             }
         }
         return group;
+    }
+
+    /** Builds the official MathType shape: one outer pile, a tmLDIV header line, then tabbed steps. */
+    public LaTeXNode buildExplicitLongDivisionPile(LaTeXNode source) {
+        if (source == null || source.getType() != LaTeXNode.Type.LONG_DIVISION
+                || !"true".equals(source.getMetadata("structured"))
+                || source.getChildren().size() < 4) {
+            throw new IllegalArgumentException("structured longdivision node required");
+        }
+        int columns = parsePositive(source.getMetadata("columnCount"), "columnCount");
+        LaTeXNode steps = source.getChildren().get(3);
+        if (steps.getChildren().isEmpty()) {
+            throw new IllegalArgumentException("longdivision requires explicit step rows");
+        }
+
+        int dividendWidth = Math.max(structureMeasurer.measure(childAt(source, 2)),
+            Math.multiplyExact(columns, MathStructureMeasurer.DEFAULT_COLUMN_WIDTH));
+        int divisorWidth = structureMeasurer.measure(childAt(source, 0));
+        int leftEdge = Math.addExact(Math.max(divisorWidth, MathStructureMeasurer.DEFAULT_COLUMN_WIDTH), 160);
+        List<VerticalTabStop> stops = new ArrayList<>(columns);
+        for (int column = 1; column <= columns; column++) {
+            int offset = Math.addExact(leftEdge,
+                (int) Math.round((double) dividendWidth * column / columns));
+            if (offset > Short.MAX_VALUE) {
+                throw new IllegalArgumentException("longdivision RULER offset exceeds int16 capacity");
+            }
+            stops.add(new VerticalTabStop(column - 1, TabStopKind.RIGHT, offset));
+        }
+
+        LaTeXNode header = deepCopy(source);
+        header.getChildren().remove(3);
+        int quotientNudge = Math.max(0,
+            dividendWidth - structureMeasurer.measure(childAt(header, 1)));
+        if (quotientNudge > Short.MAX_VALUE) {
+            throw new IllegalArgumentException("longdivision quotient nudge exceeds int16 capacity");
+        }
+        if (childAt(header, 1) != null) {
+            childAt(header, 1).setMetadata("horizontalNudge", String.valueOf(quotientNudge));
+        }
+
+        List<LaTeXNode> lines = new ArrayList<>();
+        lines.add(buildRawLine(header));
+        for (LaTeXNode row : steps.getChildren()) {
+            int endColumn = parsePositive(row.getMetadata("endColumn"), "endColumn");
+            LaTeXNode content = onlyNonEmptyCell(row);
+            LaTeXNode lineContent = new LaTeXNode(LaTeXNode.Type.GROUP);
+            int ruleStart = parseOptionalPositive(row.getMetadata("ruleStartColumn"));
+            int ruleEnd = parseOptionalPositive(row.getMetadata("ruleEndColumn"));
+            if (ruleStart > 0) {
+                if (ruleStart > ruleEnd || ruleEnd > columns || endColumn > ruleEnd) {
+                    throw new IllegalArgumentException("invalid longdivision cline range");
+                }
+                addTabs(lineContent, ruleStart - 1);
+                LaTeXNode underline = new LaTeXNode(LaTeXNode.Type.COMMAND, "\\underline");
+                LaTeXNode underlined = new LaTeXNode(LaTeXNode.Type.GROUP);
+                addTabs(underlined, endColumn - ruleStart + 1);
+                underlined.addChild(deepCopy(content));
+                addTabs(underlined, ruleEnd - endColumn);
+                underline.addChild(underlined);
+                lineContent.addChild(underline);
+            } else {
+                addTabs(lineContent, endColumn);
+                lineContent.addChild(deepCopy(content));
+            }
+            lines.add(buildRawLine(lineContent));
+        }
+        return buildRawPile(lines, 1, 0, stops);
+    }
+
+    public LaTeXNode buildEditableStructuredLongDivisionStepsMatrix(LaTeXNode source) {
+        if (source == null || source.getType() != LaTeXNode.Type.LONG_DIVISION
+                || source.getChildren().size() < 4) {
+            throw new IllegalArgumentException("structured longdivision node required");
+        }
+        int columns = parsePositive(source.getMetadata("columnCount"), "columnCount");
+        LaTeXNode steps = source.getChildren().get(3);
+        LaTeXNode matrix = createPreservedArray(1, "r", Math.max(steps.getChildren().size(), 1));
+        appendEditableStructuredStepRows(matrix, steps, columns);
+        matrix.setMetadata("rowLines", encodeZeros(matrix.getChildren().size() + 1));
+        return matrix;
+    }
+
+    private void appendEditableStructuredStepRows(LaTeXNode matrix, LaTeXNode steps, int columns) {
+        for (LaTeXNode row : steps.getChildren()) {
+            int endColumn = parsePositive(row.getMetadata("endColumn"), "endColumn");
+            if (endColumn > columns) {
+                throw new IllegalArgumentException("longdivision step exceeds declared columns");
+            }
+            LaTeXNode content = deepCopy(onlyNonEmptyCell(row));
+            LaTeXNode line = new LaTeXNode(LaTeXNode.Type.GROUP);
+            int ruleStart = parseOptionalPositive(row.getMetadata("ruleStartColumn"));
+            int ruleEnd = parseOptionalPositive(row.getMetadata("ruleEndColumn"));
+            if (ruleStart > 0) {
+                if (ruleStart > ruleEnd || ruleEnd > columns || endColumn > ruleEnd) {
+                    throw new IllegalArgumentException("invalid longdivision cline range");
+                }
+                LaTeXNode underline = new LaTeXNode(LaTeXNode.Type.COMMAND, "\\underline");
+                LaTeXNode underlined = new LaTeXNode(LaTeXNode.Type.GROUP);
+                addEditableColumnSpaces(underlined, endColumn - ruleStart);
+                underlined.addChild(content);
+                addEditableColumnSpaces(underlined, ruleEnd - endColumn);
+                underline.addChild(underlined);
+                line.addChild(underline);
+                addEditableColumnSpaces(line, columns - ruleEnd);
+            } else {
+                line.addChild(content);
+                addEditableColumnSpaces(line, columns - endColumn);
+            }
+            matrix.addChild(buildSingleCellRow(line));
+        }
+    }
+
+    /**
+     * Builds a MathType-editable long-division object without placing TAB characters
+     * inside tmUBAR slots. MathType 7 rejects that otherwise balanced PILE tree.
+     */
+    public LaTeXNode buildEditableStructuredLongDivisionMatrix(LaTeXNode source) {
+        if (source == null || source.getType() != LaTeXNode.Type.LONG_DIVISION
+                || !"true".equals(source.getMetadata("structured"))
+                || source.getChildren().size() < 4) {
+            throw new IllegalArgumentException("structured longdivision node required");
+        }
+        int columns = parsePositive(source.getMetadata("columnCount"), "columnCount");
+        LaTeXNode steps = source.getChildren().get(3);
+        if (steps.getChildren().isEmpty()) {
+            throw new IllegalArgumentException("longdivision requires explicit step rows");
+        }
+
+        LaTeXNode quotient = childAt(source, 1);
+        boolean hasQuotient = quotient != null && !quotient.getChildren().isEmpty();
+        LaTeXNode matrix = createPreservedArray(1, "r",
+            steps.getChildren().size() + (hasQuotient ? 2 : 1));
+        if (hasQuotient) {
+            matrix.addChild(buildSingleCellRow(deepCopy(quotient)));
+        }
+
+        LaTeXNode divisionHead = new LaTeXNode(LaTeXNode.Type.GROUP);
+        divisionHead.addChild(deepCopy(childAt(source, 0)));
+        divisionHead.addChild(new LaTeXNode(LaTeXNode.Type.CHAR, ")"));
+        LaTeXNode overline = new LaTeXNode(LaTeXNode.Type.COMMAND, "\\overline");
+        overline.addChild(deepCopy(childAt(source, 2)));
+        divisionHead.addChild(overline);
+        matrix.addChild(buildSingleCellRow(divisionHead));
+
+        appendEditableStructuredStepRows(matrix, steps, columns);
+        matrix.setMetadata("rowLines", encodeZeros(matrix.getChildren().size() + 1));
+        return matrix;
+    }
+
+    /** Header-only native tmLDIV candidate used to verify MathType's dedicated template in isolation. */
+    public LaTeXNode buildNativeLongDivisionHeaderCandidate(LaTeXNode source) {
+        if (source == null || source.getType() != LaTeXNode.Type.LONG_DIVISION
+                || source.getChildren().size() < 3) {
+            throw new IllegalArgumentException("longdivision node with divisor, quotient and dividend required");
+        }
+        LaTeXNode header = deepCopy(source);
+        while (header.getChildren().size() > 3) {
+            header.getChildren().remove(header.getChildren().size() - 1);
+        }
+        header.getMetadata().remove("structured");
+        header.setMetadata(LONG_DIVISION_HEADER_ONLY, "true");
+        return header;
+    }
+
+    private void addEditableColumnSpaces(LaTeXNode group, int columns) {
+        int count = Math.multiplyExact(Math.max(columns, 0), LONG_DIVISION_DIGIT_WIDTH_SPACES);
+        for (int index = 0; index < count; index++) {
+            group.addChild(new LaTeXNode(LaTeXNode.Type.CHAR, " "));
+        }
+    }
+
+    private LaTeXNode onlyNonEmptyCell(LaTeXNode row) {
+        LaTeXNode result = null;
+        for (LaTeXNode cell : row.getChildren()) {
+            if (cell.getChildren().isEmpty() || "true".equals(cell.getMetadata("explicitEmptyCell"))) {
+                continue;
+            }
+            if (result != null) {
+                throw new IllegalArgumentException("longdivision row contains multiple non-empty cells");
+            }
+            result = cell;
+        }
+        if (result == null) {
+            throw new IllegalArgumentException("longdivision row contains no content");
+        }
+        return result;
+    }
+
+    private void addTabs(LaTeXNode group, int count) {
+        for (int index = 0; index < count; index++) {
+            group.addChild(new LaTeXNode(LaTeXNode.Type.CHAR, "\t"));
+        }
+    }
+
+    private int parsePositive(String value, String label) {
+        int parsed = parseOptionalPositive(value);
+        if (parsed < 1) {
+            throw new IllegalArgumentException("invalid longdivision " + label);
+        }
+        return parsed;
+    }
+
+    private int parseOptionalPositive(String value) {
+        if (value == null || value.isBlank()) {
+            return -1;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("invalid longdivision integer: " + value, exception);
+        }
     }
 
     public LaTeXNode buildStructuredLongDivisionTemplateNode(LaTeXNode longDivisionNode, VerticalLayoutSpec spec) {
