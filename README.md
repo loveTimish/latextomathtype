@@ -38,6 +38,15 @@ Extract `vector-sidecar-windows-x64.zip` or `vector-sidecar-linux-x64.tar.gz` be
 JAR so that the directory is named `vector-sidecar`. The runtime validates Node `v24.9.0`, MathJax
 `3.2.2`, and the worker bundle hash before accepting any render result.
 
+Build complete Windows x64 and Linux x64 release archives, including the executable JAR and the
+offline sidecar:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-release.ps1 -Platform all
+```
+
+Artifacts and `SHA256SUMS.txt` are written to `target/release/<version>/`.
+
 Build, test, and run:
 
 ```powershell
