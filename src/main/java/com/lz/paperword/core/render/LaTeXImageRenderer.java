@@ -18,6 +18,8 @@ import java.awt.*;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -26,21 +28,15 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Properties;
-import java.util.UUID;
+import java.util.LinkedHashMap;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -104,12 +100,12 @@ public class LaTeXImageRenderer {
     private static final double MATHJAX_DEFAULT_PADDING_PT = 2.3d;
     private static final double MATHJAX_DEFAULT_MAX_WIDTH_PT = 400.0d;
     /** 缓存版本，公式渲染度量或图片生成逻辑变化时递增。 */
-    private static final String CACHE_VERSION = "v323-longdivision-right-aligned-rule-content";
+    private static final String CACHE_VERSION = "v325-opt-in-sized-vector-preview";
     private static final String EXPECTED_NODE_VERSION = "v24.9.0";
     private static final String EXPECTED_MATHJAX_VERSION = "3.2.2";
     private static final String EXPECTED_SAXON_JS_VERSION = "2.7.0";
     private static final String EXPECTED_MATHJAX_BUNDLE_HASH =
-        "829325803cc6b561b43a5c17837ffc8f4ea8a18abe7893dce7a76c1358fcb7bf";
+        "b00daea8ff1355e038b3bc1cc5a70ce6aacdde3184c484bb2bf6e2f24e350801";
     /** 外部命令默认超时秒数。 */
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
     private static final List<String> ARRAY_LIKE_ENVIRONMENTS = List.of(
@@ -126,11 +122,33 @@ public class LaTeXImageRenderer {
     /** 标记外部工具是否不可用，避免每个公式都重复探测失败。 */
     private volatile boolean externalToolUnavailable = false;
 
-    /** 公式预览图缓存。高清 TeX 渲染成本高，同一批试卷内重复公式很多，缓存能明显稳住速度。 */
-    private static final Map<String, PreviewImage> PREVIEW_CACHE = new ConcurrentHashMap<>();
+    /** Shared across renderer instances; both PNG and preview values consume the same budget. */
+    private static final RenderMemoryCache SHARED_MEMORY_CACHE = new RenderMemoryCache(
+        cacheLimit("memory.maxBytes", 64L * 1024 * 1024),
+        (int) Math.min(Integer.MAX_VALUE, cacheLimit("memory.maxEntries", 2048)));
+    private static volatile FormulaDiskCache sharedDiskCache;
+    private final RenderMemoryCache memoryCache;
+    private final FormulaDiskCache diskCacheOverride;
 
-    /** PNG 字节缓存，供直接图片导出入口复用。 */
-    private static final Map<String, byte[]> PNG_CACHE = new ConcurrentHashMap<>();
+    public LaTeXImageRenderer() {
+        this(SHARED_MEMORY_CACHE, null);
+    }
+
+    /** Isolated limits and clock for deterministic cache regression tests. */
+    LaTeXImageRenderer(RenderMemoryCache memoryCache, FormulaDiskCache diskCache) {
+        this.memoryCache = java.util.Objects.requireNonNull(memoryCache);
+        this.diskCacheOverride = diskCache;
+    }
+
+    /** Counters are process-local; byte weights include retained keys and approximate object overhead. */
+    public Map<String, Long> cacheStatistics() {
+        Map<String, Long> statistics = new LinkedHashMap<>();
+        memoryCache.statistics().forEach((key, value) -> statistics.put("memory." + key, value));
+        FormulaDiskCache disk = diskCache();
+        if (disk != null) disk.statistics().forEach((key, value) -> statistics.put("disk." + key, value));
+        statistics.put("disk.enabled", disk == null || !disk.enabled() ? 0L : 1L);
+        return Map.copyOf(statistics);
+    }
 
     private static final Object MATHJAX_WORKER_LOCK = new Object();
     private static Process mathJaxWorkerProcess;
@@ -174,6 +192,59 @@ public class LaTeXImageRenderer {
         }
     }
 
+    /** Explicit vector canvas choice. WHITE is an opt-in compatibility candidate. */
+    public enum PreviewBackground { TRANSPARENT, WHITE }
+
+    public static final double SIZED_PREVIEW_MAX_WIDTH_PT = 440.0d;
+    public static final double SIZED_PREVIEW_PADDING_PT = 0.75d;
+
+    private record SizedPreviewOptions(double fontSizePt, boolean displayStyle, double maxWidthPt,
+                                       double paddingPt, PreviewBackground background) {
+        private SizedPreviewOptions {
+            if (!Double.isFinite(fontSizePt) || fontSizePt < 0.5d || fontSizePt > 512d) {
+                throw new IllegalArgumentException("fontSizePt must be finite and in [0.5, 512]");
+            }
+            if (!Double.isFinite(maxWidthPt) || maxWidthPt <= 0d) {
+                throw new IllegalArgumentException("maxWidthPt must be finite and positive");
+            }
+            java.util.Objects.requireNonNull(background, "background");
+            maxWidthPt = Math.min(maxWidthPt, SIZED_PREVIEW_MAX_WIDTH_PT);
+        }
+
+        private String key() {
+            return "font=" + Double.toHexString(fontSizePt) + "|display=" + displayStyle
+                + "|maxWidth=" + Double.toHexString(maxWidthPt)
+                + "|padding=" + Double.toHexString(paddingPt) + "|background=" + background
+                + "|geometry=natural-ink-bounds-v1|fit=false";
+        }
+    }
+
+    /** Natural-size preview: one uniform transform, explicit math style, no legacy family caps. */
+    public PreviewImage renderForOlePreviewAtSize(String latex, double fontSizePt, boolean displayStyle) {
+        return renderForOlePreviewAtSize(latex, fontSizePt, displayStyle, SIZED_PREVIEW_MAX_WIDTH_PT);
+    }
+
+    public PreviewImage renderForOlePreviewAtSize(String latex, double fontSizePt, boolean displayStyle,
+                                                 double maxWidthPt) {
+        return renderForOlePreviewAtSize(latex, fontSizePt, displayStyle, maxWidthPt,
+            PreviewBackground.TRANSPARENT);
+    }
+
+    public PreviewImage renderForOlePreviewAtSize(String latex, double fontSizePt, boolean displayStyle,
+                                                 double maxWidthPt, PreviewBackground background) {
+        SizedPreviewOptions options = new SizedPreviewOptions(fontSizePt, displayStyle, maxWidthPt,
+            SIZED_PREVIEW_PADDING_PT, background);
+        rejectSizedSourceMetrics(latex);
+        String key = cacheKey("ole-wmf-sized|" + options.key(), latex, (float) fontSizePt);
+        return cachedOlePreview(key, latex, null, null, options);
+    }
+
+    private static void rejectSizedSourceMetrics(String latex) {
+        if (latex != null && latex.contains("\\pwmetrics")) {
+            throw new IllegalArgumentException("sized preview and sourceMetrics are mutually exclusive");
+        }
+    }
+
     /**
      * 使用默认字号渲染 PNG。
      *
@@ -194,24 +265,7 @@ public class LaTeXImageRenderer {
      */
     public PreviewImage renderForOlePreview(String latex) {
         String cacheKey = cacheKey("ole-wmf", latex, OLE_PREVIEW_SIZE);
-        PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
-        if (cached != null && isRequestedPreviewFormat(cached)) {
-            return cached;
-        }
-        cached = readPreviewFromDisk(cacheKey);
-        if (cached != null && isRequestedPreviewFormat(cached)) {
-            PREVIEW_CACHE.put(cacheKey, cached);
-            return cached;
-        }
-        PreviewImage preview = renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE);
-        if (preview != null) {
-            if (isRequestedPreviewFormat(preview)) {
-                PREVIEW_CACHE.put(cacheKey, preview);
-                writePreviewToDisk(cacheKey, preview);
-            }
-            return preview;
-        }
-        throw new IllegalStateException("Strict vector OLE preview rendering failed: " + latex);
+        return cachedOlePreview(cacheKey, latex, null, null);
     }
 
     public PreviewImage renderForOlePreview(String latex, Double targetWidthPt, Double targetHeightPt) {
@@ -219,26 +273,63 @@ public class LaTeXImageRenderer {
             return renderForOlePreview(latex);
         }
         String cacheKey = cacheKey("ole-wmf-target-"
-                + String.format(Locale.ROOT, "%.2fx%.2f", targetWidthPt, targetHeightPt),
+                + Double.toHexString(targetWidthPt) + "x" + Double.toHexString(targetHeightPt),
             latex, OLE_PREVIEW_SIZE);
-        PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
+        return cachedOlePreview(cacheKey, latex, targetWidthPt, targetHeightPt);
+    }
+
+    private PreviewImage cachedOlePreview(String cacheKey, String latex,
+                                          Double targetWidthPt, Double targetHeightPt) {
+        return cachedOlePreview(cacheKey, latex, targetWidthPt, targetHeightPt, null);
+    }
+
+    private PreviewImage cachedOlePreview(String cacheKey, String latex,
+                                          Double targetWidthPt, Double targetHeightPt,
+                                          SizedPreviewOptions options) {
+        PreviewImage cached = (PreviewImage) memoryCache.get(cacheKey);
         if (cached != null && isRequestedPreviewFormat(cached)) {
             return cached;
         }
-        cached = readPreviewFromDisk(cacheKey);
-        if (cached != null && isRequestedPreviewFormat(cached)) {
-            PREVIEW_CACHE.put(cacheKey, cached);
-            return cached;
-        }
-        PreviewImage preview = renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE, targetWidthPt, targetHeightPt);
-        if (preview != null) {
-            if (isRequestedPreviewFormat(preview)) {
-                PREVIEW_CACHE.put(cacheKey, preview);
-                writePreviewToDisk(cacheKey, preview);
+        CompletableFuture<PreviewImage> pending = new CompletableFuture<>();
+        CompletableFuture<PreviewImage> existing = memoryCache.inFlight.putIfAbsent(cacheKey, pending);
+        if (existing != null) {
+            try {
+                return existing.get();
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("Interrupted while awaiting vector preview", interrupted);
+            } catch (ExecutionException failed) {
+                Throwable cause = failed.getCause();
+                if (cause instanceof RuntimeException runtime) throw runtime;
+                if (cause instanceof Error error) throw error;
+                throw new IllegalStateException("Vector preview failed", cause);
             }
-            return preview;
         }
-        throw new IllegalStateException("Strict target vector preview rendering failed: " + latex);
+        try {
+            // Another owner may have completed between our first lookup and ownership.
+            cached = (PreviewImage) memoryCache.get(cacheKey);
+            if (cached == null || !isRequestedPreviewFormat(cached)) {
+                cached = readPreviewFromDisk(cacheKey);
+            }
+            if (cached == null || !isRequestedPreviewFormat(cached)) {
+                cached = options == null
+                    ? renderWmfPreviewViaTeX(latex, OLE_PREVIEW_SIZE, targetWidthPt, targetHeightPt)
+                    : renderSizedMathJaxWmfPreview(latex, options);
+                if (cached == null || !isRequestedPreviewFormat(cached)) {
+                    throw new IllegalStateException("Strict vector OLE preview rendering failed: " + latex);
+                }
+                writePreviewToDisk(cacheKey, cached);
+            }
+            memoryCache.put(cacheKey, cached);
+            pending.complete(cached);
+            return cached;
+        } catch (RuntimeException | Error failure) {
+            pending.completeExceptionally(failure);
+            throw failure;
+        } finally {
+            // Failed work is never retained: a later call can retry normally.
+            memoryCache.inFlight.remove(cacheKey, pending);
+        }
     }
 
     /**
@@ -261,24 +352,24 @@ public class LaTeXImageRenderer {
      */
     public PreviewImage renderForWordImage(String latex) {
         String cacheKey = cacheKey("word", latex, DEFAULT_SIZE);
-        PreviewImage cached = PREVIEW_CACHE.get(cacheKey);
+        PreviewImage cached = (PreviewImage) memoryCache.get(cacheKey);
         if (cached != null) {
             return cached;
         }
         cached = readPreviewFromDisk(cacheKey);
         if (cached != null) {
-            PREVIEW_CACHE.put(cacheKey, cached);
+            memoryCache.put(cacheKey, cached);
             return cached;
         }
         PreviewImage preview = renderPreviewViaTeX(latex, DEFAULT_SIZE);
         if (preview != null) {
-            PREVIEW_CACHE.put(cacheKey, preview);
+            memoryCache.put(cacheKey, preview);
             writePreviewToDisk(cacheKey, preview);
             return preview;
         }
         preview = renderPreviewViaJLatexMath(latex, DEFAULT_SIZE);
         if (preview != null) {
-            PREVIEW_CACHE.put(cacheKey, preview);
+            memoryCache.put(cacheKey, preview);
             writePreviewToDisk(cacheKey, preview);
         }
         return preview;
@@ -295,25 +386,25 @@ public class LaTeXImageRenderer {
      */
     public byte[] renderToPng(String latex, float size) {
         String cacheKey = cacheKey("png", latex, size);
-        byte[] cached = PNG_CACHE.get(cacheKey);
+        byte[] cached = (byte[]) memoryCache.get(cacheKey);
         if (cached != null) {
             return cached;
         }
         cached = readPngFromDisk(cacheKey);
         if (cached != null && cached.length > 0) {
-            PNG_CACHE.put(cacheKey, cached);
+            memoryCache.put(cacheKey, cached);
             return cached;
         }
         String localRenderLatex = normalizeLatexForLocalRender(latex);
         byte[] external = renderViaDvisvgm(localRenderLatex, size);
         if (external != null && external.length > 0) {
-            PNG_CACHE.put(cacheKey, external);
+            memoryCache.put(cacheKey, external);
             writePngToDisk(cacheKey, external);
             return external;
         }
         byte[] fallback = renderByJLatexMath(localRenderLatex, size);
         if (fallback != null && fallback.length > 0) {
-            PNG_CACHE.put(cacheKey, fallback);
+            memoryCache.put(cacheKey, fallback);
             writePngToDisk(cacheKey, fallback);
         }
         return fallback;
@@ -343,135 +434,131 @@ public class LaTeXImageRenderer {
     }
 
     private PreviewImage readPreviewFromDisk(String cacheKey) {
-        if (!diskCacheEnabled()) {
-            return null;
-        }
-        Path base = cacheBasePath(cacheKey);
-        Path metaPath = base.resolveSibling(base.getFileName() + ".properties");
-        if (!Files.isRegularFile(metaPath)) {
-            return null;
-        }
-        try {
-            Properties props = new Properties();
-            try (var in = Files.newInputStream(metaPath)) {
-                props.load(in);
+        FormulaDiskCache disk = diskCache();
+        if (disk == null) return null;
+        byte[] record = disk.get(cacheKey);
+        if (record == null) return null;
+        try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(record))) {
+            if (input.readUnsignedByte() != 2) throw new IOException("Wrong preview cache record type");
+            int width = input.readInt();
+            int height = input.readInt();
+            String extension = input.readUTF();
+            String contentType = input.readUTF();
+            boolean placeholder = input.readBoolean();
+            double depth = input.readDouble();
+            double widthPt = input.readDouble();
+            double heightPt = input.readDouble();
+            if (width <= 0 || height <= 0 || !Double.isFinite(depth)
+                || !Double.isFinite(widthPt) || !Double.isFinite(heightPt)
+                || !("png".equals(extension) && "image/png".equals(contentType)
+                    || "wmf".equals(extension) && "image/x-wmf".equals(contentType))) {
+                throw new IOException("Invalid preview cache metadata");
             }
-            String extension = props.getProperty("extension", "png");
-            Path imagePath = base.resolveSibling(base.getFileName() + "." + extension);
-            if (!Files.isRegularFile(imagePath)) {
-                return null;
-            }
-            byte[] data = Files.readAllBytes(imagePath);
-            if (data.length == 0) {
-                return null;
-            }
-            return new PreviewImage(
-                data,
-                Integer.parseInt(props.getProperty("widthPx", "10")),
-                Integer.parseInt(props.getProperty("heightPx", "10")),
-                props.getProperty("extension", "png"),
-                props.getProperty("contentType", "image/png"),
-                Boolean.parseBoolean(props.getProperty("placeholder", "false")),
-                Double.parseDouble(props.getProperty("depthPt", "-1")),
-                Double.parseDouble(props.getProperty("widthPt", "-1")),
-                Double.parseDouble(props.getProperty("heightPt", "-1"))
-            );
-        } catch (Exception e) {
-            log.debug("Formula preview disk cache read failed: {}", cacheKey, e);
+            byte[] data = readImageBytes(input);
+            return new PreviewImage(data, width, height, extension, contentType, placeholder,
+                depth, widthPt, heightPt);
+        } catch (IOException | RuntimeException invalid) {
+            disk.invalidate(cacheKey);
             return null;
         }
     }
 
     private void writePreviewToDisk(String cacheKey, PreviewImage preview) {
-        if (!diskCacheEnabled() || preview == null || preview.data() == null || preview.data().length == 0) {
-            return;
-        }
-        Path base = cacheBasePath(cacheKey);
-        Path imagePath = base.resolveSibling(base.getFileName() + "." + preview.extension());
-        Path metaPath = base.resolveSibling(base.getFileName() + ".properties");
-        try {
-            Files.createDirectories(base.getParent());
-            Properties props = new Properties();
-            props.setProperty("widthPx", Integer.toString(preview.widthPx()));
-            props.setProperty("heightPx", Integer.toString(preview.heightPx()));
-            props.setProperty("extension", preview.extension());
-            props.setProperty("contentType", preview.contentType());
-            props.setProperty("placeholder", Boolean.toString(preview.placeholder()));
-            props.setProperty("depthPt", Double.toString(preview.depthPt()));
-            props.setProperty("widthPt", Double.toString(preview.widthPt()));
-            props.setProperty("heightPt", Double.toString(preview.heightPt()));
-            writeAtomically(imagePath, preview.data());
-            Path tempMeta = tempSibling(metaPath);
-            try (var out = Files.newOutputStream(tempMeta)) {
-                props.store(out, "paperword formula preview cache");
-            }
-            moveAtomically(tempMeta, metaPath);
-        } catch (Exception e) {
-            log.debug("Formula preview disk cache write failed: {}", cacheKey, e);
+        FormulaDiskCache disk = diskCache();
+        if (disk == null || preview == null || preview.data() == null || preview.data().length == 0) return;
+        if (!disk.accepts(preview.data().length + 42L + preview.extension().length() + preview.contentType().length())) return;
+        try (ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+             DataOutputStream output = new DataOutputStream(buffer)) {
+            output.writeByte(2);
+            output.writeInt(preview.widthPx());
+            output.writeInt(preview.heightPx());
+            output.writeUTF(preview.extension());
+            output.writeUTF(preview.contentType());
+            output.writeBoolean(preview.placeholder());
+            output.writeDouble(preview.depthPt());
+            output.writeDouble(preview.widthPt());
+            output.writeDouble(preview.heightPt());
+            output.writeInt(preview.data().length);
+            output.write(preview.data());
+            disk.put(cacheKey, buffer.toByteArray());
+        } catch (IOException failure) {
+            log.debug("Formula preview cache serialization failed", failure);
         }
     }
 
     private byte[] readPngFromDisk(String cacheKey) {
-        if (!diskCacheEnabled()) {
+        FormulaDiskCache disk = diskCache();
+        if (disk == null) return null;
+        byte[] record = disk.get(cacheKey);
+        if (record == null) return null;
+        try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(record))) {
+            if (input.readUnsignedByte() != 1) throw new IOException("Wrong PNG cache record type");
+            return readImageBytes(input);
+        } catch (IOException | RuntimeException invalid) {
+            disk.invalidate(cacheKey);
             return null;
         }
-        Path pngPath = cacheBasePath(cacheKey).resolveSibling(cacheBasePath(cacheKey).getFileName() + ".png");
-        try {
-            return Files.isRegularFile(pngPath) ? Files.readAllBytes(pngPath) : null;
-        } catch (IOException e) {
-            log.debug("Formula PNG disk cache read failed: {}", cacheKey, e);
-            return null;
-        }
+    }
+
+    private static byte[] readImageBytes(DataInputStream input) throws IOException {
+        int length = input.readInt();
+        if (length <= 0 || length != input.available()) throw new IOException("Invalid cached image length");
+        return input.readNBytes(length);
     }
 
     private void writePngToDisk(String cacheKey, byte[] png) {
-        if (!diskCacheEnabled() || png == null || png.length == 0) {
-            return;
-        }
-        Path pngPath = cacheBasePath(cacheKey).resolveSibling(cacheBasePath(cacheKey).getFileName() + ".png");
-        try {
-            Files.createDirectories(pngPath.getParent());
-            writeAtomically(pngPath, png);
-        } catch (IOException e) {
-            log.debug("Formula PNG disk cache write failed: {}", cacheKey, e);
-        }
-    }
-
-    private void writeAtomically(Path target, byte[] data) throws IOException {
-        Path temp = tempSibling(target);
-        Files.write(temp, data);
-        moveAtomically(temp, target);
-    }
-
-    private Path tempSibling(Path target) {
-        return target.resolveSibling(target.getFileName() + "." + UUID.randomUUID() + ".tmp");
-    }
-
-    private void moveAtomically(Path source, Path target) throws IOException {
-        try {
-            Files.move(source, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (AtomicMoveNotSupportedException e) {
-            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
+        FormulaDiskCache disk = diskCache();
+        if (disk == null || png == null || png.length == 0) return;
+        if (!disk.accepts(5L + png.length)) return;
+        try (ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+             DataOutputStream output = new DataOutputStream(buffer)) {
+            output.writeByte(1);
+            output.writeInt(png.length);
+            output.write(png);
+            disk.put(cacheKey, buffer.toByteArray());
+        } catch (IOException failure) {
+            log.debug("Formula PNG cache serialization failed", failure);
         }
     }
 
-    private boolean diskCacheEnabled() {
-        return Boolean.parseBoolean(System.getProperty(CACHE_ENABLED_PROP, "true"));
-    }
-
-    private Path cacheBasePath(String cacheKey) {
-        String configuredDir = System.getProperty(CACHE_DIR_PROP, "data/cache/formula-render");
-        String digest = sha256Base64Url(cacheKey);
-        return Path.of(configuredDir, digest.substring(0, 2), digest.substring(2));
-    }
-
-    private String sha256Base64Url(String value) {
+    private FormulaDiskCache diskCache() {
+        if (diskCacheOverride != null) return diskCacheOverride;
+        // Preserve the existing public flag's disk-only meaning. Memory retention has its own limits.
+        if (!Boolean.parseBoolean(System.getProperty(CACHE_ENABLED_PROP, "true"))) return null;
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 digest unavailable", e);
+            FormulaDiskCache.Config config = new FormulaDiskCache.Config(
+                Path.of(System.getProperty(CACHE_DIR_PROP, "data/cache/formula-render")),
+                cacheLimit("disk.maxBytes", 256L * 1024 * 1024),
+                (int) Math.min(Integer.MAX_VALUE, cacheLimit("disk.maxEntries", 8192)),
+                Math.min(Integer.MAX_VALUE, cacheLimit("disk.maxEntryBytes", 16L * 1024 * 1024)),
+                cacheMillis("disk.ttlSeconds", 7L * 24 * 60 * 60),
+                cacheMillis("disk.maintenanceSeconds", 60));
+            FormulaDiskCache current = sharedDiskCache;
+            if (current == null || !current.config().equals(config)) {
+                synchronized (LaTeXImageRenderer.class) {
+                    current = sharedDiskCache;
+                    if (current == null || !current.config().equals(config)) {
+                        sharedDiskCache = current = new FormulaDiskCache(config, System::currentTimeMillis);
+                    }
+                }
+            }
+            return current;
+        } catch (RuntimeException invalid) {
+            log.debug("Formula disk cache configuration unavailable", invalid);
+            return null;
+        }
+    }
+
+    private static long cacheMillis(String name, long fallbackSeconds) {
+        return Math.min(Long.MAX_VALUE / 1000L, cacheLimit(name, fallbackSeconds)) * 1000L;
+    }
+
+    private static long cacheLimit(String name, long fallback) {
+        try {
+            long value = Long.parseLong(System.getProperty("paperword.render.cache." + name, Long.toString(fallback)));
+            return value >= 0 ? value : fallback;
+        } catch (NumberFormatException invalid) {
+            return fallback;
         }
     }
 
@@ -521,6 +608,9 @@ public class LaTeXImageRenderer {
             }
             throw new IllegalStateException("MathJax WMF preview returned no image: " + latex);
         } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             log.error("MathJax WMF preview render failed: {}", latex, e);
             throw new IllegalStateException("Strict vector WMF preview failed for LaTeX: " + latex, e);
         }
@@ -532,33 +622,58 @@ public class LaTeXImageRenderer {
         MathJaxSvgResult svg = renderSvgViaMathJax(input.source(), input.format());
         double widthPt = svg.widthPt();
         double heightPt = svg.heightPt();
-        double depthPt = mathJaxMathTypeFit()
-            ? svg.depthPt()
-            : calibrateMathJaxDepthPt(latex, heightPt, svg.depthPt());
+        // Do not infer the baseline from formula families or a percentage of
+        // the target height. It belongs to the SVG coordinate system.
+        double sourceBaselineFraction = sourceBaselineFraction(svg);
         if (targetWidthPt != null && targetHeightPt != null && targetWidthPt > 0d && targetHeightPt > 0d) {
             widthPt = targetWidthPt;
             heightPt = targetHeightPt;
-            depthPt = targetDepthPt(latex, heightPt);
         } else {
             double maxWidthPt = genericVectorWidthCapPt(latex);
             double scale = Math.min(1.0d, maxWidthPt / Math.max(widthPt, 1.0d));
             widthPt *= scale;
             heightPt *= scale;
-            depthPt *= scale;
             if (scale < 1.0d && isLongLinearFormula(latex)) {
                 widthPt = maxWidthPt;
                 heightPt = Math.rint(heightPt * 2.0d) / 2.0d;
             }
         }
         SvgVectorWmfRenderer.VectorWmfResult vector =
-            SvgVectorWmfRenderer.renderDetailed(svg.svgBytes(), widthPt, heightPt);
+            SvgVectorWmfRenderer.renderDetailed(svg.svgBytes(), widthPt, heightPt, sourceBaselineFraction);
         if (vector.recordSummary().bitmapRecords() != 0 || vector.recordSummary().textRecords() != 0) {
             throw new IOException("Vector encoder emitted forbidden bitmap/text records");
         }
         int widthPx = Math.max((int) Math.round(widthPt * PX_PER_PT), 4);
         int heightPx = Math.max((int) Math.round(heightPt * PX_PER_PT), 4);
         return new PreviewImage(vector.bytes(), widthPx, heightPx, "wmf", "image/x-wmf", false,
-            depthPt, widthPt, heightPt);
+            vector.baselineDepthPt(), widthPt, heightPt);
+    }
+
+    private PreviewImage renderSizedMathJaxWmfPreview(String latex, SizedPreviewOptions options) {
+        try {
+            MathJaxInput input = mathJaxInput(latex);
+            MathJaxSvgResult svg = renderSvgViaMathJax(input.source(), input.format(), options);
+            var natural = SvgVectorWmfRenderer.renderNaturalDetailed(svg.svgBytes(), svg.widthPt(),
+                sourceBaselineFraction(svg), options.maxWidthPt(), options.paddingPt(), options.background());
+            var vector = natural.vector();
+            if (vector.recordSummary().bitmapRecords() != 0 || vector.recordSummary().textRecords() != 0) {
+                throw new IOException("Vector encoder emitted forbidden bitmap/text records");
+            }
+            return new PreviewImage(vector.bytes(), Math.max(4, (int) Math.round(natural.widthPt() * PX_PER_PT)),
+                Math.max(4, (int) Math.round(natural.heightPt() * PX_PER_PT)), "wmf", "image/x-wmf", false,
+                vector.baselineDepthPt(), natural.widthPt(), natural.heightPt());
+        } catch (Exception failure) {
+            if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+            throw new IllegalStateException("Strict sized vector WMF preview failed for LaTeX: " + latex, failure);
+        }
+    }
+
+    static double sourceBaselineFraction(MathJaxSvgResult svg) throws IOException {
+        if (!Double.isFinite(svg.heightPt()) || svg.heightPt() <= 0d
+                || !Double.isFinite(svg.depthPt()) || svg.depthPt() < 0d) {
+            throw new IOException("MathJax did not provide a finite, known baseline");
+        }
+        return 1d - svg.depthPt() / svg.heightPt();
     }
 
     private BufferedImage addSafetyBorderIfInkTouchesEdge(BufferedImage source, int borderPx) {
@@ -611,22 +726,6 @@ public class LaTeXImageRenderer {
         return Math.min(red, Math.min(green, blue)) < 245;
     }
 
-    private double calibrateMathJaxDepthPt(String latex, double heightPt, double depthPt) {
-        if (heightPt <= 0d) {
-            return depthPt;
-        }
-        String text = latex == null ? "" : latex;
-        double adjusted = depthPt;
-        if (hasFractionCommand(text)) {
-            adjusted = Math.max(adjusted, heightPt * 0.75d);
-        } else if (text.contains("\\sqrt") || hasArrayLikeEnvironment(text)) {
-            adjusted = Math.max(adjusted, heightPt * 0.38d);
-        } else if (hasScript(text)) {
-            adjusted = Math.max(adjusted, heightPt * 0.26d);
-        }
-        return Math.min(Math.max(adjusted, 0d), Math.max(heightPt - 1.0d, 0d));
-    }
-
     private double estimateVectorWidthPt(String latex) {
         String text = latex == null ? "" : latex.replaceAll("\\\\pwmetrics\\{[^}]+}\\s*", "");
         text = text.replaceAll("\\\\pwstyle\\{[^}]*}\\s*", "");
@@ -663,23 +762,6 @@ public class LaTeXImageRenderer {
 
     private double estimateVectorHeightPt(String latex) {
         return classifyStructureFamily(latex).heightPt();
-    }
-
-    private double targetDepthPt(String latex, double heightPt) {
-        if (latex == null || heightPt <= 0d) {
-            return -1d;
-        }
-        String text = latex.replaceAll("\\\\pwmetrics\\{[^}]+}\\s*", "");
-        if (hasFractionCommand(text)) {
-            return Math.max(0.0d, heightPt * MathTypeStructureMetrics.FRACTION_DEPTH_RATIO);
-        }
-        if (text.contains("\\begin{array}") || text.contains("\\sqrt")) {
-            return Math.max(0.0d, heightPt * 0.32d);
-        }
-        if (hasScript(text)) {
-            return Math.max(0.0d, heightPt * 0.24d);
-        }
-        return Math.max(0.0d, heightPt * 0.22d);
     }
 
     /** TeX 盒子度量（磅）。 */
@@ -913,16 +995,26 @@ public class LaTeXImageRenderer {
 
     private MathJaxSvgResult renderSvgViaMathJax(String source, String inputFormat)
         throws IOException, InterruptedException, ExecutionException, TimeoutException {
+        return renderSvgViaMathJax(source, inputFormat, null);
+    }
+
+    private MathJaxSvgResult renderSvgViaMathJax(String source, String inputFormat, SizedPreviewOptions options)
+        throws IOException, InterruptedException, ExecutionException, TimeoutException {
         synchronized (MATHJAX_WORKER_LOCK) {
             ensureMathJaxWorker();
             long id = ++mathJaxRequestId;
             String sourceBase64 = Base64.getEncoder().encodeToString((source == null ? "" : source)
                 .getBytes(StandardCharsets.UTF_8));
-            boolean mathTypeFit = mathJaxMathTypeFit();
-            double fontPt = mathTypeFit ? mathJaxMathTypeFitFontPt() : (double) OLE_PREVIEW_SIZE;
+            boolean mathTypeFit = options == null && mathJaxMathTypeFit();
+            double fontPt = options != null ? options.fontSizePt()
+                : mathTypeFit ? mathJaxMathTypeFitFontPt() : (double) OLE_PREVIEW_SIZE;
+            boolean displayStyle = options != null && options.displayStyle();
+            double paddingPt = options != null ? options.paddingPt() : mathJaxPaddingPt();
+            // Natural vector bounds determine the sized cap only after Batik has outlined all glyphs.
+            double maxWidthPt = options != null ? 0d : mathJaxMaxWidthPt();
             String request = String.format(Locale.ROOT,
-                "{\"id\":%d,\"inputFormat\":\"%s\",\"sourceBase64\":\"%s\",\"fontPt\":%.6f,\"exRatio\":%.6f,\"paddingPt\":%.6f,\"maxWidthPt\":%.6f,\"mathTypeFit\":%s}",
-                id, inputFormat, sourceBase64, fontPt, mathJaxExRatio(), mathJaxPaddingPt(), mathJaxMaxWidthPt(), mathTypeFit);
+                "{\"id\":%d,\"inputFormat\":\"%s\",\"sourceBase64\":\"%s\",\"fontPt\":%.6f,\"exRatio\":%.6f,\"paddingPt\":%.6f,\"maxWidthPt\":%.6f,\"mathTypeFit\":%s,\"displayStyle\":%s}",
+                id, inputFormat, sourceBase64, fontPt, mathJaxExRatio(), paddingPt, maxWidthPt, mathTypeFit, displayStyle);
             mathJaxWorkerInput.write(request);
             mathJaxWorkerInput.newLine();
             mathJaxWorkerInput.flush();
@@ -973,6 +1065,14 @@ public class LaTeXImageRenderer {
         return renderSvgViaMathJax(input.source(), input.format());
     }
 
+    MathJaxSvgResult renderMathJaxSvgForAcceptance(String latex, double fontSizePt, boolean displayStyle)
+        throws IOException, InterruptedException, ExecutionException, TimeoutException {
+        SizedPreviewOptions options = new SizedPreviewOptions(fontSizePt, displayStyle,
+            SIZED_PREVIEW_MAX_WIDTH_PT, SIZED_PREVIEW_PADDING_PT, PreviewBackground.TRANSPARENT);
+        MathJaxInput input = mathJaxInput(latex);
+        return renderSvgViaMathJax(input.source(), input.format(), options);
+    }
+
     private MathJaxInput mathJaxInput(String latex) throws IOException {
         String source = latex == null ? "" : latex;
         if (!source.contains("\\begin{longdivision}")) {
@@ -982,11 +1082,11 @@ public class LaTeXImageRenderer {
         if (!parsed.isSupported()) {
             throw new IOException("Invalid structured longdivision: " + source + "; " + parsed.diagnostics());
         }
-        MathIRNode longDivision = parsed.mathIR().getChildren().stream()
-            .filter(node -> node.getType() == MathIRNode.Type.LONG_DIVISION)
-            .findFirst()
-            .orElseThrow(() -> new IOException("Structured longdivision IR is missing: " + source));
-        return new MathJaxInput(new LongDivisionMathMlWriter().write(longDivision), "mathml");
+        try {
+            return new MathJaxInput(new LongDivisionMathMlWriter().writeExpression(parsed.mathIR()), "mathml");
+        } catch (IllegalArgumentException unsupported) {
+            throw new IOException("Cannot preserve mixed longdivision preview: " + source, unsupported);
+        }
     }
 
     private void ensureMathJaxWorker() throws IOException {
@@ -1002,13 +1102,14 @@ public class LaTeXImageRenderer {
         ProcessBuilder pb = new ProcessBuilder(mathJaxNodeCommand(), script.toString(), "--worker");
         pb.directory(Path.of(System.getProperty("user.dir", ".")).toAbsolutePath().toFile());
         mathJaxWorkerProcess = pb.start();
+        Process worker = mathJaxWorkerProcess;
         mathJaxWorkerInput = new BufferedWriter(new OutputStreamWriter(
             mathJaxWorkerProcess.getOutputStream(), StandardCharsets.UTF_8));
         mathJaxWorkerOutput = new BufferedReader(new InputStreamReader(
             mathJaxWorkerProcess.getInputStream(), StandardCharsets.UTF_8));
         Thread stderrDrainer = new Thread(() -> {
             try (var reader = new BufferedReader(new InputStreamReader(
-                mathJaxWorkerProcess.getErrorStream(), StandardCharsets.UTF_8))) {
+                worker.getErrorStream(), StandardCharsets.UTF_8))) {
                 while (reader.readLine() != null) {
                     // Drain only. Worker failures are reported through JSON responses.
                 }
@@ -1022,9 +1123,10 @@ public class LaTeXImageRenderer {
     private String readMathJaxResponseLine()
         throws InterruptedException, ExecutionException, TimeoutException, IOException {
         int timeoutSeconds = Integer.getInteger(RENDER_TIMEOUT_PROP, DEFAULT_TIMEOUT_SECONDS);
+        BufferedReader output = mathJaxWorkerOutput;
         CompletableFuture<String> responseFuture = CompletableFuture.supplyAsync(() -> {
             try {
-                return mathJaxWorkerOutput.readLine();
+                return output.readLine();
             } catch (IOException e) {
                 throw new IllegalStateException(e);
             }
@@ -1032,7 +1134,7 @@ public class LaTeXImageRenderer {
         String line;
         try {
             line = responseFuture.get(timeoutSeconds, TimeUnit.SECONDS);
-        } catch (TimeoutException e) {
+        } catch (TimeoutException | InterruptedException | ExecutionException e) {
             // The readLine task stays blocked and the worker may still write the
             // late response later: the stale task would then consume the NEXT
             // request's reply and desync the id pairing. Cancel the task and
@@ -1049,14 +1151,19 @@ public class LaTeXImageRenderer {
     }
 
     private static void stopMathJaxWorker() {
-        closeQuietly(mathJaxWorkerInput);
-        closeQuietly(mathJaxWorkerOutput);
-        if (mathJaxWorkerProcess != null) {
-            mathJaxWorkerProcess.destroyForcibly();
-        }
+        Process worker = mathJaxWorkerProcess;
+        BufferedWriter input = mathJaxWorkerInput;
+        BufferedReader output = mathJaxWorkerOutput;
         mathJaxWorkerProcess = null;
         mathJaxWorkerInput = null;
         mathJaxWorkerOutput = null;
+        // BufferedReader.close() takes the same lock as a blocked readLine().
+        // Kill first to release the pipe, otherwise the timeout path deadlocks.
+        if (worker != null) {
+            worker.destroyForcibly();
+        }
+        closeQuietly(input);
+        closeQuietly(output);
     }
 
     private static void closeQuietly(AutoCloseable closeable) {

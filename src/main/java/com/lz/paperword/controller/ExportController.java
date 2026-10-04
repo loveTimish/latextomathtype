@@ -103,4 +103,10 @@ public class ExportController {
     public ResponseEntity<String> health() {
         return ResponseEntity.ok("paper-to-word service is running");
     }
+
+    /** Process-local, bounded-cache counters; no formula text or filesystem paths. */
+    @GetMapping("/cache/status")
+    public java.util.Map<String, Long> cacheStatus() {
+        return new com.lz.paperword.core.render.LaTeXImageRenderer().cacheStatistics();
+    }
 }

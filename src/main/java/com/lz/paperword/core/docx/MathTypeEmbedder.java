@@ -76,21 +76,64 @@ public class MathTypeEmbedder {
     public void embedEquation(XWPFParagraph paragraph, XWPFRun run, LaTeXNode latexAst, String rawLatex,
                               double displayScale, double maxWidthPt, FormulaMetrics targetMetrics,
                               FormulaStyleHints styleHints) {
+        embedEquationInternal(paragraph, run, latexAst, rawLatex, displayScale, maxWidthPt,
+            targetMetrics, styleHints, null, false, LaTeXImageRenderer.PreviewBackground.TRANSPARENT);
+    }
+
+    /** Explicit opt-in typography. Native FULL at 12pt and all existing math semantics are preserved. */
+    public void embedEquationAtSize(XWPFParagraph paragraph, XWPFRun run, LaTeXNode latexAst, String rawLatex,
+                                    double fontSizePt, boolean displayStyle, double maxWidthPt,
+                                    FormulaStyleHints styleHints) {
+        embedEquationAtSize(paragraph, run, latexAst, rawLatex, fontSizePt, displayStyle, maxWidthPt,
+            styleHints, LaTeXImageRenderer.PreviewBackground.TRANSPARENT);
+    }
+
+    public void embedEquationAtSize(XWPFParagraph paragraph, XWPFRun run, LaTeXNode latexAst, String rawLatex,
+                                    double fontSizePt, boolean displayStyle) {
+        embedEquationAtSize(paragraph, run, latexAst, rawLatex, fontSizePt, displayStyle,
+            LaTeXImageRenderer.SIZED_PREVIEW_MAX_WIDTH_PT, FormulaStyleHints.empty());
+    }
+
+    public void embedEquationAtSize(XWPFParagraph paragraph, XWPFRun run, LaTeXNode latexAst, String rawLatex,
+                                    double fontSizePt, boolean displayStyle, double maxWidthPt,
+                                    FormulaStyleHints styleHints, LaTeXImageRenderer.PreviewBackground background) {
+        if (!Double.isFinite(fontSizePt) || fontSizePt < 0.5d || fontSizePt > 512d
+                || !Double.isFinite(maxWidthPt) || maxWidthPt <= 0d) {
+            throw new IllegalArgumentException("fontSizePt and maxWidthPt must be finite, positive supported sizes");
+        }
+        if ((styleHints != null && styleHints.sourceMetrics() != null)
+                || (rawLatex != null && rawLatex.contains("\\pwmetrics"))) {
+            throw new IllegalArgumentException("sized preview and sourceMetrics are mutually exclusive");
+        }
+        java.util.Objects.requireNonNull(background, "background");
+        embedEquationInternal(paragraph, run, latexAst, rawLatex, 1d, maxWidthPt, null,
+            styleHints, fontSizePt, displayStyle, background);
+    }
+
+    private void embedEquationInternal(XWPFParagraph paragraph, XWPFRun run, LaTeXNode latexAst, String rawLatex,
+                                      double displayScale, double maxWidthPt, FormulaMetrics targetMetrics,
+                                      FormulaStyleHints styleHints, Double fontSizePt, boolean displayStyle,
+                                      LaTeXImageRenderer.PreviewBackground background) {
         try {
             FormulaStyleHints effectiveStyleHints = styleHints == null
                 ? FormulaStyleHints.empty()
                 : styleHints.withSourceMetrics(targetMetrics);
-            byte[] mtefData = mtefWriter.write(latexAst, effectiveStyleHints);
+            // Sized mode must size the editable equation too, not just its preview.
+            LaTeXNode editableAst = fontSizePt == null || fontSizePt == 12d
+                ? latexAst : withPointSize(latexAst, fontSizePt);
+            byte[] mtefData = mtefWriter.write(editableAst, effectiveStyleHints);
             byte[] oleData = olePackager.packageOle(mtefData);
 
-            LaTeXImageRenderer.PreviewImage preview = targetMetrics != null
+            LaTeXImageRenderer.PreviewImage preview = fontSizePt != null
+                ? imageRenderer.renderForOlePreviewAtSize(rawLatex, fontSizePt, displayStyle, maxWidthPt, background)
+                : targetMetrics != null
                 ? imageRenderer.renderForOlePreview(rawLatex, targetMetrics.wmfWidthPt(), targetMetrics.wmfHeightPt())
                 : imageRenderer.renderForOlePreview(rawLatex);
             if (preview == null || preview.data() == null || preview.data().length == 0) {
                 throw new IllegalStateException("OLE preview rendering returned no image data");
             }
             PreviewBox previewBox;
-            if (targetMetrics != null) {
+            if (targetMetrics != null || fontSizePt != null) {
                 previewBox = new PreviewBox(preview.widthPx(), preview.heightPx());
             } else {
                 previewBox = constrainPreviewBox(rawLatex, preview.widthPx(), preview.heightPx(),
@@ -151,16 +194,31 @@ public class MathTypeEmbedder {
             insertOleObjectXml(paragraph, run, oleRel.getId(), imgRel.getId(), idx,
                 previewBox.widthPx(), previewBox.heightPx(),
                 shapeWidthPt, shapeHeightPt,
-                rawLatex, depthPt);
+                rawLatex, depthPt, fontSizePt != null);
 
         } catch (Exception e) {
             throw new IllegalStateException("Failed to embed MathType equation: " + rawLatex, e);
         }
     }
 
+    private static LaTeXNode withPointSize(LaTeXNode original, double fontSizePt) {
+        LaTeXNode root = new LaTeXNode(LaTeXNode.Type.ROOT);
+        original.getMetadata().forEach(root::setMetadata);
+        LaTeXNode style = new LaTeXNode(LaTeXNode.Type.STYLE, "\\fontsize");
+        style.setMetadata("styleKind", "fontSize");
+        style.setMetadata("fontSizePt", Double.toString(fontSizePt));
+        if (original.getType() == LaTeXNode.Type.ROOT) {
+            original.getChildren().forEach(style::addChild);
+        } else {
+            style.addChild(original);
+        }
+        root.addChild(style);
+        return root;
+    }
+
     private void insertOleObjectXml(XWPFParagraph paragraph, XWPFRun run, String oleRelId, String imgRelId,
                                      int shapeIdx, int widthPx, int heightPx, double shapeWidthPt, double shapeHeightPt,
-                                     String rawLatex, double depthPt) {
+                                     String rawLatex, double depthPt, boolean sizedPreview) {
         try {
             widthPx = Math.max(widthPx, 4);
             heightPx = Math.max(heightPx, 4);
@@ -169,18 +227,18 @@ public class MathTypeEmbedder {
 
             double targetShapeWidthPt = shapeWidthPt > 0d ? shapeWidthPt : widthPx * PT_PER_PX;
             double targetShapeHeightPt = shapeHeightPt > 0d ? shapeHeightPt : heightPx * PT_PER_PX;
-            boolean legacyMissingGlyph = rawLatex != null
+            boolean legacyMissingGlyph = !sizedPreview && rawLatex != null
                 && rawLatex.trim().matches("\\\\(?:Bbb|mathbb)\\s+[A-Za-z]");
             if (legacyMissingGlyph) {
                 targetShapeWidthPt = 13.25d;
                 targetShapeHeightPt = 13.8d;
             }
-            String styleWidth = String.format("%.3fpt", targetShapeWidthPt);
-            String styleHeight = String.format("%.3fpt", targetShapeHeightPt);
+            String styleWidth = String.format(java.util.Locale.ROOT, "%.3fpt", targetShapeWidthPt);
+            String styleHeight = String.format(java.util.Locale.ROOT, "%.3fpt", targetShapeHeightPt);
             double originalWidthPt = legacyMissingGlyph ? 13.0d : targetShapeWidthPt;
             double originalHeightPt = legacyMissingGlyph ? 14.0d : targetShapeHeightPt;
             int dxaOrig = Math.max((int) Math.round(originalWidthPt * 20), 1);
-            int dyaOrig = Math.max((int) Math.round(originalHeightPt * 20) - 1, 1);
+            int dyaOrig = Math.max((int) Math.round(originalHeightPt * 20) - (sizedPreview ? 0 : 1), 1);
             int posHalfPt = depthPt >= 0d
                 ? Math.min(-(int) Math.round(depthPt * 2d), 0)
                 : resolveRunPositionHalfPoints(rawLatex, targetShapeHeightPt);
@@ -190,7 +248,7 @@ public class MathTypeEmbedder {
 
             // 参考文档 OLE run rPr 仅含 w:position，不含 w:rFonts。
             // w:position 负值 = 下移（半磅），用于补偿公式基线与文本基线的偏差。
-            String runXml = "<w:r " +
+            String runXml = "<xml-fragment " +
                 "xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" " +
                 "xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" " +
                 "xmlns:v=\"urn:schemas-microsoft-com:vml\" " +
@@ -233,20 +291,23 @@ public class MathTypeEmbedder {
                 "ShapeID=\"" + shapeId + "\" DrawAspect=\"Content\" " +
                 "ObjectID=\"" + objectId + "\" " +
                 "r:id=\"" + oleRelId + "\" />" +
-                "</w:object></w:r>";
+                "</w:object></xml-fragment>";
 
             CTR replacement = CTR.Factory.parse(runXml);
             int runIndex = paragraph.getRuns().indexOf(run);
             if (runIndex < 0) {
                 throw new IllegalStateException("Could not locate target run in paragraph");
             }
-            paragraph.getCTP().setRArray(runIndex, replacement);
+            // CTR is a complex type: parsing an outer <w:r> would make that
+            // element a CHILD of the target run. Parse only its content and
+            // retain the existing CTR so POI's cached XWPFRun stays attached.
+            run.getCTR().set(replacement);
 
             XWPFRun spacerRun = paragraph.insertNewRun(runIndex + 1);
             spacerRun.setText(" ");
 
         } catch (Exception e) {
-            log.error("Failed to insert OLE XML into run", e);
+            throw new IllegalStateException("Failed to insert OLE XML into run", e);
         }
     }
 

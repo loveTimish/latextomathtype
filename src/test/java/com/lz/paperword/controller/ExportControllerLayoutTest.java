@@ -35,6 +35,15 @@ class ExportControllerLayoutTest {
     private LayoutExportService layoutExportService;
 
     @Test
+    void invalidWorkingSpaceReturnsAnExplicitClientError() throws Exception {
+        when(paperExportService.export(any(PaperExportRequest.class)))
+            .thenThrow(new com.lz.paperword.model.ExportRequestValidationException("answerSpaceLines must be between 0 and 12"));
+        mockMvc.perform(post("/api/export/word").contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isBadRequest())
+            .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath("$.code").value("INVALID_EXPORT_REQUEST"));
+    }
+
+    @Test
     void shouldExposeLayoutWordExportEndpoint() throws Exception {
         when(layoutExportService.exportLayoutDocument(any(LayoutDocumentRequest.class)))
             .thenReturn(new byte[]{0x50, 0x4B, 0x03, 0x04});

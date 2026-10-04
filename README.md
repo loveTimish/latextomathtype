@@ -19,6 +19,12 @@ PaperExportRequest -> LaTeX parser -> Math IR -> MTEF v5 -> OLE2 -> MathJax/Bati
 - The preview path outlines MathJax SVG through Batik and emits classic POLYPOLYGON WMF; bitmap and text records are forbidden and there is no playback-time font dependency.
 - Linux runtime is supported; final GUI editability checks use Windows + Word + MathType.
 
+## Linux export safety and PDF integration
+
+- Local picture reads now require an explicit `paperword.assets.root`; invalid or missing pictures abort the export rather than being silently omitted. Only bounded, validated PNG/JPEG assets are accepted. See [asset migration and security policy](docs/image-assets-security.md), including the exact legacy Windows-path mapping and trusted-read-only-directory requirement.
+- Formula caches have configurable memory/disk quotas and TTL. See [cache settings and metrics](docs/render-cache.md); legacy cache files are not automatically removed.
+- Opt-in `POST /api/export/pdf` and `/api/export/layout-pdf` return the explicit Linux LibreOffice baseline-compatible PDF. See [setup, error contract and limits](docs/linux-pdf-service.md). Native comparison remains available; Word/MathType native GUI validation is separate.
+
 ## Quick Start
 
 For local development, install the locked MathJax dependency:
@@ -144,3 +150,7 @@ docs/      technical notes and validation plans
 - [MathJax](https://github.com/mathjax/MathJax-src)
 - [WIRIS MathType SDK: MTEF storage](https://docs.wiris.com/en_US/mathtype-sdk-technical-documentation/how-mtef-is-stored-in-files-and-objects)
 - [WIRIS MathType SDK: MTEF v5](https://docs.wiris.com/en_US/mathtype-sdk-technical-documentation/mathtype-mtef-v5-mathtype-40-and-later)
+
+Printable worksheets: see [student and teacher layout options](docs/printable-papers.md) for opt-in stem flow, 12pt exam typography, working-space grouping, page-number fields and preserved solution steps.
+
+The [read-only round-trip inspector](docs/mathtype-roundtrip-inspector.md) compares native streams, effective WMF records and placement. It does not repair or guarantee native MathType/WPS no-edit round trips; see the [editing boundary](docs/native-roundtrip-boundary.md).

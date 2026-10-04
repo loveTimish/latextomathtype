@@ -17,7 +17,6 @@ public class PaperExportService {
 
     private static final Logger log = LoggerFactory.getLogger(PaperExportService.class);
 
-    private final DocxBuilder oleDocxBuilder = new DocxBuilder(true);
 
     /**
      * Export a paper to a .docx byte array.
@@ -31,7 +30,9 @@ public class PaperExportService {
             request.getPaper() != null ? request.getPaper().getName() : "unnamed");
 
         long start = System.currentTimeMillis();
-        byte[] docx = oleDocxBuilder.build(request);
+        // Builders retain document counters, layout flags and MTEF writer state.
+        // Each export owns its builder; immutable render results remain shared.
+        byte[] docx = new DocxBuilder(true).build(request);
 
         long elapsed = System.currentTimeMillis() - start;
 

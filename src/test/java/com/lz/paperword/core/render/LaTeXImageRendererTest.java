@@ -256,9 +256,14 @@ class LaTeXImageRendererTest {
             byte[] png = new LaTeXImageRenderer().renderToPng("x+" + UUID.randomUUID(), 13f);
 
             assertTrue(png.length > 0);
+            boolean supportsSafeCache;
+            try (var directory = Files.newDirectoryStream(tempDir)) {
+                supportsSafeCache = directory instanceof java.nio.file.SecureDirectoryStream<?>;
+            }
             try (var stream = Files.walk(tempDir)) {
-                assertTrue(stream.anyMatch(path -> path.getFileName().toString().endsWith(".png")),
-                    "rendered formulas should be written to the disk cache");
+                assertEquals(supportsSafeCache,
+                    stream.anyMatch(path -> path.getFileName().toString().endsWith(".pwc")),
+                    "safe providers cache the render; other providers still render without disk caching");
             }
         } finally {
             restoreProperty("paperword.render.cache.enabled", oldEnabled);
