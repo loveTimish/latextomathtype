@@ -36,9 +36,9 @@ const BUNDLE_HASH = crypto.createHash("sha256")
 const FIT_PAD_TOP_PT = 3.23;
 const FIT_PAD_BOTTOM_PT = 2.64;
 
-function convertToSvg(source, inputFormat = "tex") {
+function convertToSvg(source, inputFormat = "tex", displayStyle = false) {
   const document = inputFormat === "mathml" ? mathmlHtml : html;
-  const node = document.convert(source, { display: false, em: 16, ex: 8, containerWidth: 100000 });
+  const node = document.convert(source, { display: displayStyle, em: 16, ex: 8, containerWidth: 100000 });
   let svg = adaptor.outerHTML(node);
   const start = svg.indexOf("<svg");
   const end = svg.lastIndexOf("</svg>");
@@ -210,12 +210,13 @@ function renderLatex(request) {
   const exRatio = finiteOr(request.exRatio, 0.431);
   const paddingPt = finiteOr(request.paddingPt, 2.3);
   const maxWidthPt = finiteOr(request.maxWidthPt, 400);
+  const displayStyle = Boolean(request.displayStyle);
   const useMathTypeFit = Boolean(request.mathTypeFit) && inputFormat === "tex";
   const split = useMathTypeFit
     ? splitTopLevelLines(latex, fontPt)
     : { lines: [latex], gapsEm: [0] };
   const lines = split.lines;
-  let svg = convertToSvg(lines[0], inputFormat);
+  let svg = convertToSvg(lines[0], inputFormat, displayStyle);
 
   const widthEx = Math.max(numberAttr(svg, "width"), 0.1);
   const heightEx = Math.max(numberAttr(svg, "height"), 0.1);
@@ -236,7 +237,7 @@ function renderLatex(request) {
     // emUnits is intrinsic to the SVG (independent of the requested fontPt).
     const emUnits = exRatio > 0 ? vb[2] / (widthEx * exRatio) : 1000;
     const parts = lines.map((line, idx) => {
-      const lineSvg = idx === 0 ? svg : convertToSvg(line, inputFormat);
+      const lineSvg = idx === 0 ? svg : convertToSvg(line, inputFormat, displayStyle);
       return fitMathType(lineSvg, emUnits, request.fitParams);
     });
     const fit = parts.length > 1

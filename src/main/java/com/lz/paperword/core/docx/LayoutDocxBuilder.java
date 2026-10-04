@@ -20,14 +20,10 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.STLineSpacingRule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.math.BigInteger;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -37,6 +33,8 @@ import java.util.regex.Pattern;
 /**
  * 将 OCR/版面归一化后的布局模型直接写成保持分页与块结构的 DOCX。
  */
+// Instances contain per-document counters and MTEF state. Use one builder
+// per concurrent export, as LayoutExportService does.
 public class LayoutDocxBuilder {
 
     private static final Logger log = LoggerFactory.getLogger(LayoutDocxBuilder.class);
@@ -47,9 +45,15 @@ public class LayoutDocxBuilder {
     private final LaTeXParser latexParser = new LaTeXParser();
     private final MathTypeEmbedder mathEmbedder = new MathTypeEmbedder();
     private final boolean embedMathTypeOle;
+    private final ImageAssetLoader imageAssets;
 
     public LayoutDocxBuilder(boolean embedMathTypeOle) {
+        this(embedMathTypeOle, ImageAssetLoader.fromSystemProperties());
+    }
+
+    public LayoutDocxBuilder(boolean embedMathTypeOle, ImageAssetLoader imageAssets) {
         this.embedMathTypeOle = embedMathTypeOle;
+        this.imageAssets = java.util.Objects.requireNonNull(imageAssets, "imageAssets");
     }
 
     public byte[] build(LayoutDocumentRequest request) throws IOException {
@@ -173,37 +177,31 @@ public class LayoutDocxBuilder {
                                  LayoutDocumentRequest.DocumentInfo info,
                                  LayoutDocumentRequest.Block block) {
         String imagePath = block.getImagePath() != null ? block.getImagePath() : page.getBackgroundImagePath();
-        if (imagePath == null || imagePath.isBlank()) {
-            return;
-        }
-        Path path = Path.of(imagePath);
-        if (!Files.exists(path)) {
-            log.warn("Image block path does not exist: {}", imagePath);
-            return;
-        }
+        ImageAssetLoader.ImageAsset image = imageAssets.load(imagePath);
 
         XWPFParagraph para = doc.createParagraph();
         LayoutDocumentRequest.Style style = block.getStyle() == null ? new LayoutDocumentRequest.Style() : block.getStyle();
         applyParagraphStyle(para, style, LayoutDocumentRequest.BlockType.IMAGE);
-        try (InputStream inputStream = Files.newInputStream(path)) {
-            BufferedImage image = ImageIO.read(path.toFile());
-            int widthPx = image != null ? image.getWidth() : safeInt(block.getImageWidthPx(), 0);
-            int heightPx = image != null ? image.getHeight() : safeInt(block.getImageHeightPx(), 0);
-            if (widthPx <= 0 || heightPx <= 0) {
-                return;
-            }
-
-            int usableWidthTwips = DEFAULT_PAGE_WIDTH_TWIPS
-                - safeInt(info.getMarginLeftTwips(), 1440)
-                - safeInt(info.getMarginRightTwips(), 1440);
+        try (ByteArrayInputStream inputStream = new ByteArrayInputStream(image.data())) {
+            int widthPx = image.widthPx();
+            int heightPx = image.heightPx();
+            int usableWidthTwips = imageUsableExtent(DEFAULT_PAGE_WIDTH_TWIPS,
+                safeInt(info.getMarginLeftTwips(), 1440), safeInt(info.getMarginRightTwips(), 1440));
+            int usableHeightTwips = imageUsableExtent(DEFAULT_PAGE_HEIGHT_TWIPS,
+                safeInt(info.getMarginTopTwips(), 1440), safeInt(info.getMarginBottomTwips(), 1440));
             int targetWidthTwips = deriveTargetWidthTwips(page, block, usableWidthTwips);
-            int targetHeightTwips = (int) Math.round((double) heightPx * targetWidthTwips / Math.max(widthPx, 1));
+            double scale = Math.min((double) targetWidthTwips / widthPx, (double) usableHeightTwips / heightPx);
+            targetWidthTwips = Math.max(1, (int) Math.round(widthPx * scale));
+            int targetHeightTwips = Math.max(1, (int) Math.round(heightPx * scale));
 
             XWPFRun run = para.createRun();
-            run.addPicture(inputStream, resolvePictureType(imagePath), path.getFileName().toString(),
+            run.addPicture(inputStream, image.pictureType(), image.fileName(),
                 Units.toEMU(targetWidthTwips / 20.0), Units.toEMU(targetHeightTwips / 20.0));
         } catch (Exception e) {
-            log.error("Failed to insert image {}", imagePath, e);
+            if (e instanceof ImageAssetException imageError) {
+                throw imageError;
+            }
+            throw new ImageAssetException("IMAGE_ASSET_EMBED_FAILED", "Failed to embed a validated layout image", e);
         }
     }
 
@@ -215,7 +213,16 @@ public class LayoutDocxBuilder {
             return usableWidthTwips;
         }
         int pageWidth = safeInt(page.getWidth(), 1000);
-        return Math.max(1440, usableWidthTwips * bbox.getWidth() / Math.max(pageWidth, 1));
+        long requested = (long) usableWidthTwips * bbox.getWidth() / Math.max(pageWidth, 1);
+        return (int) Math.min(usableWidthTwips, Math.max(Math.min(1440, usableWidthTwips), requested));
+    }
+
+    private int imageUsableExtent(int pageExtent, int firstMargin, int secondMargin) {
+        long available = (long) pageExtent - firstMargin - secondMargin;
+        if (available <= 0) {
+            throw new ImageAssetException("IMAGE_ASSET_EMBED_FAILED", "Page margins leave no room for the requested image");
+        }
+        return (int) Math.min(pageExtent, available);
     }
 
     private void applyParagraphStyle(XWPFParagraph para, LayoutDocumentRequest.Style style,
@@ -431,7 +438,11 @@ public class LayoutDocxBuilder {
         applyMathRunStyle(mathRun, style);
         if (embedMathTypeOle) {
             try {
-                mathEmbedder.embedEquation(para, mathRun, ast, rawLatex, 1.0d, Double.MAX_VALUE, null,
+                // 11pt is this API's default body size. Preserve that calibrated
+                // ratio while scaling both preview geometry and baseline together.
+                double displayScale = style.getFontSizePt() != null && style.getFontSizePt() > 0
+                    ? style.getFontSizePt() / 11.0d : 1.0d;
+                mathEmbedder.embedEquation(para, mathRun, ast, rawLatex, displayScale, Double.MAX_VALUE, null,
                     styleHints);
             } catch (Exception e) {
                 throw new IllegalStateException("Failed to embed formula: " + rawLatex, e);
@@ -552,20 +563,6 @@ public class LayoutDocxBuilder {
             case FORMULA, IMAGE, TABLE -> 120;
             default -> 60;
         };
-    }
-
-    private int resolvePictureType(String fileName) {
-        String lower = fileName.toLowerCase();
-        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
-            return XWPFDocument.PICTURE_TYPE_JPEG;
-        }
-        if (lower.endsWith(".gif")) {
-            return XWPFDocument.PICTURE_TYPE_GIF;
-        }
-        if (lower.endsWith(".bmp")) {
-            return XWPFDocument.PICTURE_TYPE_BMP;
-        }
-        return XWPFDocument.PICTURE_TYPE_PNG;
     }
 
     private int xOf(LayoutDocumentRequest.BoundingBox bbox) {

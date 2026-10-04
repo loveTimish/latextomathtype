@@ -18,6 +18,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class GeneratedMathTypeTexReferenceDocxTest {
 
@@ -30,6 +31,8 @@ class GeneratedMathTypeTexReferenceDocxTest {
             "wmf-structure-metrics",
             "word-mathtype-tex-reference-expanded.source-report.json"
         );
+        assumeTrue(Files.exists(sourceReport),
+            "Requires the external Word/MathType source-report fixture; not included in a clean checkout");
         PaperExportRequest request = buildRequest(sourceReport);
         byte[] docx = new DocxBuilder().build(request);
 

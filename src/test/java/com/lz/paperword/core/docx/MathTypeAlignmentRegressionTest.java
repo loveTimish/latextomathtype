@@ -42,7 +42,10 @@ class MathTypeAlignmentRegressionTest {
     void shouldUseExpectedPreviewForFractionFormula() throws IOException {
         ObjectMetrics generated = extractFirstObjectMetrics(buildDocxWithFormula("\\frac{1}{2}"));
         assertEquals("wmf", generated.previewExtension);
-        assertWithin(generated.positionHalfPt, -24, 4.0d, "fraction baseline position");
+        double depth = new com.lz.paperword.core.render.LaTeXImageRenderer()
+            .renderForOlePreview("\\frac{1}{2}").depthPt();
+        assertEquals(-(int) Math.round(depth * 2), generated.positionHalfPt,
+            "fraction baseline must use the actual rendered geometry");
         assertTrue(generated.styleHeightPt >= 12.0d, "fraction preview height should stay readable");
         assertTrue(generated.styleHeightPt <= 32.0d, "fraction preview height should not be oversized");
     }
@@ -104,7 +107,13 @@ class MathTypeAlignmentRegressionTest {
             "reference preview should be vector");
         assertEquals("wmf", generated.previewExtension);
         // 预览容器变化不应改变公式基线与版面尺寸。
-        assertWithin(generated.positionHalfPt, reference.positionHalfPt, 8.0d, "baseline position");
+        // The legacy MathType reference is 27.75pt tall; this SVG preview is
+        // about 15pt. Comparing their unscaled offsets preserves the old bug.
+        // Compare geometric descent relative to each actual display box instead.
+        double referenceDepthRatio = -reference.positionHalfPt / (2d * reference.styleHeightPt);
+        double generatedDepthRatio = -generated.positionHalfPt / (2d * generated.styleHeightPt);
+        assertEquals(referenceDepthRatio, generatedDepthRatio, 0.06d,
+            "baseline descent ratio should remain close across different preview sizes");
         assertTrue(generated.styleHeightPt >= 12.0d, "style height should stay readable after preview shrink");
         assertTrue(generated.dyaOrig > 0, "dyaOrig should be positive");
         assertTrue(generated.styleWidthPt > 0, "style width should be positive");

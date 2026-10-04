@@ -22,11 +22,10 @@ public class LayoutExportService {
 
     private static final Logger log = LoggerFactory.getLogger(LayoutExportService.class);
 
-    private final LayoutDocxBuilder oleDocxBuilder = new LayoutDocxBuilder(true);
 
     public byte[] exportLayoutDocument(LayoutDocumentRequest request) throws IOException {
         long start = System.currentTimeMillis();
-        byte[] docx = sanitizeNestedOleRuns(oleDocxBuilder.build(request));
+        byte[] docx = sanitizeNestedOleRuns(new LayoutDocxBuilder(true).build(request));
         log.info("Layout document exported in {}ms, size: {} bytes",
             System.currentTimeMillis() - start, docx.length);
         return docx;

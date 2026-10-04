@@ -117,30 +117,20 @@ class DocxBuilderTest {
     }
 
     @Test
-    void shouldResolveWindowsProjectImagePathOnLinuxUserDir(@TempDir Path tempDir) throws IOException {
-        String oldUserDir = System.getProperty("user.dir");
-        Path imageDir = tempDir.resolve("target/reference-roundtrip/generated-media");
-        Files.createDirectories(imageDir);
-        Path image = imageDir.resolve("section-1.png");
-        Files.write(image, java.util.Base64.getDecoder().decode(
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    void shouldResolveOnlyExplicitlyMappedWindowsImagePath(@TempDir Path tempDir) throws IOException {
+        Path image = tempDir.resolve("section-1.png");
+        ImageAssetLoaderTest.image(image, "png", 1, 1);
+        PaperExportRequest request = createSampleRequest();
+        request.getSections().get(0).setImages(List.of(
+            "J:\\latextomathtype\\target\\reference-roundtrip\\generated-media\\section-1.png"
         ));
-
-        try {
-            System.setProperty("user.dir", tempDir.toString());
-            PaperExportRequest request = createSampleRequest();
-            request.getSections().get(0).setImages(List.of(
-                "J:\\latextomathtype\\target\\reference-roundtrip\\generated-media\\section-1.png"
-            ));
-
-            byte[] docx = new DocxBuilder().build(request);
-            Map<String, byte[]> entries = unzipBinaryEntries(docx);
-
-            assertTrue(entries.keySet().stream().anyMatch(name -> name.startsWith("word/media/") && name.endsWith(".png")),
-                "Windows repo absolute image path should resolve relative to the Linux project root");
-        } finally {
-            System.setProperty("user.dir", oldUserDir);
-        }
+        ImageAssetLoader assets = new ImageAssetLoader(new ImageAssetConfig(tempDir,
+            "J:/latextomathtype/target/reference-roundtrip/generated-media",
+            ImageAssetConfig.DEFAULT_MAX_BYTES, ImageAssetConfig.DEFAULT_MAX_PIXELS));
+        byte[] docx = new DocxBuilder(false, assets).build(request);
+        Map<String, byte[]> entries = unzipBinaryEntries(docx);
+        assertTrue(entries.keySet().stream().anyMatch(name -> name.startsWith("word/media/") && name.endsWith(".png")),
+            "Only explicitly mapped Windows asset paths should resolve on Linux");
     }
 
     @Test

@@ -14,6 +14,10 @@ public class QuestionDTO {
      */
     private Integer questionType;
     private String content;
+    /** Optional stem wrapping: "legacy" (default) or "flow" for conservative soft line joins. */
+    private String contentFlow;
+    /** Start this question (including an optional phase label) on a new page. */
+    private Boolean pageBreakBefore;
     /** 题目配图的本地文件路径列表（按出现顺序渲染在题干之后、选项之前） */
     private List<String> images;
     /** Image references found in source LaTeX but not resolved to renderable local files. */
@@ -21,6 +25,8 @@ public class QuestionDTO {
     private List<OptionDTO> options;
     private String correct;
     private Integer score;
+    /** Optional working-space lines for unanswered calculation/solution questions, 0 to 12; default 3. */
+    private Integer answerSpaceLines;
     private String analyze;
     private String solution;
     private String difficulty;

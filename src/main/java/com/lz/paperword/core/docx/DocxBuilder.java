@@ -19,13 +19,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -73,6 +71,8 @@ import org.apache.xmlbeans.XmlBoolean;
  *   <li>答案和解析：蓝色标签（#0000CC）</li>
  * </ul>
  */
+// Instances contain per-document layout and MTEF state. Do not share one
+// instance between concurrent build() calls; use one builder per export.
 public class DocxBuilder {
 
     private static final Logger log = LoggerFactory.getLogger(DocxBuilder.class);
@@ -110,8 +110,16 @@ public class DocxBuilder {
      * </ul>
      */
     private final boolean embedMathTypeOle;
+    private final ImageAssetLoader imageAssets;
     private boolean compactLayoutContext;
     private boolean hideQuestionTypeMetadataContext;
+    private boolean printLayoutContext;
+    private boolean examTypographyContext;
+    private boolean metadataContext;
+    private com.lz.paperword.core.render.LaTeXImageRenderer.PreviewBackground previewBackgroundContext;
+    private final java.util.Set<XWPFParagraph> formulaParagraphs = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    private final java.util.Set<XWPFParagraph> metadataParagraphs = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    private final java.util.Set<XWPFParagraph> workingParagraphs = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 
     /**
      * 默认构造函数：启用 MathType OLE 嵌入。
@@ -126,12 +134,66 @@ public class DocxBuilder {
      * @param embedMathTypeOle true=嵌入 MathType OLE 对象，false=保留 LaTeX 文本标记
      */
     public DocxBuilder(boolean embedMathTypeOle) {
+        this(embedMathTypeOle, ImageAssetLoader.fromSystemProperties());
+    }
+
+    public DocxBuilder(boolean embedMathTypeOle, ImageAssetLoader imageAssets) {
         this.embedMathTypeOle = embedMathTypeOle;
+        this.imageAssets = java.util.Objects.requireNonNull(imageAssets, "imageAssets");
+    }
+
+    private static void validateMode(String field, String value, String optIn) {
+        if (value != null && !"legacy".equals(value) && !optIn.equals(value)) {
+            throw new com.lz.paperword.model.ExportRequestValidationException(field + " must be legacy or " + optIn);
+        }
+    }
+
+    private void applyExamTypography(XWPFDocument doc) {
+        for (XWPFParagraph paragraph : doc.getParagraphs()) {
+            String style = paragraph.getStyle();
+            if (STYLE_TITLE.equals(style) || STYLE_HEADING_1.equals(style) || STYLE_HEADING_2.equals(style)) {
+                for (XWPFRun run : paragraph.getRuns()) ExamTypography.styleRun(run,
+                    STYLE_TITLE.equals(style) ? 18.0 : STYLE_HEADING_2.equals(style) ? 13.0 : 12.0);
+                continue;
+            }
+            boolean metadata = metadataParagraphs.contains(paragraph);
+            for (XWPFRun run : paragraph.getRuns()) {
+                if (run.getCTR().sizeOfObjectArray() == 0) ExamTypography.styleRun(run,
+                    metadata ? ExamTypography.METADATA_SIZE_PT : ExamTypography.BODY_SIZE_PT);
+            }
+            if (workingParagraphs.contains(paragraph)) ExamTypography.workingLine(paragraph);
+            else ExamTypography.bodyParagraph(paragraph, metadata,
+                formulaParagraphs.contains(paragraph) || paragraph.getRuns().stream().anyMatch(run -> !run.getEmbeddedPictures().isEmpty()));
+        }
+    }
+
+    private void applyQuestionKeeps(List<XWPFParagraph> paragraphs, int first, int workspaceStart,
+                                    int solutionStart, int end, boolean hasAnswer) {
+        // Bound the opening group by its estimated physical size. Long questions and
+        // long answer areas may flow rather than moving an entire question to a new page.
+        int target = solutionStart >= 0 ? solutionStart : Math.min(end - 1, workspaceStart + 1);
+        int estimatedLines = 0;
+        for (int i = first; i < target && i < end - 1; i++) {
+            XWPFParagraph paragraph = paragraphs.get(i);
+            estimatedLines += Math.max(1, (paragraph.getText().length() + 55) / 56);
+            if (estimatedLines > 6 || i - first >= 5) break;
+            keepWithNext(paragraph);
+        }
+        for (int i = first; i < end - 1; i++) {
+            String text = paragraphs.get(i).getText().trim();
+            if (text.length() <= 60 && (text.endsWith(":") || text.endsWith("："))) keepWithNext(paragraphs.get(i));
+        }
+        if (solutionStart >= 0 && hasAnswer && end - 2 >= solutionStart) {
+            keepWithNext(paragraphs.get(end - 2));
+            // A short concluding step and the answer should not form a two-line last page.
+            if (end - 3 >= solutionStart && paragraphs.get(end - 2).getText().length() <= 60
+                    && paragraphs.get(end - 3).getText().length() <= 90) keepWithNext(paragraphs.get(end - 3));
+        }
     }
 
     private void initializeStyles(XWPFDocument doc) {
         XWPFStyles styles = doc.createStyles();
-        double bodyFontSize = compactLayoutContext ? COMPACT_BODY_FONT_SIZE_PT : 11.0d;
+        double bodyFontSize = examTypographyContext ? ExamTypography.BODY_SIZE_PT : compactLayoutContext ? COMPACT_BODY_FONT_SIZE_PT : 11.0d;
         addParagraphStyle(styles, STYLE_NORMAL, "Normal", bodyFontSize, false);
         addParagraphStyle(styles, STYLE_BODY_TEXT, "Body Text", bodyFontSize, false);
         addParagraphStyle(styles, STYLE_TITLE, "Title", 18, true);
@@ -159,9 +221,9 @@ public class DocxBuilder {
 
         CTRPr rPr = style.addNewRPr();
         CTFonts fonts = rPr.addNewRFonts();
-        fonts.setAscii("宋体");
-        fonts.setHAnsi("宋体");
-        fonts.setCs("宋体");
+        fonts.setAscii(examTypographyContext ? "Times New Roman" : "宋体");
+        fonts.setHAnsi(examTypographyContext ? "Times New Roman" : "宋体");
+        fonts.setCs(examTypographyContext ? "Times New Roman" : "宋体");
         fonts.setEastAsia("宋体");
         CTHpsMeasure size = rPr.addNewSz();
         size.setVal(halfPoints(fontSizePt));
@@ -197,6 +259,28 @@ public class DocxBuilder {
         try (XWPFDocument doc = new XWPFDocument()) {
             mathEmbedder.resetDocumentFormulaCounter();
             compactLayoutContext = isCompactLayout(request);
+            String typography = request != null && request.getPaper() != null ? request.getPaper().getTypography() : null;
+            validateMode("paper.typography", typography, "exam");
+            examTypographyContext = "exam".equals(typography);
+            if (examTypographyContext && compactLayoutContext) {
+                throw new com.lz.paperword.model.ExportRequestValidationException("paper.typography=exam cannot be combined with compactLayout");
+            }
+            String background = request != null && request.getPaper() != null ? request.getPaper().getPreviewBackground() : null;
+            if (background != null && !"transparent".equals(background) && !"white".equals(background)) {
+                throw new com.lz.paperword.model.ExportRequestValidationException("paper.previewBackground must be transparent or white");
+            }
+            if ("white".equals(background) && !examTypographyContext) {
+                throw new com.lz.paperword.model.ExportRequestValidationException("paper.previewBackground=white requires paper.typography=exam");
+            }
+            previewBackgroundContext = "white".equals(background)
+                ? com.lz.paperword.core.render.LaTeXImageRenderer.PreviewBackground.WHITE
+                : com.lz.paperword.core.render.LaTeXImageRenderer.PreviewBackground.TRANSPARENT;
+            metadataContext = false;
+            formulaParagraphs.clear();
+            metadataParagraphs.clear();
+            workingParagraphs.clear();
+            printLayoutContext = request != null && request.getPaper() != null
+                && Boolean.TRUE.equals(request.getPaper().getPrintLayout());
             hideQuestionTypeMetadataContext = request != null
                     && request.getPaper() != null
                     && Boolean.TRUE.equals(request.getPaper().getHideQuestionTypeMetadata());
@@ -205,6 +289,9 @@ public class DocxBuilder {
             setPageMargins(doc, compactLayoutContext);
             if (compactLayoutContext) {
                 addCompactFooter(doc, request.getPaper());
+            } else if (request != null && request.getPaper() != null
+                    && Boolean.TRUE.equals(request.getPaper().getPageNumbers())) {
+                addPageNumberFooter(doc);
             }
 
             // 1. 写入试卷标题
@@ -220,6 +307,13 @@ public class DocxBuilder {
                 }
             }
             ensureFontTablePart(doc);
+            if (examTypographyContext) applyExamTypography(doc);
+            if (printLayoutContext || examTypographyContext) {
+                for (XWPFParagraph paragraph : doc.getParagraphs()) {
+                    CTPPr properties = paragraph.getCTP().isSetPPr() ? paragraph.getCTP().getPPr() : paragraph.getCTP().addNewPPr();
+                    (properties.isSetKeepLines() ? properties.getKeepLines() : properties.addNewKeepLines()).setVal(true);
+                }
+            }
 
             // 将文档序列化为字节数组
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -300,8 +394,8 @@ public class DocxBuilder {
         CTSectPr sectPr = doc.getDocument().getBody().addNewSectPr();
         CTPageMar pageMar = sectPr.addNewPgMar();
         // 页边距设置（单位：twips，1440 twips = 1 英寸 ≈ 2.54cm）
-        long vertical = compactLayout ? 851L : 1440L;
-        long horizontal = compactLayout ? 1134L : 1440L;
+        long vertical = examTypographyContext ? 1020L : compactLayout ? 851L : 1440L;
+        long horizontal = examTypographyContext ? 1247L : compactLayout ? 1134L : 1440L;
         pageMar.setTop(BigInteger.valueOf(vertical));
         pageMar.setBottom(BigInteger.valueOf(vertical));
         pageMar.setLeft(BigInteger.valueOf(horizontal));
@@ -311,6 +405,8 @@ public class DocxBuilder {
             pageMar.setFooter(BigInteger.valueOf(851L));
             pageMar.setGutter(BigInteger.ZERO);
         }
+
+        if (examTypographyContext) pageMar.setFooter(BigInteger.valueOf(425L));
 
         // A4 纸张尺寸（单位：twips）
         CTPageSz pageSz = sectPr.addNewPgSz();
@@ -358,6 +454,27 @@ public class DocxBuilder {
         } catch (Exception e) {
             log.warn("Failed to add compact footer", e);
         }
+    }
+
+    private void addPageNumberFooter(XWPFDocument doc) throws IOException {
+        try {
+            XWPFFooter footer = doc.createHeaderFooterPolicy().createFooter(XWPFHeaderFooterPolicy.DEFAULT);
+            XWPFParagraph paragraph = footer.createParagraph();
+            paragraph.setAlignment(ParagraphAlignment.CENTER);
+            paragraph.setSpacingBefore(0);
+            paragraph.setSpacingAfter(0);
+            for (String part : new String[]{"第 ", "PAGE", " 页 / 共 ", "NUMPAGES", " 页"}) {
+                if (part.equals("PAGE") || part.equals("NUMPAGES")) addFieldRun(paragraph, part);
+                else { XWPFRun run = paragraph.createRun(); run.setText(part); setFooterRunStyle(run); }
+            }
+        } catch (Exception e) {
+            throw new IOException("Failed to add requested page-number footer", e);
+        }
+    }
+
+    private void keepWithNext(XWPFParagraph paragraph) {
+        CTPPr properties = paragraph.getCTP().isSetPPr() ? paragraph.getCTP().getPPr() : paragraph.getCTP().addNewPPr();
+        (properties.isSetKeepNext() ? properties.getKeepNext() : properties.addNewKeepNext()).setVal(true);
     }
 
     private String compactFooterLeftText(PaperExportRequest.PaperInfo paper) {
@@ -444,6 +561,7 @@ public class DocxBuilder {
             infoPara.setStyle(STYLE_BODY_TEXT);
             infoPara.setAlignment(ParagraphAlignment.CENTER);
             infoPara.setSpacingAfter(200);
+            if (examTypographyContext) metadataParagraphs.add(infoPara);
 
             XWPFRun infoRun = infoPara.createRun();
             infoRun.setText(info.toString());
@@ -473,6 +591,7 @@ public class DocxBuilder {
             headRun.setBold(true);
             headRun.setFontSize(12);
             headRun.setFontFamily("宋体");
+            if (printLayoutContext || examTypographyContext) keepWithNext(headPara);
         }
 
         if (section.getImages() != null && !section.getImages().isEmpty()) {
@@ -508,19 +627,31 @@ public class DocxBuilder {
      */
     private void writeQuestion(XWPFDocument doc, QuestionDTO question) {
         if (question == null) return;
+        int firstParagraph = doc.getParagraphs().size();
+        validateMode("question.contentFlow", question.getContentFlow(), "flow");
+        boolean flow = "flow".equals(question.getContentFlow());
+        if (flow && question.getContent() != null && Pattern.compile("(?i)<(?:img|table)\\b").matcher(question.getContent()).find()) {
+            throw new com.lz.paperword.model.ExportRequestValidationException(
+                "question.contentFlow=flow does not support HTML img/table blocks; use question.images or the layout export route");
+        }
+        Integer requestedLines = question.getAnswerSpaceLines();
+        if (requestedLines != null && (requestedLines < 0 || requestedLines > 12)) {
+            throw new com.lz.paperword.model.ExportRequestValidationException("answerSpaceLines must be between 0 and 12");
+        }
 
         // ---- 教学阶段小节标题（课堂讲解/课堂练习/课后作业等） ----
         if (question.getPhaseLabel() != null && !question.getPhaseLabel().isBlank()) {
             writePhaseHeader(doc, question.getPhaseLabel());
         }
 
+        int stemStart = doc.getParagraphs().size();
         // ---- 题目内容行 ----
         // 题号前缀（如 "1. "、"2. "）
         String prefix = !compactLayoutContext && question.getSerialNumber() != null ?
             question.getSerialNumber() + ". " : "";
 
         // 题干中的 <br/> 需要拆成多个段落，否则复杂竖式会和题干挤在同一行
-        List<String> contentLines = splitHtmlContentLines(question.getContent());
+        List<String> contentLines = flow ? ContentFlowLayout.split(question.getContent()) : splitHtmlContentLines(question.getContent());
         if (contentLines.isEmpty()) {
             XWPFParagraph qPara = doc.createParagraph();
             qPara.setStyle(STYLE_BODY_TEXT);
@@ -539,7 +670,7 @@ public class DocxBuilder {
                 String line = contentLines.get(i);
                 if (i > 0) {
                     applyCompactBodyIndent(qPara, 315);
-                    if (isStandaloneDisplayFormula(line)) {
+                    if (!examTypographyContext && isStandaloneDisplayFormula(line)) {
                         qPara.setAlignment(ParagraphAlignment.CENTER);
                         qPara.setIndentationLeft(0);
                         qPara.setIndentationFirstLine(0);
@@ -567,6 +698,7 @@ public class DocxBuilder {
             writeOptions(doc, question.getOptions());
         }
 
+        int answerSpaceStart = doc.getParagraphs().size();
         // ---- 答题空间（根据题目类型决定） ----
         if (question.getQuestionType() != null) {
             int type = question.getQuestionType();
@@ -575,7 +707,7 @@ public class DocxBuilder {
             } else if (!hideQuestionTypeMetadataContext && (type == 5 || type == 6)
                     && isNumberedQuestion(question) && !hasResolvedContent(question)) {
                 // 简答题/计算题：在题目后添加 3 行空白区域供答题
-                addAnswerSpace(doc, 3);
+                addAnswerSpace(doc, requestedLines == null ? 3 : requestedLines);
             }
         }
 
@@ -595,13 +727,29 @@ public class DocxBuilder {
         if (question.getAnalyze() != null && !question.getAnalyze().isBlank()) {
             writeInlineLabeledSection(doc, "【解析】", question.getAnalyze(), usesLooseFormulaContinuation(question));
         }
+        int solutionStart = -1;
         if (question.getSolution() != null && !question.getSolution().isBlank()) {
+            solutionStart = doc.getParagraphs().size();
             writeMultilineLabeledSection(doc, "【解答】", question.getSolution(), usesLooseFormulaContinuation(question));
         }
 
         // ---- 正确答案（标签 + 答案内容） ----
         if (question.getCorrect() != null && !question.getCorrect().isBlank()) {
             writeAnswerSection(doc, question.getCorrect());
+        }
+        List<XWPFParagraph> paragraphs = doc.getParagraphs();
+        int end = paragraphs.size();
+        if (examTypographyContext) {
+            for (int i = stemStart; i < end; i++) {
+                ExamTypography.indent(paragraphs.get(i), i == stemStart && !prefix.isEmpty());
+            }
+        }
+        if (Boolean.TRUE.equals(question.getPageBreakBefore()) && end > firstParagraph) {
+            paragraphs.get(firstParagraph).setPageBreak(true);
+        }
+        if (printLayoutContext || examTypographyContext) {
+            applyQuestionKeeps(paragraphs, firstParagraph, answerSpaceStart, solutionStart, end,
+                question.getCorrect() != null && !question.getCorrect().isBlank());
         }
     }
 
@@ -642,32 +790,16 @@ public class DocxBuilder {
     }
 
     private void writeQuestionImage(XWPFDocument doc, String imagePath, int maxWidthPx, ParagraphAlignment alignment) {
-        if (imagePath == null || imagePath.isBlank()) return;
-        File f = resolveLocalImageFile(imagePath);
-        if (!f.exists()) {
-            log.warn("题目配图文件不存在，跳过: {}", imagePath);
-            return;
+        ImageAssetLoader.ImageAsset image = imageAssets.load(imagePath);
+        if (maxWidthPx <= 0) {
+            throw new ImageAssetException("IMAGE_ASSET_INVALID_PATH", "Image display width must be positive");
         }
-        String lower = imagePath.toLowerCase();
-        int pictureType = (lower.endsWith(".jpg") || lower.endsWith(".jpeg"))
-            ? XWPFDocument.PICTURE_TYPE_JPEG : XWPFDocument.PICTURE_TYPE_PNG;
-
-        // 读取像素尺寸，按最大宽度等比缩放，避免插入过大图片
-        int wPx = 200, hPx = 150;
-        try {
-            java.awt.image.BufferedImage bi = javax.imageio.ImageIO.read(f);
-            if (bi != null) {
-                wPx = bi.getWidth();
-                hPx = bi.getHeight();
-            }
-        } catch (Exception ignore) {
-            // 读取尺寸失败时使用默认尺寸
-        }
-        if (wPx > maxWidthPx) {
-            double scale = (double) maxWidthPx / wPx;
-            wPx = maxWidthPx;
-            hPx = Math.max(1, (int) Math.round(hPx * scale));
-        }
+        int wPx = image.widthPx();
+        int hPx = image.heightPx();
+        // Fit both axes before EMU conversion, including extreme panoramic/tall images.
+        double scale = Math.min(1.0, Math.min((double) Math.min(maxWidthPx, 600) / wPx, 900.0 / hPx));
+        wPx = Math.max(1, (int) Math.round(wPx * scale));
+        hPx = Math.max(1, (int) Math.round(hPx * scale));
 
         XWPFParagraph para = doc.createParagraph();
         para.setStyle(STYLE_BODY_TEXT);
@@ -676,43 +808,13 @@ public class DocxBuilder {
         para.setSpacingAfter(0);
         applyCompactContinuationRhythm(para);
         XWPFRun run = para.createRun();
-        try (FileInputStream fis = new FileInputStream(f)) {
-            run.addPicture(fis, pictureType, f.getName(),
+        try (ByteArrayInputStream input = new ByteArrayInputStream(image.data())) {
+            run.addPicture(input, image.pictureType(), image.fileName(),
                 org.apache.poi.util.Units.pixelToEMU(wPx),
                 org.apache.poi.util.Units.pixelToEMU(hPx));
         } catch (Exception e) {
-            log.error("插入题目配图失败: {}", imagePath, e);
+            throw new ImageAssetException("IMAGE_ASSET_EMBED_FAILED", "Failed to embed a validated question or section image", e);
         }
-    }
-
-    private File resolveLocalImageFile(String imagePath) {
-        File direct = new File(imagePath);
-        if (direct.exists()) {
-            return direct;
-        }
-
-        String normalized = imagePath.replace('\\', '/');
-        Path projectRoot = Path.of(System.getProperty("user.dir", ".")).toAbsolutePath().normalize();
-        String[] anchors = {
-            "/latextomathtype/",
-            "/target/",
-            "/rebuild-assets/"
-        };
-        for (String anchor : anchors) {
-            int pos = normalized.indexOf(anchor);
-            if (pos < 0) {
-                continue;
-            }
-            String relative = anchor.equals("/latextomathtype/")
-                ? normalized.substring(pos + anchor.length())
-                : normalized.substring(pos + 1);
-            File candidate = projectRoot.resolve(relative).normalize().toFile();
-            if (candidate.exists()) {
-                return candidate;
-            }
-        }
-
-        return direct;
     }
 
     /**
@@ -799,7 +901,10 @@ public class DocxBuilder {
         // 写入纯文本前缀
         if (prefix != null && !prefix.isEmpty()) {
             XWPFRun prefixRun = para.createRun();
-            prefixRun.setText(prefix);
+            if (examTypographyContext && prefix.matches("\\d+\\.\\s+")) {
+                prefixRun.setText(prefix.trim());
+                prefixRun.addTab();
+            } else prefixRun.setText(prefix);
             applyBodyRunStyle(prefixRun, textFontFamily, textFontSizePt);
         }
 
@@ -807,6 +912,17 @@ public class DocxBuilder {
 
         // 解析 HTML 内容，提取纯文本段和 LaTeX 数学公式段
         List<ContentSegment> segments = latexParser.parseHtml(htmlContent);
+        if (examTypographyContext && segments.stream().anyMatch(segment -> segment.metrics() != null
+                || (segment.styleHints() != null && segment.styleHints().sourceMetrics() != null))) {
+            throw new com.lz.paperword.model.ExportRequestValidationException(
+                "paper.typography=exam cannot be combined with source formula metrics");
+        }
+        boolean displayParagraph = isStandaloneDisplayFormula(htmlContent)
+            || (segments.stream().anyMatch(ContentSegment::isMath)
+                && segments.stream().filter(segment -> !segment.isMath())
+                    .allMatch(segment -> segment.rawText().matches("[\\s\\p{P}]*")));
+        if (segments.stream().anyMatch(ContentSegment::isMath)) formulaParagraphs.add(para);
+        if (metadataContext) metadataParagraphs.add(para);
         boolean containsAnswerLine = segments.stream()
             .filter(seg -> !seg.isMath())
             .anyMatch(seg -> normalizeAnswerLineMarkers(seg.rawText()).contains(ANSWER_LINE_MARKER));
@@ -826,8 +942,16 @@ public class DocxBuilder {
                             firstSegment);
                         double maxWidthPt = resolveCompactFormulaMaxWidth(seg.rawText(), containsAnswerLine,
                             firstSegment);
-                        mathEmbedder.embedEquation(para, mathRun, seg.ast(), seg.rawText(),
-                            displayScale, maxWidthPt, seg.metrics(), seg.styleHints());
+                        if (examTypographyContext) {
+                            mathEmbedder.embedEquationAtSize(para, mathRun, seg.ast(), seg.rawText(),
+                                metadataContext ? ExamTypography.METADATA_SIZE_PT : ExamTypography.BODY_SIZE_PT,
+                                displayParagraph, ExamTypography.FORMULA_MAX_WIDTH_PT, seg.styleHints(), previewBackgroundContext);
+                        } else {
+                            mathEmbedder.embedEquation(para, mathRun, seg.ast(), seg.rawText(),
+                                displayScale, maxWidthPt, seg.metrics(), seg.styleHints());
+                        }
+                    } catch (com.lz.paperword.model.ExportRequestValidationException e) {
+                        throw e;
                     } catch (Exception e) {
                         throw new IllegalStateException("Failed to embed formula: " + seg.rawText(), e);
                     }
@@ -1037,6 +1161,8 @@ public class DocxBuilder {
 
     private void writeInlineLabeledSection(XWPFDocument doc, String label, String content,
                                            boolean looseFormulaContinuation) {
+        boolean previousMetadata = metadataContext;
+        metadataContext = examTypographyContext && java.util.Set.of("【知识点】", "【标签】", "【难度】").contains(label);
         List<String> lines = splitHtmlContentLines(content);
         if (lines.isEmpty()) {
             lines = List.of(content);
@@ -1058,6 +1184,7 @@ public class DocxBuilder {
             }
             writeContentWithMath(para, "", lines.get(i));
         }
+        metadataContext = previousMetadata;
     }
 
     private void writeCompactMetadata(XWPFDocument doc, QuestionDTO question) {
@@ -1209,8 +1336,12 @@ public class DocxBuilder {
     }
 
     private void applyBodyRunStyle(XWPFRun run, String fontFamily, double fontSizePt) {
-        setRunFontSize(run, fontSizePt);
-        run.setFontFamily(fontFamily);
+        if (examTypographyContext) {
+            ExamTypography.styleRun(run, metadataContext ? ExamTypography.METADATA_SIZE_PT : ExamTypography.BODY_SIZE_PT);
+        } else {
+            setRunFontSize(run, fontSizePt);
+            run.setFontFamily(fontFamily);
+        }
     }
 
     private int runFontSizePt(double fontSizePt) {
@@ -1233,27 +1364,11 @@ public class DocxBuilder {
     }
 
     private List<String> splitHtmlContentLines(String htmlContent) {
-        if (htmlContent == null || htmlContent.isBlank()) {
-            return List.of();
-        }
-        String[] parts = htmlContent.split("(?i)<br\\s*/?>|(?:\\R\\s*){2,}");
-        List<String> lines = new java.util.ArrayList<>();
-        for (String part : parts) {
-            String trimmed = part == null ? "" : part.trim();
-            if (!trimmed.isEmpty()) {
-                lines.add(trimmed);
-            }
-        }
-        return lines;
+        return ContentFlowLayout.splitLegacy(htmlContent);
     }
 
     private boolean isStandaloneDisplayFormula(String line) {
-        if (line == null) {
-            return false;
-        }
-        String trimmed = line.trim();
-        return (trimmed.startsWith("\\[") && trimmed.endsWith("\\]"))
-            || (trimmed.startsWith("$$") && trimmed.endsWith("$$"));
+        return ContentFlowLayout.isDisplayFormula(line);
     }
 
     private boolean hasResolvedContent(QuestionDTO question) {
@@ -1268,6 +1383,7 @@ public class DocxBuilder {
         }
         String[] lines = contentHtml.split("(?i)<br\\s*/?>\\s*");
         StringBuilder builder = new StringBuilder();
+        String mathDelimiter = "";
         for (String line : lines) {
             String trimmed = line.trim();
             if (trimmed.isEmpty()) {
@@ -1278,11 +1394,33 @@ public class DocxBuilder {
                 continue;
             }
             if (!builder.isEmpty()) {
-                builder.append('\n');
+                // Keep the explicit paragraph boundary understood by
+                // splitHtmlContentLines. A single newline is collapsed by the
+                // subsequent HTML/text pass and used to join every solution step.
+                // HTML line wrapping inside an existing math span is not a
+                // paragraph boundary: preserve the complete delimited formula.
+                builder.append(mathDelimiter.isEmpty() ? "<br/>" : " ");
             }
             builder.append(cleanText);
+            mathDelimiter = solutionMathDelimiterAfter(cleanText, mathDelimiter);
         }
         return builder.toString();
+    }
+
+    private String solutionMathDelimiterAfter(String text, String delimiter) {
+        int backslashes = 0;
+        for (int i = 0; i < text.length(); i++) {
+            boolean escaped = (backslashes & 1) != 0;
+            backslashes = text.charAt(i) == '\\' ? backslashes + 1 : 0;
+            if (escaped) continue;
+            if (!delimiter.isEmpty()) {
+                if (text.startsWith(delimiter, i)) { i += delimiter.length() - 1; delimiter = ""; backslashes = 0; }
+            } else if (text.startsWith("$$", i)) { delimiter = "$$"; i++; }
+            else if (text.charAt(i) == '$') delimiter = "$";
+            else if (text.startsWith("\\[", i)) { delimiter = "\\]"; i++; backslashes = 0; }
+            else if (text.startsWith("\\(", i)) { delimiter = "\\)"; i++; backslashes = 0; }
+        }
+        return delimiter;
     }
 
     /**
@@ -1299,6 +1437,8 @@ public class DocxBuilder {
             XWPFParagraph blankPara = doc.createParagraph();
             blankPara.setStyle(STYLE_BODY_TEXT);
             blankPara.setSpacingAfter(200);
+            if (printLayoutContext || examTypographyContext) ExamTypography.workingLine(blankPara);
+            workingParagraphs.add(blankPara);
             XWPFRun blankRun = blankPara.createRun();
             blankRun.setText("");
         }

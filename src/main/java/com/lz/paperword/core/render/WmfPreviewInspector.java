@@ -334,7 +334,11 @@ public final class WmfPreviewInspector {
             boolean touchesEdge = false;
             for (int y = 0; y < heightPx; y++) {
                 for (int x = 0; x < widthPx; x++) {
-                    if (((image.getRGB(x, y) >>> 24) & 0xFF) != 0) {
+                    int argb = image.getRGB(x, y);
+                    // An explicit white vector canvas is background, not formula ink.
+                    boolean dark = Math.min((argb >>> 16) & 0xFF,
+                        Math.min((argb >>> 8) & 0xFF, argb & 0xFF)) < 245;
+                    if (((argb >>> 24) & 0xFF) != 0 && dark) {
                         foreground++;
                         if (x == 0 || y == 0 || x == widthPx - 1 || y == heightPx - 1) {
                             touchesEdge = true;

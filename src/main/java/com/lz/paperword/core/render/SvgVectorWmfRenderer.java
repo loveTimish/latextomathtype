@@ -97,6 +97,17 @@ public final class SvgVectorWmfRenderer {
     /** 渲染并返回可用于验收报告的结构摘要。 */
     public static VectorWmfResult renderDetailed(byte[] svgBytes, double widthPt, double heightPt)
         throws SvgVectorWmfException {
+        return renderDetailed(svgBytes, widthPt, heightPt, Double.NaN);
+    }
+
+    /**
+     * Render and carry an SVG baseline through the SAME aspect-preserving,
+     * centering and safety-padding transform as the outlines. The baseline is
+     * expressed as a fraction of the source SVG viewport height, from its top.
+     */
+    public static VectorWmfResult renderDetailed(byte[] svgBytes, double widthPt, double heightPt,
+                                                 double sourceBaselineFraction)
+        throws SvgVectorWmfException {
         if (svgBytes == null || svgBytes.length == 0) {
             throw new SvgVectorWmfException("empty SVG input");
         }
@@ -132,10 +143,118 @@ public final class SvgVectorWmfRenderer {
             return new VectorWmfResult(emitted.bytes(), polygons.size(), Set.copyOf(colors),
                 scene.outlinedCodePoints(),
                 new WmfRecordSummary(emitted.polyPolygonRecords(), 0, 0, emitted.maxRecordWords()),
-                List.of());
+                List.of(), mappedBaselineDepthPt(scene, layout, heightPt, sourceBaselineFraction));
         } catch (IOException e) {
             throw new SvgVectorWmfException("WMF emit failed: " + e.getMessage());
         }
+    }
+
+    /**
+     * Natural font-size route. The physical frame and outlines share one uniform transform.
+     * Only actual painted bounds plus an explicit safety border determine the frame; integer
+     * WMF units are reflected back to the DOCX instead of independently rounding its height.
+     */
+    public static NaturalVectorWmfResult renderNaturalDetailed(byte[] svgBytes, double sourceWidthPt,
+            double sourceBaselineFraction, double maxWidthPt, double paddingPt,
+            LaTeXImageRenderer.PreviewBackground background) throws SvgVectorWmfException {
+        if (!Double.isFinite(sourceWidthPt) || sourceWidthPt <= 0d
+                || !Double.isFinite(maxWidthPt) || maxWidthPt <= 0d
+                || !Double.isFinite(paddingPt) || paddingPt < 0d) {
+            throw new IllegalArgumentException("invalid natural vector geometry");
+        }
+        java.util.Objects.requireNonNull(background, "background");
+        BatikVectorSceneBuilder.VectorScene scene;
+        try {
+            scene = BatikVectorSceneBuilder.build(svgBytes);
+        } catch (BatikVectorSceneBuilder.VectorSceneException failure) {
+            throw new SvgVectorWmfException(failure.getMessage());
+        }
+        Rectangle2D bounds = null;
+        for (var painted : scene.shapes()) {
+            Rectangle2D next = painted.shape().getBounds2D();
+            if (!next.isEmpty()) bounds = bounds == null ? (Rectangle2D) next.clone() : bounds.createUnion(next);
+        }
+        if (bounds == null || bounds.isEmpty()) {
+            throw new SvgVectorWmfException("natural SVG contains no painted outlines");
+        }
+        if (!Double.isFinite(sourceBaselineFraction)) {
+            throw new SvgVectorWmfException("natural SVG requires a finite known baseline");
+        }
+        double baselineSourceY = scene.viewportHeight() * sourceBaselineFraction;
+        // A plus/equal sign or raised expression can have all ink above its baseline.
+        // Include that real coordinate instead of treating a negative depth as unknown.
+        double top = Math.min(bounds.getMinY(), baselineSourceY);
+        double bottom = Math.max(bounds.getMaxY(), baselineSourceY);
+        bounds = new Rectangle2D.Double(bounds.getMinX(), top, bounds.getWidth(), bottom - top);
+        double ptPerSourceUnit = sourceWidthPt / scene.viewportWidth();
+        double naturalWidthPt = bounds.getWidth() * ptPerSourceUnit + 2d * paddingPt;
+        double naturalHeightPt = bounds.getHeight() * ptPerSourceUnit + 2d * paddingPt;
+        double scale = Math.min(1d, maxWidthPt / naturalWidthPt);
+        double maxDimensionPt = Math.max(naturalWidthPt, naturalHeightPt) * scale;
+        int unitsPerInch = PREFERRED_UNITS_PER_INCH;
+        if (maxDimensionPt / 72d * unitsPerInch > INT16_SAFE) {
+            unitsPerInch = Math.max(1, (int) Math.floor(INT16_SAFE * 72d / maxDimensionPt));
+        }
+        double unitsPerPt = unitsPerInch / 72d;
+        // A capped frame must not become wider than its cap after integer quantization.
+        int maxWidthUnits = (int) Math.min(INT16_SAFE, Math.floor(maxWidthPt * unitsPerPt));
+        if (maxWidthUnits < 1) throw new IllegalArgumentException("maxWidthPt is smaller than one WMF unit");
+        scale = Math.min(scale, maxWidthUnits / (naturalWidthPt * unitsPerPt));
+        int widthUnits = Math.max(1, (int) Math.ceil(naturalWidthPt * scale * unitsPerPt - 1e-9));
+        int heightUnits = Math.max(1, (int) Math.ceil(naturalHeightPt * scale * unitsPerPt - 1e-9));
+        if (widthUnits > INT16_SAFE || heightUnits > INT16_SAFE) {
+            throw new SvgVectorWmfException("natural WMF frame exceeds supported int16 geometry");
+        }
+        double outlineScale = ptPerSourceUnit * scale * unitsPerPt;
+        double borderUnits = paddingPt * scale * unitsPerPt;
+        AffineTransform transform = new AffineTransform(outlineScale, 0d, 0d, outlineScale,
+            borderUnits - bounds.getMinX() * outlineScale,
+            borderUnits - bounds.getMinY() * outlineScale);
+        List<PaintedPolygon> polygons = new ArrayList<>();
+        Set<Integer> colors = new LinkedHashSet<>();
+        // A background is an additional fill only: no stroke, no glyph transform or ink expansion.
+        if (background == LaTeXImageRenderer.PreviewBackground.WHITE) {
+            polygons.add(new PaintedPolygon(flattenShape(new Rectangle2D.Double(0, 0, widthUnits, heightUnits)),
+                Color.WHITE));
+            colors.add(0xFFFFFF);
+        }
+        int inkShapeCount = 0;
+        for (var painted : scene.shapes()) {
+            var contours = flattenShape(transform.createTransformedShape(painted.shape()));
+            if (!contours.isEmpty()) {
+                polygons.add(new PaintedPolygon(contours, painted.color()));
+                colors.add(painted.color().getRGB() & 0xFFFFFF);
+                inkShapeCount++;
+            }
+        }
+        double widthPt = widthUnits / unitsPerPt;
+        double heightPt = heightUnits / unitsPerPt;
+        double baselineDepthPt = -1d;
+        if (Double.isFinite(sourceBaselineFraction)) {
+            double baselineY = scene.viewportHeight() * sourceBaselineFraction;
+            baselineDepthPt = (heightUnits - (baselineY * outlineScale + transform.getTranslateY())) / unitsPerPt;
+        }
+        try {
+            var emitted = emitPaintedWmf(polygons, widthUnits, heightUnits, unitsPerInch);
+            var vector = new VectorWmfResult(emitted.bytes(), inkShapeCount, colors, scene.outlinedCodePoints(),
+                new WmfRecordSummary(emitted.polyPolygonRecords(), 0, 0, emitted.maxRecordWords()),
+                List.of(), baselineDepthPt);
+            return new NaturalVectorWmfResult(vector, widthPt, heightPt);
+        } catch (IOException failure) {
+            throw new SvgVectorWmfException("WMF emit failed: " + failure.getMessage());
+        }
+    }
+
+    public record NaturalVectorWmfResult(VectorWmfResult vector, double widthPt, double heightPt) { }
+
+    private static double mappedBaselineDepthPt(BatikVectorSceneBuilder.VectorScene scene,
+                                                 SceneLayout layout, double displayedHeightPt,
+                                                 double sourceBaselineFraction) {
+        if (!Double.isFinite(sourceBaselineFraction)) return -1d;
+        double sourceY = scene.viewportHeight() * sourceBaselineFraction;
+        double finalY = layout.toWmf().getScaleY() * sourceY + layout.toWmf().getTranslateY();
+        // The DOCX displays the complete integer WMF frame at displayedHeightPt.
+        return displayedHeightPt * (1d - finalY / layout.heightUnits());
     }
 
     static BufferedImage rasterizeBatikReference(byte[] svgBytes, double widthPt, double heightPt,
@@ -196,7 +315,13 @@ public final class SvgVectorWmfRenderer {
 
     public record VectorWmfResult(byte[] bytes, int shapeCount, Set<Integer> colors,
                                   Set<Integer> outlinedCodePoints, WmfRecordSummary recordSummary,
-                                  List<String> diagnostics) {
+                                  List<String> diagnostics, double baselineDepthPt) {
+        public VectorWmfResult(byte[] bytes, int shapeCount, Set<Integer> colors,
+                               Set<Integer> outlinedCodePoints, WmfRecordSummary recordSummary,
+                               List<String> diagnostics) {
+            this(bytes, shapeCount, colors, outlinedCodePoints, recordSummary, diagnostics, -1d);
+        }
+
         public VectorWmfResult {
             bytes = bytes.clone();
             colors = Set.copyOf(colors);

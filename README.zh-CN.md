@@ -1,5 +1,12 @@
 # latextomathtype
 
+## Linux 安全导出与 PDF 集成
+
+- 配图默认禁用，必须显式配置 `paperword.assets.root`。坏图、缺图、越界或超限会明确失败，不再静默漏图；仅接受有界且完整验证的 PNG/JPEG。见[资产目录与旧 Windows 路径迁移](docs/image-assets-security.md)
+- 公式缓存已有内存/磁盘容量、TTL 与统计，见[配置和兼容边界](docs/render-cache.md)。旧缓存不自动删除
+- 可显式启用 `/api/export/pdf` 和 `/api/export/layout-pdf`，使用几何基线兼容转换；支持原生 LO 对照。见[Linux PDF HTTP 配置与错误契约](docs/linux-pdf-service.md)
+
+
 [English](README.md)
 
 将试卷数据和 LaTeX 公式导出为 Word `.docx`，并把公式保留为可编辑的 MathType OLE 对象。
@@ -143,3 +150,7 @@ docs/      技术说明和验收计划
 - [MathJax](https://github.com/mathjax/MathJax-src)
 - [WIRIS MathType SDK: MTEF storage](https://docs.wiris.com/en_US/mathtype-sdk-technical-documentation/how-mtef-is-stored-in-files-and-objects)
 - [WIRIS MathType SDK: MTEF v5](https://docs.wiris.com/en_US/mathtype-sdk-technical-documentation/mathtype-mtef-v5-mathtype-40-and-later)
+
+学生卷与教师卷打印排版：见[题干自动折行 12pt 排版与页码选项](docs/printable-papers.md)，包括有界作答空间与解析步骤换行。
+
+[只读往返检查器](docs/mathtype-roundtrip-inspector.md)可比较原生流、有效 WMF 记录和对象位置。它不修复或保证 MathType/WPS 无修改编辑往返，具体见[原生编辑边界](docs/native-roundtrip-boundary.md)。
